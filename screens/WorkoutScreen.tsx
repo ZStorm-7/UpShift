@@ -1,6 +1,24 @@
 import { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Modal } from 'react-native';
+import { View, Text, StyleSheet, Modal } from 'react-native';
 import { colors } from '../theme/colors';
+import { spacing, radius, type, layout } from '../theme/tokens';
+import { fontFamily } from '../theme/fonts';
+import {
+  Screen,
+  AppBar,
+  Card,
+  Pill,
+  Button,
+  text,
+} from '../components/ui';
+import { PressableScale, AnimatedMeter } from '../components/anim';
+import { Enter } from '../components/dashboard';
+import { CalorieRing } from '../components/CalorieRing';
+import { useUser } from '../context/UserContext';
+import { awardXP, incrementTodayField } from '../firebase/progress';
+import { useLanguage } from '../i18n/LanguageContext';
+import haptics from '../services/haptics';
+import sound from '../services/sound';
 
 type Exercise = {
   name: string;
@@ -33,20 +51,36 @@ const ROUTINES: Record<string, Record<MuscleGroup, string[]>> = {
 };
 
 const MUSCLE_GROUPS: MuscleGroup[] = ['arms', 'chest', 'legs', 'back'];
+// Note: there's no real "human back" emoji in Unicode (no back-facing
+// person exists), so this is the closest reasonable stand-in — a gorilla,
+// which is common gym slang for a broad, developed back ("gorilla back").
+// The old '🔙' was literally the wrong symbol — that's the "BACK" arrow
+// used for UI navigation, not a body part; it just happened to match the
+// word "back" as a pun.
 const MUSCLE_ICONS: Record<MuscleGroup, string> = {
   arms: '💪',
   chest: '🫀',
   legs: '🦵',
-  back: '🔙',
+  back: '🦍',
 };
 
 const XP_PER_SET = 8;
 const REST_TIME = 60;
 const GRACE_TIME = 5;
 
+// Maps the activity level chosen during onboarding to a workout routine tier.
+const ACTIVITY_TO_TIER: Record<string, string> = {
+  'Sedentary': 'beginner',
+  'Lightly active': 'beginner',
+  'Moderately active': 'intermediate',
+  'Very active': 'advanced',
+};
+
 export default function WorkoutScreen({ navigation }: any) {
-  const activityLevel = 'intermediate'; // will connect to Firebase later
-  const routine = ROUTINES[activityLevel];
+  const { authUser, profile } = useUser();
+  const { t } = useLanguage();
+  const tier = ACTIVITY_TO_TIER[profile?.activityLevel || ''] || 'beginner';
+  const routine = ROUTINES[tier];
 
   const [selectedGroup, setSelectedGroup] = useState<MuscleGroup | null>(null);
   const [exercises, setExercises] = useState<Exercise[]>([]);
@@ -56,6 +90,10 @@ export default function WorkoutScreen({ navigation }: any) {
   const [timerSeconds, setTimerSeconds] = useState(GRACE_TIME);
   const [timerPhase, setTimerPhase] = useState<'grace' | 'rest'>('grace');
   const timerRef = useRef<any>(null);
+
+  // Set once this workout's completion has been saved to Firestore, so a
+  // re-render (or the completion card staying on screen) doesn't save twice.
+  const [workoutSaved, setWorkoutSaved] = useState(false);
 
   const startWorkout = (group: MuscleGroup) => {
     const groupExercises = routine[group].map(name => ({
@@ -68,6 +106,7 @@ export default function WorkoutScreen({ navigation }: any) {
     setExercises(groupExercises);
     setWorkoutStarted(true);
     setTotalXP(0);
+    setWorkoutSaved(false);
   };
 
   const completeSet = (exerciseIndex: number) => {
@@ -79,6 +118,8 @@ export default function WorkoutScreen({ navigation }: any) {
       )
     );
     setTotalXP(prev => prev + XP_PER_SET);
+    haptics.setComplete();
+    sound.xpEarned();
     startRestTimer();
   };
 
@@ -117,336 +158,290 @@ export default function WorkoutScreen({ navigation }: any) {
   const completedSets = exercises.reduce((sum, ex) => sum + ex.completedSets, 0);
   const workoutComplete = totalSets > 0 && completedSets === totalSets;
 
+  // Persist the finished workout: bump today's workout count and add this
+  // session's XP to the user's lifetime XP/level, exactly once per workout.
+  useEffect(() => {
+    if (!workoutComplete || workoutSaved || !authUser) return;
+    setWorkoutSaved(true);
+    (async () => {
+      try {
+        // Both writes go through the transactional helpers rather than
+        // read-modify-write. `firebase/progress.ts` spells out why at length:
+        // the Dashboard stays mounted underneath this screen holding a stale
+        // `currentXP`, so a workout that wrote an absolute XP total would be
+        // silently erased the next time a quest was ticked back on the
+        // Dashboard. The helpers exist precisely to close that race, and this
+        // screen was the one still going around them.
+        await Promise.all([
+          incrementTodayField(authUser.uid, 'workoutsCompleted', 1),
+          awardXP(authUser.uid, totalXP),
+        ]);
+      } catch {
+        // If this fails, workoutSaved stays true so we don't retry-loop;
+        // the workout's local UI state is unaffected either way.
+      }
+
+      // Hand off to the summary AFTER the writes settle, so the celebration
+      // can't appear for a workout that failed to save. `replace`, not
+      // `navigate`: backing out of the summary should return to the Dashboard,
+      // not to a finished workout the user would then be able to "complete"
+      // again.
+      navigation.replace('WorkoutSummary', {
+        xpEarned: totalXP,
+        completedSets,
+        totalSets,
+        exerciseCount: exercises.length,
+        muscleGroup: selectedGroup ?? '',
+      });
+    })();
+  }, [workoutComplete, workoutSaved, authUser, totalXP]);
+
   if (!workoutStarted) {
     return (
-      <View style={styles.wrapper}>
-        <ScrollView contentContainerStyle={styles.container}>
-          <View style={styles.headerRow}>
-            <Pressable onPress={() => navigation.goBack()}>
-              <Text style={styles.backButton}>← Back</Text>
-            </Pressable>
-            <Text style={styles.screenTitle}>Workout</Text>
-            <View style={{ width: 60 }} />
-          </View>
-          <Text style={styles.subtitle}>Choose a muscle group to train today.</Text>
-          {MUSCLE_GROUPS.map(group => (
-            <Pressable
-              key={group}
-              style={styles.groupCard}
-              onPress={() => startWorkout(group)}>
-              <Text style={styles.groupIcon}>{MUSCLE_ICONS[group]}</Text>
-              <View>
-                <Text style={styles.groupName}>
-                  {group.charAt(0).toUpperCase() + group.slice(1)}
-                </Text>
-                <Text style={styles.groupExercises}>
-                  {routine[group].join(' · ')}
-                </Text>
-              </View>
-            </Pressable>
-          ))}
-        </ScrollView>
-      </View>
+      <Screen scroll contentStyle={styles.content}>
+        <AppBar title="Workout" onBack={() => navigation.goBack()} />
+        <Enter index={0}>
+          <Text style={styles.subtitle}>{t('chooseMuscleGroup')}</Text>
+        </Enter>
+        {MUSCLE_GROUPS.map((group, index) => (
+          <Enter key={group} index={index + 1}>
+            <PressableScale
+              onPress={() => startWorkout(group)}
+              accessibilityRole="button"
+              accessibilityLabel={`Start ${group} workout: ${routine[group].join(', ')}`}>
+              <Card style={styles.groupCard}>
+                <Text style={styles.groupIcon}>{MUSCLE_ICONS[group]}</Text>
+                <View style={styles.groupTextCol}>
+                  <Text style={styles.groupName}>
+                    {group.charAt(0).toUpperCase() + group.slice(1)}
+                  </Text>
+                  <Text style={styles.groupExercises}>
+                    {routine[group].join(' · ')}
+                  </Text>
+                </View>
+              </Card>
+            </PressableScale>
+          </Enter>
+        ))}
+      </Screen>
     );
   }
 
   return (
-    <View style={styles.wrapper}>
-      <ScrollView contentContainerStyle={styles.container}>
-        <View style={styles.headerRow}>
-          <Pressable onPress={() => {
-            setWorkoutStarted(false);
-            setExercises([]);
-          }}>
-            <Text style={styles.backButton}>← Back</Text>
-          </Pressable>
-          <Text style={styles.screenTitle}>
-            {selectedGroup?.charAt(0).toUpperCase()}{selectedGroup?.slice(1)} Day
-          </Text>
-          <Text style={styles.xpBadge}>+{totalXP} XP</Text>
-        </View>
+    <Screen scroll contentStyle={styles.content}>
+      <AppBar
+        title={`${selectedGroup?.charAt(0).toUpperCase()}${selectedGroup?.slice(1)} Day`}
+        onBack={() => {
+          setWorkoutStarted(false);
+          setExercises([]);
+        }}
+        right={<Pill label={`+${totalXP} XP`} color={colors.xp} />}
+      />
 
-        {/* Progress bar */}
-        <View style={styles.card}>
+      {/* Progress. AnimatedMeter rather than Meter: the bar retargets from
+          where it currently is when a set lands mid-fill, and it celebrates
+          the crossing to 100% instead of just stopping there. */}
+      <Enter index={0}>
+        <Card>
           <View style={styles.progressRow}>
-            <Text style={styles.progressText}>{completedSets} / {totalSets} sets</Text>
-            <Text style={styles.progressText}>{Math.round((completedSets / totalSets) * 100)}%</Text>
+            <Text style={styles.progressText}>{completedSets} / {totalSets} {t('sets')}</Text>
+            <Text style={styles.progressValue}>{Math.round((completedSets / totalSets) * 100)}%</Text>
           </View>
-          <View style={styles.progressBg}>
-            <View style={[styles.progressFill, { width: `${(completedSets / totalSets) * 100}%` }]} />
-          </View>
-        </View>
+          <AnimatedMeter progress={completedSets / totalSets} />
+        </Card>
+      </Enter>
 
-        {/* Exercises */}
-        {exercises.map((exercise, index) => (
-          <View key={exercise.name} style={styles.exerciseCard}>
+      {/* Exercises */}
+      {exercises.map((exercise, index) => (
+        <Enter key={exercise.name} index={index + 1}>
+          <Card style={styles.exerciseCard}>
             <Text style={styles.exerciseName}>{exercise.name}</Text>
-            <Text style={styles.exerciseDetail}>{exercise.sets} sets × {exercise.reps} reps</Text>
+            <Text style={styles.exerciseDetail}>{exercise.sets} {t('sets')} × {exercise.reps} {t('reps')}</Text>
+            {/* One pill per set: filled = done, outlined = pending. The count
+                below repeats the same information as text, so completion is
+                never carried by colour alone. */}
             <View style={styles.setsRow}>
               {Array.from({ length: exercise.sets }).map((_, setIndex) => (
-                <View
+                <Pill
                   key={setIndex}
-                  style={[
-                    styles.setDot,
-                    setIndex < exercise.completedSets && styles.setDotDone,
-                  ]}
+                  label={`${setIndex + 1}`}
+                  filled={setIndex < exercise.completedSets}
+                  color={setIndex < exercise.completedSets ? colors.accent : colors.border}
                 />
               ))}
-            </View>
-            <Pressable
-              style={[
-                styles.setButton,
-                exercise.completedSets >= exercise.sets && styles.setButtonDone,
-              ]}
-              onPress={() => completeSet(index)}
-              disabled={exercise.completedSets >= exercise.sets}>
-              <Text style={styles.setButtonText}>
-                {exercise.completedSets >= exercise.sets
-                  ? '✅ Complete'
-                  : `Complete Set ${exercise.completedSets + 1}`}
+              <Text style={styles.setsCount}>
+                {exercise.completedSets} / {exercise.sets}
               </Text>
-            </Pressable>
-          </View>
-        ))}
+            </View>
+            <Button
+              label={
+                exercise.completedSets >= exercise.sets
+                  ? `✅ ${t('complete')}`
+                  : `${t('completeSet')} ${exercise.completedSets + 1}`
+              }
+              variant="secondary"
+              onPress={() => completeSet(index)}
+              disabled={exercise.completedSets >= exercise.sets}
+              fullWidth
+            />
+          </Card>
+        </Enter>
+      ))}
 
-        {workoutComplete && (
-          <View style={styles.completeCard}>
-            <Text style={styles.completeTitle}>🎉 Workout Complete!</Text>
-            <Text style={styles.completeXP}>You earned {totalXP} XP</Text>
-            <Pressable
+      {workoutComplete && (
+        <Enter index={0}>
+          <Card accentColor={colors.accent} style={styles.completeCard}>
+            <Text style={styles.completeTitle}>🎉 {t('workoutComplete')}</Text>
+            <Text style={styles.completeXP}>{t('youEarned')} {totalXP} XP</Text>
+            <Button
+              label={t('backToDashboard')}
+              variant="primary"
+              onPress={() => navigation.goBack()}
+              fullWidth
               style={styles.doneButton}
-              onPress={() => navigation.goBack()}>
-              <Text style={styles.doneButtonText}>Back to Dashboard</Text>
-            </Pressable>
-          </View>
-        )}
-      </ScrollView>
+            />
+          </Card>
+        </Enter>
+      )}
 
       {/* Rest timer modal */}
       <Modal visible={restTimerVisible} transparent animationType="fade">
         <View style={styles.timerOverlay}>
           <View style={styles.timerCard}>
             <Text style={styles.timerPhaseText}>
-              {timerPhase === 'grace' ? '⚡ Get Ready' : '😮‍💨 Rest'}
+              {timerPhase === 'grace' ? t('getReady') : t('rest')}
             </Text>
-            <Text style={styles.timerSeconds}>{timerSeconds}</Text>
-            <Text style={styles.timerLabel}>
-              {timerPhase === 'grace' ? 'seconds grace period' : 'seconds rest'}
-            </Text>
-            <Pressable style={styles.skipButton} onPress={skipRest}>
-              <Text style={styles.skipText}>Skip Rest</Text>
-            </Pressable>
+
+            {/* The countdown ring is the same component as the calorie ring,
+                driven backwards: it empties as the rest period runs out. One
+                ring in the app, two jobs, so the two screens read as the same
+                product rather than two takes on "a circle with a number". */}
+            <CalorieRing
+              value={timerSeconds}
+              goal={timerPhase === 'grace' ? GRACE_TIME : REST_TIME}
+              size={172}
+              thickness={10}
+              instant
+              caption={timerPhase === 'grace' ? t('secondsGrace') : t('secondsRest')}
+              color={timerPhase === 'grace' ? colors.xp : colors.accent}
+            />
+
+            <Button label={t('skipRest')} variant="ghost" onPress={skipRest} fullWidth />
           </View>
         </View>
       </Modal>
-    </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  wrapper: {
-    flex: 1,
-    backgroundColor: colors.bg,
-  },
-  container: {
-    paddingHorizontal: 20,
-    paddingVertical: 60,
-    gap: 16,
-    paddingBottom: 100,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  backButton: {
-    color: colors.accent,
-    fontSize: 16,
-    width: 60,
-  },
-  screenTitle: {
-    color: colors.textPrimary,
-    fontSize: 20,
-    fontWeight: '700',
+  // Screen owns the gutter and the bottom inset; this only adds the rhythm
+  // between the stacked sections.
+  content: {
+    gap: layout.gap,
+    paddingBottom: layout.bottomInset,
   },
   subtitle: {
-    color: colors.textSecondary,
-    fontSize: 15,
-    marginBottom: 8,
-  },
-  xpBadge: {
-    color: colors.xp,
-    fontWeight: '700',
-    fontSize: 16,
-    width: 60,
-    textAlign: 'right',
+    ...text.bodySecondary,
+    marginBottom: spacing.sm,
   },
   groupCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    padding: 20,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
+    gap: spacing.lg,
+  },
+  // Lets a long exercise list wrap inside the card instead of pushing the
+  // icon off the row.
+  groupTextCol: {
+    flex: 1,
+    gap: spacing.xs,
   },
   groupIcon: {
     fontSize: 32,
   },
   groupName: {
+    ...type.heading,
     color: colors.textPrimary,
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 4,
   },
   groupExercises: {
+    ...type.bodySm,
     color: colors.textSecondary,
-    fontSize: 12,
-  },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
   },
   progressRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   progressText: {
+    ...type.bodySm,
     color: colors.textSecondary,
-    fontSize: 13,
   },
-  progressBg: {
-    height: 8,
-    backgroundColor: colors.surfaceRaised,
-    borderRadius: 4,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: 8,
-    backgroundColor: colors.accent,
-    borderRadius: 4,
+  // The percentage is the readout, so it gets primary ink — the label beside
+  // it stays secondary. Same relationship as every other section header.
+  progressValue: {
+    ...type.bodySm,
+    color: colors.textPrimary,
+    fontFamily: fontFamily.sansBold,
   },
   exerciseCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    padding: 20,
-    gap: 10,
-    borderWidth: 1,
-    borderColor: colors.border,
+    gap: spacing.md,
   },
   exerciseName: {
+    ...type.heading,
     color: colors.textPrimary,
-    fontSize: 17,
-    fontWeight: '700',
   },
   exerciseDetail: {
+    ...type.bodySm,
     color: colors.textSecondary,
-    fontSize: 13,
   },
   setsRow: {
     flexDirection: 'row',
-    gap: 8,
-  },
-  setDot: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: colors.surfaceRaised,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  setDotDone: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accent,
-  },
-  setButton: {
-    backgroundColor: colors.accent,
-    borderRadius: 10,
-    paddingVertical: 12,
     alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
   },
-  setButtonDone: {
-    backgroundColor: colors.surfaceRaised,
-  },
-  setButtonText: {
-    color: colors.bg,
-    fontWeight: '700',
-    fontSize: 14,
+  setsCount: {
+    ...type.bodySm,
+    color: colors.textMuted,
   },
   completeCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    padding: 24,
     alignItems: 'center',
-    gap: 12,
-    borderWidth: 1,
-    borderColor: colors.accent,
+    gap: spacing.md,
   },
   completeTitle: {
+    ...type.title,
     color: colors.textPrimary,
-    fontSize: 22,
-    fontWeight: '700',
   },
   completeXP: {
+    ...type.heading,
     color: colors.xp,
-    fontSize: 18,
-    fontWeight: '700',
   },
   doneButton: {
-    backgroundColor: colors.accent,
-    borderRadius: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 32,
-    marginTop: 8,
-  },
-  doneButtonText: {
-    color: colors.bg,
-    fontWeight: '700',
-    fontSize: 15,
+    marginTop: spacing.sm,
   },
   timerOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.85)',
+    backgroundColor: colors.scrim,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: layout.screenPadding,
   },
   timerCard: {
     backgroundColor: colors.surface,
-    borderRadius: 24,
-    padding: 40,
+    borderRadius: radius.xl,
+    padding: spacing.xl,
+    borderWidth: layout.hairline,
+    borderColor: colors.border,
     alignItems: 'center',
-    gap: 12,
-    width: '80%',
+    gap: spacing.md,
+    width: '100%',
   },
   timerPhaseText: {
-    color: colors.textPrimary,
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  timerSeconds: {
-    color: colors.accent,
-    fontSize: 72,
-    fontWeight: '700',
+    ...type.label,
+    color: colors.textMuted,
   },
   timerLabel: {
+    ...type.bodySm,
     color: colors.textSecondary,
-    fontSize: 14,
-  },
-  skipButton: {
-    marginTop: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 24,
-    backgroundColor: colors.surfaceRaised,
-    borderRadius: 10,
-  },
-  skipText: {
-    color: colors.textSecondary,
-    fontWeight: '600',
   },
 });

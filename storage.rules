@@ -1,0 +1,27 @@
+rules_version = '2';
+
+// Paste this into Firebase Console → Build → Storage → Rules → Publish.
+// (Separate from firestore.rules — Storage has its own rule set, and enabling
+// Storage for the first time starts you on a default that expires.)
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Profile photos. Readable by anyone so the leaderboard can display other
+    // users' avatars, but each user can only write the single file named after
+    // their own uid — so nobody can overwrite someone else's picture.
+    match /profilePhotos/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null
+                   && fileName == request.auth.uid + '.jpg'
+                   // Cap uploads at 5MB so a huge file can't run up storage
+                   // costs, and require it actually be an image.
+                   && request.resource.size < 5 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+    }
+
+    // Nothing else in Storage is writable.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

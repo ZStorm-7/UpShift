@@ -1,19 +1,122 @@
-import { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Modal, TextInput } from 'react-native';
+import { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, Pressable, Modal, AccessibilityInfo } from 'react-native';
+import { getDoc, setDoc } from 'firebase/firestore';
 import { colors } from '../theme/colors';
+import { spacing, radius, type, layout } from '../theme/tokens';
+import { fontFamily } from '../theme/fonts';
+import { Screen, Button, Field } from '../components/ui';
+import { Shimmer } from '../components/anim';
+import AuthTransition from '../components/AuthTransition';
+import Avatar from '../components/Avatar';
+import { withMinDuration, AUTH_TRANSITION_MS } from '../utils/timing';
+import {
+  Enter,
+  LevelCard,
+  QuestRow,
+  StatCard,
+  WaterBlock,
+  LevelUpTakeover,
+} from '../components/dashboard';
+import haptics from '../services/haptics';
+import sound from '../services/sound';
 import { useUser } from '../context/UserContext';
+import { useLanguage } from '../i18n/LanguageContext';
+import {
+  dayDocRef,
+  statsDocRef,
+  TOTAL_XP_PER_LEVEL,
+  countLoggedHistoryDays,
+  getTodayKey,
+  awardXP,
+  incrementTodayField,
+} from '../firebase/progress';
+import {
+  Quest,
+  QUEST_POOL,
+  questDocRef,
+  getQuestCycleKey,
+  pickDailyQuests,
+  getMsUntilNextNoon,
+  formatCountdown,
+} from '../firebase/quests';
+import { getQuestEmoji } from '../data/questEmoji';
+import {
+  StreakState,
+  EMPTY_STREAK,
+  streakDocRef,
+  advanceStreak,
+  liveStreak,
+} from '../firebase/streaks';
+import {
+  WeightEntry,
+  weightLogDocRef,
+  upsertTodayWeight,
+  latestWeight,
+  weightChange,
+} from '../firebase/weight';
+import {
+  QuestContext,
+  findNewlyEarnedQuests,
+  isAutoVerifiable,
+  verifyQuest,
+} from '../firebase/questVerify';
+import { publishToLeaderboard, computeTotalXP } from '../firebase/leaderboard';
+import {
+  requestNotificationPermission,
+  scheduleStreakRiskReminder,
+  cancelStreakRiskReminder,
+} from '../services/notifications';
+import { getRankInfo } from '../data/ranks';
 
-const DAILY_QUESTS = [
-  { id: 1, title: 'Log a workout', xp: 30 },
-  { id: 2, title: 'Hit your calorie goal', xp: 25 },
-  { id: 3, title: 'Drink your water goal', xp: 20 },
-];
+// Header avatar diameter. Named because Avatar derives its font size and
+// AuthTransition-style pressable frame from it — a bare `36` scattered across
+// three places is how a resize turns into three separate edits.
+const AVATAR_SIZE = 36;
+
+// The entrance stagger used to be defined here. It now lives in <Enter/>
+// (components/dashboard.tsx) reading its timing from animation/motion.ts, so
+// the dashboard and every other screen stagger by the same 60ms.
 
 export default function DashboardScreen({ navigation }: any) {
-  const { profile } = useUser();
+  const { authUser, profile, logOut } = useUser();
+  const { t } = useLanguage();
 
-  const [quests, setQuests] = useState(DAILY_QUESTS.map(q => ({ ...q, completed: false })));
-  const [currentXP, setCurrentXP] = useState(20);
+  // The reverse of AuthScreen's sign-in transition: the same 500ms-floor
+  // overlay, going the other way — signed-in back to signed-out. Same
+  // reasoning as AUTH_TRANSITION_MS in AuthScreen: signOut can resolve
+  // fast enough that skipping the floor would read as a flicker rather
+  // than a deliberate beat.
+  const [loggingOut, setLoggingOut] = useState(false);
+  const handleLogOut = async () => {
+    setLoggingOut(true);
+    try {
+      await withMinDuration(logOut(), AUTH_TRANSITION_MS);
+      navigation.reset({ index: 0, routes: [{ name: 'Welcome' }] });
+    } finally {
+      // Only matters if logOut() itself threw — on the success path the
+      // screen is about to be torn down by the reset above anyway.
+      setLoggingOut(false);
+    }
+  };
+
+  const [loading, setLoading] = useState(true);
+
+  // Quests now live in their own Firestore doc (users/{uid}/meta/quests)
+  // instead of a hardcoded array, because they need to (a) refresh with a
+  // new random pick each noon-to-noon cycle and (b) remember which ones are
+  // done independently from the midnight-based day doc used for
+  // food/water/sleep. See firebase/quests.ts for the cycle-key logic.
+  const [quests, setQuests] = useState<Quest[]>([]);
+  const [completedQuestIds, setCompletedQuestIds] = useState<number[]>([]);
+  // IDs of today's quests that were ALREADY true the instant the current
+  // noon-to-noon cycle drew them — e.g. "Log breakfast" gets redrawn at
+  // 12:01pm and you logged breakfast at 8am, under the previous cycle. Those
+  // ids are frozen at draw time (see loadQuests) and excluded from the
+  // auto-verify effect below, so already-paid-for work can't pay out twice.
+  // Manually tapping the quest still works — this only blocks the automatic
+  // path, matching how every other quest's honor-system tap already behaves.
+  const [preSatisfiedIds, setPreSatisfiedIds] = useState<number[]>([]);
+  const [currentXP, setCurrentXP] = useState(0);
   const [level, setLevel] = useState(1);
 
   const [waterTotal, setWaterTotal] = useState(0);
@@ -24,28 +127,578 @@ export default function DashboardScreen({ navigation }: any) {
   const [sleepHours, setSleepHours] = useState(0);
   const [sleepModalVisible, setSleepModalVisible] = useState(false);
   const [sleepInput, setSleepInput] = useState('');
+  const [bedTimeInput, setBedTimeInput] = useState('');
+  const [wakeTimeInput, setWakeTimeInput] = useState('');
+  const [sleepTimeError, setSleepTimeError] = useState('');
+
+  const [totalCalories, setTotalCalories] = useState(0);
+  const [workoutsCompleted, setWorkoutsCompleted] = useState(0);
+
+  // Extra facts about today's food log, needed so quests like "Log 4 meals
+  // today" and "Log a snack under 200 kcal" can be checked automatically
+  // rather than taken on trust.
+  const [mealCount, setMealCount] = useState(0);
+  const [smallestMealCalories, setSmallestMealCalories] = useState<number | null>(null);
+  const [sleepLoggedFromTimes, setSleepLoggedFromTimes] = useState(false);
+
+  const [streak, setStreak] = useState<StreakState>(EMPTY_STREAK);
+  const [weightEntries, setWeightEntries] = useState<WeightEntry[]>([]);
+  const [weightModalVisible, setWeightModalVisible] = useState(false);
+  const [weightInput, setWeightInput] = useState('');
+
+  // Shown as a dismissible banner whenever a Firestore save/load fails,
+  // instead of the old behavior of silently swallowing the error.
+  const [errorMsg, setErrorMsg] = useState('');
+  const errorTimeoutRef = useRef<any>(null);
+  const showError = (message: string) => {
+    setErrorMsg(message);
+    if (errorTimeoutRef.current) clearTimeout(errorTimeoutRef.current);
+    errorTimeoutRef.current = setTimeout(() => setErrorMsg(''), 6000);
+  };
+
+  // Noon countdown, driven off the device's own local time/timezone — no
+  // per-user timezone selection needed, "now" is always whatever time it
+  // actually is where the phone is.
+  //
+  // There used to be a second `now` state ticking alongside this one at 1Hz,
+  // left over from when the header showed a clock. The redesigned header
+  // doesn't, so it was re-rendering the whole dashboard every second — and
+  // because it ticked on a separate interval from this one, React couldn't
+  // batch the two. Every Animated.View below rebuilt its style closure twice a
+  // second to display nothing.
+  const [msUntilNoon, setMsUntilNoon] = useState(getMsUntilNextNoon());
+
+  // Which calendar day and which quest cycle the currently-displayed numbers
+  // were loaded for. Compared against the live values once a minute so the
+  // screen notices midnight and noon passing while it stays mounted.
+  const loadedDayKeyRef = useRef<string>(getTodayKey());
+  const loadedCycleKeyRef = useRef<string>('');
+  const reloadRef = useRef<(() => void) | null>(null);
+  // The noon rollover needs to redraw quests against TODAY'S numbers. It runs
+  // from a setInterval whose effect only depends on [authUser], so anything it
+  // closes over is frozen at the render where authUser first arrived — which
+  // is while loading is still true and every number is still a placeholder.
+  // Keeping the context builder in a ref, refreshed on every render, is what
+  // lets that interval see real values. Without it, a level-12 user whose
+  // phone sits on the dashboard through midday gets the new cycle's
+  // "Reach Level 5" evaluated against level 1, marked not-pre-satisfied, and
+  // then instantly auto-completed for XP they earned weeks ago.
+  const questContextRef = useRef<() => QuestContext>(() => buildQuestContext());
+
+  // Level-up: a full-screen 2.5s takeover plus a vibration. Driven by
+  // comparing the newly-loaded level to whatever it was a moment ago — see
+  // the effect below.
+  const [showLevelUp, setShowLevelUp] = useState(false);
+  // Starts as null so the very first load (going from "nothing loaded yet"
+  // to whatever level was saved) never counts as a level-up — only actual
+  // increases *after* that first load should trigger the animation.
+  //
+  // The subtlety that made this wrong for a long time: `level` state starts
+  // at the placeholder 1, and this effect runs on the FIRST render, before
+  // Firestore has answered. That first pass would see null, skip the
+  // animation (correct) — and then seed the ref with 1 (wrong). When the real
+  // level arrived a moment later, 12 > 1, so every launch by a level-12 user
+  // fired a "Level Up!" celebration for a level they earned weeks ago. The
+  // fix is the `loading` guard below: while the first load is still in
+  // flight the ref is left untouched, so the first value it ever sees is a
+  // real one from Firestore rather than the placeholder.
+  const prevLevelRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (loading) return;
+    if (prevLevelRef.current !== null && level > prevLevelRef.current) {
+      setShowLevelUp(true);
+      // The vibration fires here rather than inside the takeover so the
+      // physical feedback lands on the same frame the overlay mounts. Put it
+      // in the component's effect instead and it arrives a render later —
+      // small, but enough that the buzz and the burst stop feeling like one
+      // event.
+      haptics.levelUp();
+      sound.levelUp();
+    }
+    prevLevelRef.current = level;
+  }, [level, loading]);
+
+  const quests_ = quests.map(q => ({ ...q, completed: completedQuestIds.includes(q.id) }));
 
   const waterPercent = Math.round((waterTotal / waterGoal) * 100);
-  const totalXP = 100;
-  const xpProgress = (currentXP / totalXP) * 100;
+  const totalXP = TOTAL_XP_PER_LEVEL;
 
-  const completeQuest = (id: number, xp: number) => {
-    setQuests(prev =>
-      prev.map(q => q.id === id ? { ...q, completed: true } : q)
-    );
-    const newXP = currentXP + xp;
-    if (newXP >= totalXP) {
-      setCurrentXP(newXP - totalXP);
-      setLevel(prev => prev + 1);
-    } else {
-      setCurrentXP(newXP);
+  // Builds a QuestContext from whatever this screen currently has in React
+  // state. Used by the auto-verify effect (state is trustworthy there — it's
+  // only reachable once `loading` is false) and as a fallback inside
+  // loadQuests for the noon-only reload path, where state still reflects
+  // today's real numbers because midnight hasn't passed. It must NOT be used
+  // for the very first load of the day — see the freshContext parameter on
+  // loadQuests for why.
+  const buildQuestContext = (): QuestContext => ({
+    totalCalories,
+    calorieGoal: profile?.calorieGoal || 0,
+    waterTotal,
+    waterGoal,
+    sleepHours,
+    sleepLoggedFromTimes,
+    workoutsCompleted,
+    mealCount,
+    smallestMealCalories,
+    level,
+  });
+
+  // Refreshed every render so the interval-driven noon reload above always
+  // reads current numbers rather than the render it was created in.
+  questContextRef.current = buildQuestContext;
+
+  // `freshContext`, when provided, comes from data the caller just read from
+  // Firestore rather than from this component's React state. That matters
+  // only for a first-of-the-day load: state can still be holding yesterday's
+  // numbers (or the placeholder zeros from before the very first read
+  // finishes), and drawing a fresh quest set against stale/zeroed state would
+  // wrongly conclude nothing is pre-satisfied — silently reopening the exact
+  // exploit this is meant to close. The noon-only boundary reload doesn't
+  // pass one, because at that point state IS today's real data (midnight
+  // hasn't crossed, so nothing has gone stale).
+  const loadQuests = async (uid: string, freshContext?: QuestContext) => {
+    const cycleKey = getQuestCycleKey();
+    try {
+      // How many prior days this user has actually logged data for. Quests
+      // that need more history than this can't possibly be completed, so they
+      // must not be handed out — see pickDailyQuests.
+      const historyDays = await countLoggedHistoryDays(uid);
+      const snap = await getDoc(questDocRef(uid));
+
+      // Stamped only once the reads have actually succeeded. It used to be set
+      // on the first line of this function, which meant a transient failure
+      // (offline, quota) still marked the cycle as loaded — so the once-a-
+      // minute boundary watcher never retried, and the quest card sat empty
+      // until the user navigated away and back.
+      loadedCycleKeyRef.current = cycleKey;
+
+      const storedIsCurrent = snap.exists() && snap.data().cycleKey === cycleKey;
+      if (storedIsCurrent) {
+        const data = snap.data();
+        const ids: number[] = data.questIds || [];
+        const resolved = ids
+          .map(id => QUEST_POOL.find(q => q.id === id))
+          .filter((q): q is Quest => Boolean(q));
+
+        // A stored set can contain a quest that's no longer legitimate —
+        // either it was assigned before this gating existed, or the account
+        // simply doesn't have the history it needs. Rather than leave an
+        // uncompletable quest sitting there, throw the whole set out and
+        // redraw from the eligible pool. The evicted quest isn't deleted;
+        // it's still in QUEST_POOL and becomes drawable again once the
+        // account has enough history.
+        const allAchievable = resolved.every(q => q.requiresHistoryDays <= historyDays);
+        if (allAchievable && resolved.length > 0) {
+          setQuests(resolved);
+          setCompletedQuestIds(data.completedQuestIds || []);
+          // Older quest documents were written before preSatisfiedIds
+          // existed. Defaulting to [] reproduces the old (exploitable, but
+          // at-least-not-crashing) behavior for them rather than throwing on
+          // an undefined field — the exclusion set is simply empty until the
+          // next fresh draw writes a real one.
+          setPreSatisfiedIds(data.preSatisfiedIds || []);
+          return;
+        }
+      }
+
+      // Either the first time this user has loaded quests, noon has passed
+      // since the stored cycleKey was saved, or the stored set contained
+      // something unachievable — in all three cases, draw a fresh set.
+      const fresh = pickDailyQuests(cycleKey, 3, historyDays);
+      setQuests(fresh);
+      setCompletedQuestIds([]);
+
+      // Freeze which of the freshly-drawn quests are ALREADY true right now,
+      // using real data (freshContext) rather than possibly-stale state — see
+      // the comment above this function. Reusing findNewlyEarnedQuests with
+      // an empty completedIds list is exactly "which drawn quests currently
+      // pass their verifier", which is exactly what needs to be excluded from
+      // ever auto-completing this cycle.
+      const preSatisfied = findNewlyEarnedQuests(
+        fresh.map(q => q.id),
+        [],
+        // Through the ref, not buildQuestContext directly: the noon reload
+        // calls this from a setInterval that captured its closure back when
+        // every number was still a placeholder.
+        freshContext ?? questContextRef.current()
+      );
+      setPreSatisfiedIds(preSatisfied);
+
+      await setDoc(questDocRef(uid), {
+        cycleKey,
+        questIds: fresh.map(q => q.id),
+        completedQuestIds: [],
+        preSatisfiedIds: preSatisfied,
+      });
+    } catch {
+      showError(t('errorLoadFailed'));
     }
+  };
+
+  // Load today's progress (and lifetime XP/level) from Firestore. Reloads
+  // whenever this screen comes back into focus (e.g. returning from
+  // Nutrition after logging food) so the numbers stay in sync.
+  useEffect(() => {
+    if (!authUser) {
+      setLoading(false);
+      return;
+    }
+
+    const loadProgress = async (showSpinner: boolean) => {
+      if (showSpinner) setLoading(true);
+      // Stamp which calendar day the state we're about to set belongs to, so
+      // the rollover watcher can notice when it stops being today.
+      loadedDayKeyRef.current = getTodayKey();
+      try {
+        const [daySnap, statsSnap, streakSnap, weightSnap] = await Promise.all([
+          getDoc(dayDocRef(authUser.uid)),
+          getDoc(statsDocRef(authUser.uid)),
+          getDoc(streakDocRef(authUser.uid)),
+          getDoc(weightLogDocRef(authUser.uid)),
+        ]);
+        // Captured into local consts (not just pushed through setState) so
+        // the freshContext passed to loadQuests below reflects what was
+        // actually just read from Firestore. setState is async — reading
+        // waterTotal/level/etc. back out of state immediately after calling
+        // their setters would still see the PREVIOUS render's values (zeros,
+        // on a cold load), which is exactly the staleness that let a
+        // redrawn quest look unearned when it had actually already been
+        // done. See the comment on loadQuests' freshContext parameter.
+        let dayContext: {
+          waterTotal: number;
+          sleepHours: number;
+          sleepLoggedFromTimes: boolean;
+          workoutsCompleted: number;
+          totalCalories: number;
+          mealCount: number;
+          smallestMealCalories: number | null;
+        };
+        if (daySnap.exists()) {
+          const data = daySnap.data();
+          const foodLog = data.foodLog || [];
+          dayContext = {
+            waterTotal: data.waterTotal || 0,
+            sleepHours: data.sleepHours || 0,
+            sleepLoggedFromTimes: Boolean(data.sleepLoggedFromTimes),
+            workoutsCompleted: data.workoutsCompleted || 0,
+            totalCalories: foodLog.reduce((sum: number, item: any) => sum + (item.calories || 0), 0),
+            mealCount: foodLog.length,
+            smallestMealCalories:
+              foodLog.length > 0
+                ? Math.min(...foodLog.map((item: any) => item.calories || 0))
+                : null,
+          };
+        } else {
+          dayContext = {
+            waterTotal: 0,
+            sleepHours: 0,
+            sleepLoggedFromTimes: false,
+            workoutsCompleted: 0,
+            totalCalories: 0,
+            mealCount: 0,
+            smallestMealCalories: null,
+          };
+        }
+        setWaterTotal(dayContext.waterTotal);
+        setSleepHours(dayContext.sleepHours);
+        setSleepLoggedFromTimes(dayContext.sleepLoggedFromTimes);
+        setWorkoutsCompleted(dayContext.workoutsCompleted);
+        setTotalCalories(dayContext.totalCalories);
+        setMealCount(dayContext.mealCount);
+        setSmallestMealCalories(dayContext.smallestMealCalories);
+
+        setStreak(streakSnap.exists() ? (streakSnap.data() as StreakState) : EMPTY_STREAK);
+        setWeightEntries(weightSnap.exists() ? (weightSnap.data().entries || []) : []);
+        // currentXP/level always come straight from Firestore here, not from
+        // any local-only state — so logging out and back in (or closing and
+        // reopening the app) always shows whatever was last saved, never a
+        // stale in-memory value.
+        const levelVal = statsSnap.exists() ? (statsSnap.data().level || 1) : 1;
+        if (statsSnap.exists()) {
+          setCurrentXP(statsSnap.data().currentXP || 0);
+        } else {
+          setCurrentXP(0);
+        }
+        setLevel(levelVal);
+
+        await loadQuests(authUser.uid, {
+          totalCalories: dayContext.totalCalories,
+          calorieGoal: profile?.calorieGoal || 0,
+          waterTotal: dayContext.waterTotal,
+          waterGoal,
+          sleepHours: dayContext.sleepHours,
+          sleepLoggedFromTimes: dayContext.sleepLoggedFromTimes,
+          workoutsCompleted: dayContext.workoutsCompleted,
+          mealCount: dayContext.mealCount,
+          smallestMealCalories: dayContext.smallestMealCalories,
+          level: levelVal,
+        });
+      } catch {
+        showError(t('errorLoadFailed'));
+      }
+      if (showSpinner) setLoading(false);
+    };
+
+    // Held in a ref so the rollover watcher below can call the same loader
+    // without this effect having to re-run (and re-show the spinner).
+    reloadRef.current = () => loadProgress(false);
+
+    loadProgress(true);
+    const unsubscribe = navigation.addListener('focus', () => loadProgress(false));
+    return unsubscribe;
+  }, [authUser, navigation]);
+
+  // Ticks the clock every second, and once a minute checks two boundaries
+  // that the app can cross while sitting open on screen.
+  //
+  // MIDNIGHT — the day document is keyed by calendar date, so at 00:00 the
+  // app is silently pointing at a different document than the numbers on
+  // screen came from. Without this, a phone left on the charger overnight
+  // would show yesterday's totals all morning, and every log written against
+  // them landed in today's document carrying yesterday's numbers along. The
+  // additive writes are now relative (see incrementTodayField), which stops
+  // the corruption; this reload is what makes the DISPLAY reset too.
+  //
+  // NOON — the quest cycle boundary. Only redraws when the key has actually
+  // changed: the old code called loadQuests unconditionally every 60 seconds,
+  // and loadQuests reads the user's entire `days` collection to count history.
+  // For an account with 300 logged days that was 18,000 document reads an
+  // hour, which exhausts the free Firestore quota in about three hours and
+  // then breaks every read in the app.
+  useEffect(() => {
+    const boundaryInterval = setInterval(() => {
+      if (!authUser) return;
+
+      if (getTodayKey() !== loadedDayKeyRef.current) {
+        reloadRef.current?.();
+        return; // the reload runs loadQuests itself; don't do it twice
+      }
+
+      const cycleKey = getQuestCycleKey();
+      if (cycleKey !== loadedCycleKeyRef.current) {
+        // Deliberately NOT stamping loadedCycleKeyRef here. loadQuests stamps
+        // it itself, and only after its reads succeed — the whole point of
+        // that guard (see the comment there) is that a failed noon redraw gets
+        // retried on the next tick. Stamping it up front here marked the cycle
+        // loaded before we knew whether it had loaded, which re-broke exactly
+        // the bug that guard was added to fix.
+        loadQuests(authUser.uid);
+      }
+    }, 60000);
+
+    return () => clearInterval(boundaryInterval);
+  }, [authUser]);
+
+  // The error banner's dismiss timer outlives the screen otherwise: fail a
+  // save, immediately log out, and the pending setState lands on an unmounted
+  // component.
+  useEffect(() => {
+    return () => {
+      if (errorTimeoutRef.current) clearTimeout(errorTimeoutRef.current);
+    };
+  }, []);
+
+  // Recompute the countdown every second too, cheaply, without a network call.
+  useEffect(() => {
+    const interval = setInterval(() => setMsUntilNoon(getMsUntilNextNoon()), 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Auto-completes any quest the logged data proves you've earned. Runs
+  // whenever the underlying numbers change (including right after a focus
+  // reload, so logging food in the Nutrition screen credits the relevant
+  // quest the moment you come back here).
+  //
+  // `loading` is in the guard because the very first render has all these
+  // values at 0 — checking then would see "0 meals, 0 calories" and be
+  // correct but pointless, and worse, a quest like "level >= 5" would
+  // evaluate against the placeholder level of 1.
+  useEffect(() => {
+    if (loading || !authUser || quests.length === 0) return;
+    const context = buildQuestContext();
+    // preSatisfiedIds is merged into the exclusion list alongside
+    // completedQuestIds — not passed as some separate flag — so the
+    // exclusion is a plain "already accounted for" set. A quest that was
+    // already true when this cycle began stays excluded from AUTO-completion
+    // for the whole cycle; it does not block a manual tap (completeQuest),
+    // which is the same honor-system path every other quest already has.
+    const earned = findNewlyEarnedQuests(
+      quests.map(q => q.id),
+      [...completedQuestIds, ...preSatisfiedIds],
+      context
+    );
+    if (earned.length > 0) completeQuests(earned);
+  }, [
+    loading, authUser, quests, completedQuestIds, preSatisfiedIds,
+    totalCalories, waterTotal, sleepHours, sleepLoggedFromTimes,
+    workoutsCompleted, mealCount, smallestMealCalories, level,
+  ]);
+
+  // Advances the streak the moment every quest in the current cycle is done.
+  // advanceStreak() is idempotent per cycle key, so this can safely re-run
+  // on every render without inflating the count.
+  useEffect(() => {
+    if (loading || !authUser || quests.length === 0) return;
+    const allDone = quests.every(q => completedQuestIds.includes(q.id));
+    if (!allDone) return;
+
+    const cycleKey = getQuestCycleKey();
+    if (streak.lastCompletedCycleKey === cycleKey) return;
+
+    const next = advanceStreak(streak, cycleKey);
+    setStreak(next);
+    setDoc(streakDocRef(authUser.uid), next).catch(() => {
+      showError(t('errorSaveFailed'));
+    });
+  }, [loading, authUser, quests, completedQuestIds, streak]);
+
+  // Mirrors this user's public stats into the leaderboard collection whenever
+  // their XP, level, streak, name or avatar changes. Only these few fields
+  // leave the private user document — no email, weight, age or food data.
+  //
+  // Failures are swallowed on purpose: the leaderboard is cosmetic, and a
+  // user whose rules aren't set up yet (or who is offline) should still have a
+  // fully working app rather than an error banner about a scoreboard.
+  useEffect(() => {
+    if (loading || !authUser || !profile) return;
+    publishToLeaderboard({
+      uid: authUser.uid,
+      displayName: `${profile.firstName} ${profile.lastInitial}.`,
+      avatar: profile.avatar || '',
+      // Firestore rejects `undefined` fields outright, so an unchosen color
+      // has to be OMITTED, not set to undefined — hence the spread rather
+      // than `avatarColor: profile.avatarColor`.
+      ...(profile.avatarColor ? { avatarColor: profile.avatarColor } : {}),
+      level,
+      totalXP: computeTotalXP(level, currentXP),
+      rank: getRankInfo(level).rank,
+      streak: liveStreak(streak, getQuestCycleKey()),
+    }).catch(() => {});
+  }, [loading, authUser, profile, level, currentXP, streak]);
+
+  const logWeight = () => {
+    if (!authUser) return;
+    const weight = parseFloat(weightInput);
+    if (!weight || weight <= 0 || weight > 1000) return;
+    const updated = upsertTodayWeight(weightEntries, weight);
+    setWeightEntries(updated);
+    setDoc(weightLogDocRef(authUser.uid), { entries: updated }).catch(() => {
+      showError(t('errorSaveFailed'));
+    });
+    setWeightInput('');
+    setWeightModalVisible(false);
+  };
+
+  const saveDayProgress = (updates: Partial<{ waterTotal: number; sleepHours: number; sleepLoggedFromTimes: boolean }>) => {
+    if (!authUser) return;
+    setDoc(dayDocRef(authUser.uid), updates, { merge: true }).catch(() => {
+      showError(t('errorSaveFailed'));
+    });
+  };
+
+  const saveQuestProgress = (updatedIds: number[]) => {
+    if (!authUser) return;
+    setDoc(questDocRef(authUser.uid), { completedQuestIds: updatedIds }, { merge: true }).catch(() => {
+      showError(t('errorSaveFailed'));
+    });
+  };
+
+  // Marks one or more quests complete and awards their combined XP in a
+  // single pair of writes. Taking an array matters for auto-verification:
+  // logging one big meal can satisfy several quests at once, and completing
+  // them one-at-a-time would fire overlapping writes that clobber each other
+  // (each would compute its new XP from the same stale starting value).
+  // The XP itself is awarded by a Firestore transaction rather than computed
+  // here and written as an absolute number. Doing the arithmetic locally was
+  // silently destroying XP: this screen stays mounted underneath Workout, so
+  // its `currentXP` goes stale the moment a workout awards anything, and the
+  // next quest tap would write the stale total straight over the server's.
+  // See awardXP in firebase/progress.ts.
+  const completeQuests = async (ids: number[]) => {
+    if (!authUser) return;
+    const fresh = ids.filter(id => !completedQuestIds.includes(id));
+    if (fresh.length === 0) return;
+
+    const updatedIds = [...completedQuestIds, ...fresh];
+    setCompletedQuestIds(updatedIds);
+    saveQuestProgress(updatedIds);
+    // One tick per batch, not per quest. Logging a big meal can satisfy three
+    // quests at once, and three overlapping vibrations read as a malfunction
+    // rather than three rewards.
+    haptics.questTick();
+    // Fires on TAP, alongside the haptic — not after the write settles.
+    sound.questTick();
+    sound.xpEarned();
+
+    const gainedXP = fresh.reduce((sum, id) => {
+      const quest = QUEST_POOL.find(q => q.id === id);
+      return sum + (quest?.xp || 0);
+    }, 0);
+
+    try {
+      const next = await awardXP(authUser.uid, gainedXP);
+      setCurrentXP(next.currentXP);
+      setLevel(next.level);
+    } catch {
+      // The quest is already marked done both locally and in Firestore, so
+      // rolling that back would be worse than leaving the XP to be picked up
+      // on the next successful award. Just say the save failed.
+      showError(t('errorSaveFailed'));
+    }
+  };
+
+  // The tap handler behind every QuestRow. This is the ONE place a manual tap
+  // can turn into a completion, so it's also the one place that has to tell
+  // apart the two kinds of quest the design distinguishes:
+  //
+  //   - Auto-verifiable (has an entry in QUEST_VERIFIERS, marked "⚡ Auto-
+  //     tracked" in the UI): the app can check the real answer, so a tap
+  //     can't be allowed to force a "yes" the data disagrees with. Before
+  //     this fix, tapping "Hit your calorie goal" at 9am with nothing logged
+  //     yet paid out the XP anyway — the honor-system tap and the auto-verify
+  //     effect were both wired to the same completeQuests call with nothing
+  //     between them.
+  //   - Everything else ("Take a 10-minute walk outside"): there is no data
+  //     that could confirm or deny it, so a tap IS the only signal that
+  //     exists, and stays instant — same as it always has.
+  //
+  // The context comes from the ref, not a plain closure over the render's
+  // props, for the same reason the auto-verify effect below reads it that
+  // way — see questContextRef's own comment for the stale-closure bug that
+  // caused.
+  const completeQuest = (id: number) => {
+    if (isAutoVerifiable(id)) {
+      const earned = verifyQuest(id, questContextRef.current());
+      if (!earned) {
+        // Not done yet. A no-op that still acknowledges the tap — silence
+        // here would read as the button being broken, not as "not yet".
+        haptics.selection();
+        const quest = quests_.find(q => q.id === id);
+        AccessibilityInfo.announceForAccessibility?.(
+          `${quest?.title ?? 'Quest'} isn't complete yet. This one tracks itself — it'll check off automatically once you've done it.`
+        );
+        return;
+      }
+    }
+    completeQuests([id]);
   };
 
   const addWater = () => {
     const amount = parseInt(waterInput) || 0;
     if (amount > 0) {
-      setWaterTotal(prev => Math.min(prev + amount, waterGoal));
+      // No cap. This used to be Math.min(waterTotal + amount, waterGoal),
+      // which silently discarded any water logged past the goal — so quest 50
+      // ("Drink an extra 500ml beyond your goal") could never be completed,
+      // and the app quietly lied about how much you'd actually drunk. The
+      // progress BAR is still capped at 100% (see waterPercent usage); the
+      // stored number is now truthful.
+      // increment() rather than a computed total: relative, so it can't carry
+      // a stale in-memory number into a freshly rolled-over day document.
+      setWaterTotal(waterTotal + amount);
+      incrementTodayField(authUser!.uid, 'waterTotal', amount).catch(() => {
+        showError(t('errorSaveFailed'));
+      });
       setWaterInput('');
       setWaterModalVisible(false);
     }
@@ -55,25 +708,154 @@ export default function DashboardScreen({ navigation }: any) {
     const hours = parseFloat(sleepInput) || 0;
     if (hours > 0 && hours <= 24) {
       setSleepHours(hours);
+      // Explicitly false, not omitted. saveDayProgress writes with
+      // { merge: true }, so leaving this out doesn't mean "no change" the
+      // way it would with a plain object assignment — it means "keep
+      // whatever's already in Firestore". Quest 53 ("logged sleep via
+      // bedtime + wake time") reads this flag directly, and a plain-hours
+      // entry overwriting a stale `true` from an earlier times-based entry
+      // that same day would let it be claimed for hours that were never
+      // actually derived from bedtime/wake time.
+      setSleepLoggedFromTimes(false);
+      saveDayProgress({ sleepHours: hours, sleepLoggedFromTimes: false });
       setSleepInput('');
       setSleepModalVisible(false);
     }
   };
 
-  const getRankInfo = () => {
-    if (level < 5) return { rank: 'Rookie', next: 'Grinder at Level 5' };
-    if (level < 10) return { rank: 'Grinder', next: 'Athlete at Level 10' };
-    if (level < 20) return { rank: 'Athlete', next: 'Warrior at Level 20' };
-    if (level < 35) return { rank: 'Warrior', next: 'Champion at Level 35' };
-    if (level < 50) return { rank: 'Champion', next: 'Legend at Level 50' };
-    if (level < 75) return { rank: 'Legend', next: 'Mythic at Level 75' };
-    return { rank: 'Mythic', next: "You've reached the top!" };
+  // Parses things like "11:00 PM", "11:00pm", or 24-hour "23:00" into
+  // minutes-since-midnight (0–1439). Returns null for anything that doesn't
+  // match, so the caller can show an error instead of silently computing
+  // something wrong from bad input.
+  const parseTimeToMinutes = (input: string): number | null => {
+    const trimmed = input.trim().toUpperCase();
+    const match = trimmed.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/);
+    if (!match) return null;
+    let hours = parseInt(match[1], 10);
+    const minutes = parseInt(match[2], 10);
+    const period = match[3];
+    if (period === 'PM' && hours !== 12) hours += 12;
+    if (period === 'AM' && hours === 12) hours = 0;
+    if (hours > 23 || minutes > 59) return null;
+    return hours * 60 + minutes;
   };
 
-  const { rank, next } = getRankInfo();
+  // Turns a bedtime + wake time into total hours slept, handling the
+  // overnight wraparound (bedtime after midnight is "earlier" in clock time
+  // than wake time, but it's still fewer hours until wake-up, not more —
+  // e.g. 11:00 PM to 7:00 AM is 8 hours, not negative four).
+  const calculateSleepFromTimes = () => {
+    const bedMinutes = parseTimeToMinutes(bedTimeInput);
+    const wakeMinutes = parseTimeToMinutes(wakeTimeInput);
+    if (bedMinutes === null || wakeMinutes === null) {
+      setSleepTimeError('Use a format like "11:00 PM" or "7:30 AM" for both times.');
+      return;
+    }
+    setSleepTimeError('');
+    let diffMinutes = wakeMinutes - bedMinutes;
+    if (diffMinutes <= 0) diffMinutes += 24 * 60;
+    const hours = Math.round((diffMinutes / 60) * 4) / 4; // rounded to nearest quarter-hour
+    setSleepHours(hours);
+    // Recorded so quest 53 ("Log your sleep using bedtime + wake time") can
+    // tell this path apart from someone just typing "7.5" into the hours box.
+    setSleepLoggedFromTimes(true);
+    saveDayProgress({ sleepHours: hours, sleepLoggedFromTimes: true });
+    setBedTimeInput('');
+    setWakeTimeInput('');
+    setSleepModalVisible(false);
+  };
+
+  // Rank thresholds now live in data/ranks.ts so the Leaderboard screen shows
+  // the identical names/emoji without a second copy of the ladder.
+  const { rank, next, emoji: rankEmoji } = getRankInfo(level);
+  // getRankInfo returns either "Warrior at Level 20" or the top-of-ladder
+  // message. Only the first wants a "Next:" in front of it.
+  const nextRankLabel = next.includes('at Level') ? `Next: ${next}` : next;
+  const questsDone = quests_.filter(q => q.completed).length;
+  const currentStreakDays = liveStreak(streak, getQuestCycleKey());
+
+  // Ask for notification permission once, the first time the Dashboard
+  // mounts with notifications not explicitly turned off. Requesting it here
+  // rather than during onboarding keeps the permission prompt away from the
+  // five-step signup flow (one more system dialog there is one more chance
+  // to bounce), and shows it at the moment it's actually relevant — right
+  // as quests, the thing the reminder is about, are on screen.
+  useEffect(() => {
+    if (profile?.notificationsEnabled === false) return;
+    requestNotificationPermission();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Local streak-risk reminder. Re-evaluated on every render where quest
+  // completion or the streak count could have changed — see
+  // services/notifications.ts for why "reschedule from scratch each time"
+  // is the right model for a notification that can't check live state at
+  // fire time. Opted out entirely when the user has turned notifications
+  // off in Edit Profile (undefined/unset defaults to on, matching every
+  // other opt-in-by-default flag in this app).
+  useEffect(() => {
+    if (profile?.notificationsEnabled === false) {
+      cancelStreakRiskReminder();
+      return;
+    }
+    scheduleStreakRiskReminder(questsDone < quests_.length, currentStreakDays);
+  }, [profile?.notificationsEnabled, questsDone, quests_.length, currentStreakDays]);
+
+  const currentWeight = latestWeight(weightEntries);
+  const weightDelta = weightChange(weightEntries);
+
+  // "Before the day ends" checklist — anything still incomplete right now.
+  const remainingItems: string[] = [];
+  quests_.filter(q => !q.completed).forEach(q => remainingItems.push(`${getQuestEmoji(q.title)} ${q.title}`));
+  if (waterTotal < waterGoal) remainingItems.push(`💧 ${t('water')}: ${waterTotal}ml / ${waterGoal}ml`);
+  if (sleepHours === 0) remainingItems.push(`😴 ${t('sleep')}`);
+  if (totalCalories === 0) remainingItems.push(`🍎 ${t('calories')}`);
+
+  // Skeletons in the shape of the real layout, not a spinner. A spinner in
+  // the middle of an empty screen says "wait"; skeletons say "here's what's
+  // coming", the layout doesn't jump when data lands, and the wait measurably
+  // feels shorter because there's already something to look at.
+  if (loading) {
+    return (
+      <Screen scroll contentStyle={styles.container}>
+        <Shimmer width="60%" height={28} />
+        <Shimmer width="100%" height={132} style={styles.skeletonCard} />
+        <Shimmer width="40%" height={16} />
+        <Shimmer width="100%" height={56} style={styles.skeletonCard} />
+        <Shimmer width="100%" height={56} style={styles.skeletonCard} />
+        <Shimmer width="100%" height={56} style={styles.skeletonCard} />
+        <View style={styles.statsRow}>
+          <Shimmer width="100%" height={84} style={[styles.skeletonCard, styles.flexOne]} />
+          <Shimmer width="100%" height={84} style={[styles.skeletonCard, styles.flexOne]} />
+        </View>
+        <Shimmer width="100%" height={128} style={styles.skeletonCard} />
+      </Screen>
+    );
+  }
 
   return (
-    <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
+    <Screen scroll contentStyle={styles.container}>
+
+      {/* Error banner */}
+      {errorMsg !== '' && (
+        <Pressable
+          style={styles.errorBanner}
+          onPress={() => setErrorMsg('')}
+          accessibilityRole="button"
+          // role="alert" + a live region so the failure is spoken when it
+          // appears. Without it the only signal that a save failed is a red
+          // bar that a screen-reader user never lands on, because nothing
+          // moves focus here.
+          accessibilityLiveRegion="polite"
+          accessibilityLabel={`${errorMsg}. Double tap to dismiss.`}>
+          <Text style={styles.errorText} accessible={false}>
+            ⚠️ {errorMsg}
+          </Text>
+          <Text style={styles.errorDismiss} accessible={false}>
+            ✕
+          </Text>
+        </Pressable>
+      )}
 
       {/* Warning banners */}
       {sleepHours > 0 && sleepHours < 6 && (
@@ -87,82 +869,169 @@ export default function DashboardScreen({ navigation }: any) {
         </View>
       )}
 
-      {/* Greeting */}
-      {profile && (
-        <Text style={styles.greeting}>Good morning, {profile.firstName} 👋</Text>
-      )}
-
-      {/* Rank + XP */}
-      <View style={styles.card}>
-        <View style={styles.rankRow}>
-          <Text style={styles.rankLabel}>Level {level}</Text>
-          <Text style={styles.xpLabel}>{currentXP} / {totalXP} XP</Text>
+      {/* Greeting.
+          The mockup's header is the greeting and nothing else — no time, no
+          battery, no chrome. The avatar and the three nav glyphs are the one
+          addition, because the app genuinely needs a way out to Leaderboard,
+          History and Settings and a floating tab bar would cover the water
+          button. */}
+      <Enter index={0}>
+        <View style={styles.greetingRow}>
+          <View style={styles.greetingLeft}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Edit profile"
+              onPress={() => navigation.navigate('EditProfile')}
+              style={styles.avatarPressable}>
+              <Avatar
+                photoUrl={profile?.avatar}
+                color={profile?.avatarColor}
+                uid={authUser?.uid ?? ''}
+                firstName={profile?.firstName}
+                lastInitial={profile?.lastInitial}
+                size={AVATAR_SIZE}
+              />
+            </Pressable>
+            {profile && (
+              <Text style={styles.greeting} numberOfLines={2}>
+                {t('goodMorning')}, {profile.firstName}
+              </Text>
+            )}
+          </View>
+          <View style={styles.headerActions}>
+            <Pressable hitSlop={10} accessibilityRole="button" accessibilityLabel="Friends" onPress={() => navigation.navigate('Friends')}>
+              <Text style={styles.iconGlyph}>👥</Text>
+            </Pressable>
+            <Pressable hitSlop={10} accessibilityRole="button" accessibilityLabel="Leaderboard" onPress={() => navigation.navigate('Leaderboard')}>
+              <Text style={styles.iconGlyph}>🏆</Text>
+            </Pressable>
+            <Pressable hitSlop={10} accessibilityRole="button" accessibilityLabel="History" onPress={() => navigation.navigate('History')}>
+              <Text style={styles.iconGlyph}>📊</Text>
+            </Pressable>
+            <Pressable hitSlop={10} accessibilityRole="button" accessibilityLabel="Log out" onPress={handleLogOut}>
+              <Text style={styles.iconGlyph}>⏻</Text>
+            </Pressable>
+          </View>
         </View>
-        <View style={styles.xpBarBg}>
-          <View style={[styles.xpBarFill, { width: `${xpProgress}%` }]} />
-        </View>
-        <Text style={styles.rankTitle}>⚔️ {rank}</Text>
-        <Text style={styles.rankNext}>Next rank: {next}</Text>
-      </View>
+      </Enter>
 
-      {/* Daily Quests */}
-      <Text style={styles.sectionTitle}>Daily Quests</Text>
-      {quests.map(quest => (
-        <Pressable
-          key={quest.id}
-          style={[styles.questCard, quest.completed && styles.questCompleted]}
-          onPress={() => !quest.completed && completeQuest(quest.id, quest.xp)}>
-          <View style={styles.questLeft}>
-            <Text style={styles.questCheck}>{quest.completed ? '✅' : '⬜'}</Text>
-            <Text style={[styles.questTitle, quest.completed && styles.questTitleDone]}>
-              {quest.title}
+      {/* Level + XP + rank */}
+      <Enter index={1}>
+        <LevelCard
+          level={level}
+          currentXP={currentXP}
+          totalXP={totalXP}
+          rank={`${rankEmoji} ${rank}`}
+          nextLabel={nextRankLabel}
+          streakDays={currentStreakDays}
+        />
+      </Enter>
+
+      {/* Daily Quests.
+          One card PER QUEST, with real space between them — the layout the
+          Claude Design mock uses. An earlier version merged them into a single
+          card of hairline-separated rows on the theory that a checklist reads
+          as one finishable thing; the mock disagrees, and on screen the mock
+          is right. Each quest is independently tappable and independently
+          rewarding, and giving each one its own edges makes the tap target
+          obvious and gives the 1.14 tick somewhere to happen. The "0 / 3 done"
+          counter is what supplies the sense of a set, so the cards don't have
+          to.
+
+          The whole section is ONE entrance beat, not one per card. The design
+          is explicit about this — "five groups rise 18px in sequence:
+          greeting, level card, quests, stats, water" — and it's the right
+          call: the quests are a group, and staggering them individually would
+          spend three of the five beats on one section and make the stats and
+          water arrive late enough to feel like an afterthought. */}
+      <Enter index={2}>
+        <View style={styles.questSection}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>{t('dailyQuests')}</Text>
+            <Text style={styles.sectionCount}>
+              {questsDone} / {quests_.length} done
             </Text>
           </View>
-          <Text style={styles.questXP}>+{quest.xp} XP</Text>
-        </Pressable>
-      ))}
 
-      {/* Today's Stats */}
-      <Text style={styles.sectionTitle}>Today</Text>
-      <View style={styles.statsRow}>
-        <Pressable style={styles.statCard} onPress={() => navigation.navigate('Nutrition')}>
-          <Text style={styles.statIcon}>🍎</Text>
-          <Text style={styles.statValue}>0</Text>
-          <Text style={styles.statLabel}>Calories</Text>
-        </Pressable>
-        <Pressable style={styles.statCard} onPress={() => navigation.navigate('Workout')}>
-          <Text style={styles.statIcon}>💪</Text>
-          <Text style={styles.statValue}>0</Text>
-          <Text style={styles.statLabel}>Workouts</Text>
-        </Pressable>
-        <Pressable style={styles.statCard} onPress={() => setWaterModalVisible(true)}>
-          <Text style={styles.statIcon}>💧</Text>
-          <Text style={styles.statValue}>{(waterTotal / 1000).toFixed(1)}L</Text>
-          <Text style={styles.statLabel}>Water</Text>
-        </Pressable>
-        <Pressable style={styles.statCard} onPress={() => setSleepModalVisible(true)}>
-          <Text style={styles.statIcon}>😴</Text>
-          <Text style={styles.statValue}>{sleepHours > 0 ? `${sleepHours}h` : '—'}</Text>
-          <Text style={styles.statLabel}>Sleep</Text>
-        </Pressable>
-      </View>
+          {quests_.map(quest => (
+            <View key={quest.id} style={styles.questCard}>
+              <QuestRow
+                title={quest.title}
+                xp={quest.xp}
+                completed={quest.completed}
+                autoLabel={isAutoVerifiable(quest.id) ? `⚡ ${t('autoTracked')}` : undefined}
+                onPress={() => completeQuest(quest.id)}
+              />
+            </View>
+          ))}
 
-      {/* Water progress */}
-      <View style={styles.card}>
-        <View style={styles.rankRow}>
-          <Text style={styles.rankLabel}>💧 Water</Text>
-          <Text style={styles.xpLabel}>{waterTotal}ml / {waterGoal}ml</Text>
+          <Text style={styles.countdownText}>
+            {t('nextQuestReset')} {formatCountdown(msUntilNoon)}
+          </Text>
         </View>
-        <View style={styles.xpBarBg}>
-          <View style={[styles.xpBarFill, {
-            width: `${Math.min(waterPercent, 100)}%`,
-            backgroundColor: colors.protein
-          }]} />
+      </Enter>
+
+      {/* Today's two headline numbers. The other two (sleep, weight) are one
+          row further down — they change once a day, where calories and sets
+          change all day. */}
+      <Enter index={3}>
+        <View style={styles.statsRow}>
+          <StatCard
+            value={totalCalories.toLocaleString()}
+            label={t('calories')}
+            onPress={() => navigation.navigate('Nutrition')}
+          />
+          <StatCard
+            value={`${workoutsCompleted}`}
+            label={t('workouts')}
+            onPress={() => navigation.navigate('Workout')}
+          />
         </View>
-        <Pressable style={styles.addWaterButton} onPress={() => setWaterModalVisible(true)}>
-          <Text style={styles.addWaterText}>+ Log Water</Text>
-        </Pressable>
-      </View>
+      </Enter>
+
+      <Enter index={4}>
+        <View style={styles.statsRow}>
+          <StatCard
+            value={sleepHours > 0 ? `${sleepHours}h` : '—'}
+            label={t('sleep')}
+            onPress={() => setSleepModalVisible(true)}
+          />
+          <StatCard
+            value={currentWeight ? `${currentWeight.weightLbs}` : '—'}
+            label={
+              currentWeight && weightDelta !== null && weightDelta !== 0
+                ? `lbs · ${weightDelta > 0 ? '+' : ''}${weightDelta}`
+                : 'lbs'
+            }
+            onPress={() => setWeightModalVisible(true)}
+          />
+        </View>
+      </Enter>
+
+      {/* Water */}
+      <Enter index={5}>
+        <WaterBlock
+          total={waterTotal}
+          goal={waterGoal}
+          onLog={() => setWaterModalVisible(true)}
+        />
+      </Enter>
+
+      {/* Anything still outstanding, as plain text at the bottom rather than a
+          card at the top. It's a nudge, not a headline — putting it above the
+          level card made opening the app feel like being handed a to-do list. */}
+      {remainingItems.length > 0 && (
+        <Enter index={6}>
+          <View style={styles.remainingBlock}>
+            <Text style={styles.remainingLabel}>{t('beforeDayEnds')}</Text>
+            {remainingItems.map((item, i) => (
+              <Text key={i} style={styles.remainingItem}>
+                {item}
+              </Text>
+            ))}
+          </View>
+        </Enter>
+      )}
 
       {/* Water modal */}
       <Modal visible={waterModalVisible} transparent animationType="slide">
@@ -172,33 +1041,37 @@ export default function DashboardScreen({ navigation }: any) {
             <Text style={styles.modalSubtitle}>How much did you drink? (ml)</Text>
             <View style={styles.quickButtons}>
               {[250, 350, 500, 750].map(amount => (
-                <Pressable
+                <Button
                   key={amount}
-                  style={styles.quickButton}
+                  label={`${amount}ml`}
+                  variant="secondary"
+                  size="sm"
+                  style={styles.flexOne}
                   onPress={() => {
-                    setWaterTotal(prev => Math.min(prev + amount, waterGoal));
+                    setWaterTotal(waterTotal + amount);
+                    incrementTodayField(authUser!.uid, 'waterTotal', amount).catch(() => {
+                      showError(t('errorSaveFailed'));
+                    });
                     setWaterModalVisible(false);
-                  }}>
-                  <Text style={styles.quickButtonText}>{amount}ml</Text>
-                </Pressable>
+                  }}
+                />
               ))}
             </View>
             <Text style={styles.orText}>or enter custom amount</Text>
-            <TextInput
-              style={styles.input}
+            <Field
               placeholder="Custom amount (ml)"
-              placeholderTextColor={colors.textSecondary}
               value={waterInput}
               onChangeText={setWaterInput}
               keyboardType="numeric"
             />
             <View style={styles.modalButtons}>
-              <Pressable style={styles.cancelButton} onPress={() => setWaterModalVisible(false)}>
-                <Text style={styles.cancelText}>Cancel</Text>
-              </Pressable>
-              <Pressable style={styles.confirmButton} onPress={addWater}>
-                <Text style={styles.confirmText}>Add</Text>
-              </Pressable>
+              <Button
+                label={t('cancel')}
+                onPress={() => setWaterModalVisible(false)}
+                variant="secondary"
+                style={styles.flexOne}
+              />
+              <Button label={t('add')} onPress={addWater} style={styles.flexTwo} />
             </View>
           </View>
         </View>
@@ -212,267 +1085,297 @@ export default function DashboardScreen({ navigation }: any) {
             <Text style={styles.modalSubtitle}>How many hours did you sleep?</Text>
             <View style={styles.quickButtons}>
               {[6, 7, 8, 9].map(hours => (
-                <Pressable
+                <Button
                   key={hours}
-                  style={styles.quickButton}
+                  label={`${hours}h`}
+                  variant="secondary"
+                  size="sm"
+                  style={styles.flexOne}
                   onPress={() => {
                     setSleepHours(hours);
+                    // Same reasoning as logSleep just below — a quick-pick
+                    // hours button is exactly as "not from bedtime/wake time"
+                    // as the manual field, and needs to clear the flag the
+                    // same way.
+                    setSleepLoggedFromTimes(false);
+                    saveDayProgress({ sleepHours: hours, sleepLoggedFromTimes: false });
+                    setSleepInput('');
                     setSleepModalVisible(false);
-                  }}>
-                  <Text style={styles.quickButtonText}>{hours}h</Text>
-                </Pressable>
+                  }}
+                />
               ))}
             </View>
             <Text style={styles.orText}>or enter custom amount</Text>
-            <TextInput
-              style={styles.input}
+            <Field
               placeholder="Hours (e.g. 7.5)"
-              placeholderTextColor={colors.textSecondary}
               value={sleepInput}
               onChangeText={setSleepInput}
               keyboardType="numeric"
             />
             <View style={styles.modalButtons}>
-              <Pressable style={styles.cancelButton} onPress={() => setSleepModalVisible(false)}>
-                <Text style={styles.cancelText}>Cancel</Text>
-              </Pressable>
-              <Pressable style={styles.confirmButton} onPress={logSleep}>
-                <Text style={styles.confirmText}>Save</Text>
-              </Pressable>
+              <Button
+                label={t('cancel')}
+                onPress={() => setSleepModalVisible(false)}
+                variant="secondary"
+                style={styles.flexOne}
+              />
+              <Button label={t('save')} onPress={logSleep} style={styles.flexTwo} />
+            </View>
+
+            <Text style={styles.orText}>or calculate from bedtime & wake time</Text>
+            <View style={styles.rowInputsSleep}>
+              <Field
+                style={styles.flexOne}
+                placeholder="Bedtime (11:00 PM)"
+                value={bedTimeInput}
+                onChangeText={setBedTimeInput}
+              />
+              <Field
+                style={styles.flexOne}
+                placeholder="Wake time (7:00 AM)"
+                value={wakeTimeInput}
+                onChangeText={setWakeTimeInput}
+              />
+            </View>
+            {sleepTimeError !== '' && <Text style={styles.error}>{sleepTimeError}</Text>}
+            <Button label="Calculate & Save" onPress={calculateSleepFromTimes} variant="secondary" fullWidth />
+          </View>
+        </View>
+      </Modal>
+
+      {/* Weight modal */}
+      <Modal visible={weightModalVisible} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>{t('logWeight')}</Text>
+            <Text style={styles.modalSubtitle}>{t('weightPrompt')}</Text>
+            <Field
+              placeholder="e.g. 150"
+              value={weightInput}
+              onChangeText={setWeightInput}
+              keyboardType="numeric"
+            />
+            {weightEntries.length > 0 && (
+              <Text style={styles.orText}>
+                {weightEntries.length} {weightEntries.length === 1 ? 'entry' : 'entries'} logged so far
+              </Text>
+            )}
+            <View style={styles.modalButtons}>
+              <Button
+                label={t('cancel')}
+                onPress={() => setWeightModalVisible(false)}
+                variant="secondary"
+                style={styles.flexOne}
+              />
+              <Button label={t('save')} onPress={logWeight} style={styles.flexTwo} />
             </View>
           </View>
         </View>
       </Modal>
 
-    </ScrollView>
+      {/* Level-up takeover.
+          In a Modal rather than an absolutely-positioned View, because this
+          screen is a ScrollView — absoluteFill inside scrolling content is
+          positioned against the CONTENT, so a user scrolled halfway down
+          would see the celebration land somewhere off screen. A Modal is
+          measured against the window, which is what "takeover" means.
+          animationType="none" because the component runs its own timeline and
+          the OS sliding it in first would push the whole thing past 2.5s. */}
+      <Modal visible={showLevelUp} transparent animationType="none" statusBarTranslucent>
+        {showLevelUp && (
+          <LevelUpTakeover
+            level={level}
+            rank={rank}
+            onDone={() => setShowLevelUp(false)}
+          />
+        )}
+      </Modal>
+
+      {/* The other end of AuthScreen's sign-in transition — same overlay,
+          same 500ms floor, going the other direction. */}
+      {loggingOut && <AuthTransition />}
+
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  scroll: {
-    flex: 1,
-    backgroundColor: colors.bg,
+  skeletonCard: {
+    borderRadius: radius.lg,
   },
   container: {
-    paddingHorizontal: 20,
-    paddingVertical: 60,
-    gap: 16,
-    paddingBottom: 100,
+    // Screen already owns the horizontal gutter and the bottom inset; this
+    // only adds the top inset (roughly a header's worth of clearance) and the
+    // rhythm between sections.
+    paddingTop: layout.headerHeight,
+    gap: spacing.lg,
   },
+  errorBanner: {
+    backgroundColor: colors.dangerSoft,
+    borderWidth: layout.hairline,
+    borderColor: colors.danger,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  errorText: {
+    ...type.bodySm,
+    color: colors.danger,
+    flex: 1,
+  },
+  errorDismiss: {
+    ...type.bodySm,
+    color: colors.danger,
+    fontFamily: fontFamily.sansBold,
+    marginLeft: spacing.sm,
+  },
+  greetingRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  greetingLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    flexShrink: 1,
+    flex: 1,
+  },
+  // The Avatar component supplies its own circle, fill and border-radius —
+  // this only adds the hairline frame and hit-slop-friendly touch target
+  // around it, matching the old avatarCircle's footprint exactly so nothing
+  // in the header row shifts.
+  avatarPressable: {
+    borderRadius: AVATAR_SIZE / 2,
+    borderWidth: layout.hairline,
+    borderColor: colors.border,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  // The mockup's headline. Deliberately display-sized: it's the only thing on
+  // screen with a person's name in it, and shrinking it to a polite subtitle
+  // is what makes a dashboard feel like a report rather than a greeting.
   greeting: {
+    ...type.title,
     color: colors.textPrimary,
-    fontSize: 22,
-    fontWeight: '700',
+    flexShrink: 1,
+  },
+  iconGlyph: {
+    fontSize: 17,
+    color: colors.textSecondary,
   },
   warningBanner: {
-    backgroundColor: '#2A1F10',
-    borderWidth: 1,
+    backgroundColor: colors.warningSoft,
+    borderWidth: layout.hairline,
     borderColor: colors.warning,
-    borderRadius: 12,
-    padding: 14,
+    borderRadius: radius.md,
+    padding: spacing.md,
   },
   warningText: {
+    ...type.body,
     color: colors.warning,
-    fontSize: 14,
-    lineHeight: 20,
   },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: colors.border,
-    gap: 10,
+  questSection: {
+    gap: spacing.md,
   },
-  rankRow: {
+  sectionHeader: {
     flexDirection: 'row',
+    alignItems: 'baseline',
     justifyContent: 'space-between',
-  },
-  rankLabel: {
-    color: colors.xp,
-    fontWeight: '700',
-    fontSize: 16,
-  },
-  xpLabel: {
-    color: colors.textSecondary,
-    fontSize: 14,
-  },
-  xpBarBg: {
-    height: 8,
-    backgroundColor: colors.surfaceRaised,
-    borderRadius: 4,
-    overflow: 'hidden',
-  },
-  xpBarFill: {
-    height: 8,
-    backgroundColor: colors.xp,
-    borderRadius: 4,
-  },
-  rankTitle: {
-    color: colors.textPrimary,
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  rankNext: {
-    color: colors.textSecondary,
-    fontSize: 13,
   },
   sectionTitle: {
+    ...type.heading,
     color: colors.textPrimary,
-    fontSize: 18,
-    fontWeight: '700',
-    marginTop: 8,
   },
+  sectionCount: {
+    ...type.bodySm,
+    color: colors.textMuted,
+  },
+  // One card per quest. Horizontal padding only — QuestRow supplies its own
+  // vertical padding, so the tap target spans the full card height rather
+  // than stopping at the text.
   questCard: {
     backgroundColor: colors.surface,
-    borderRadius: 12,
-    padding: 16,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderWidth: 1,
+    borderRadius: radius.lg,
+    borderWidth: layout.hairline,
     borderColor: colors.border,
+    paddingHorizontal: spacing.lg,
   },
-  questCompleted: {
-    opacity: 0.5,
-  },
-  questLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  questCheck: {
-    fontSize: 20,
-  },
-  questTitle: {
-    color: colors.textPrimary,
-    fontSize: 15,
-  },
-  questTitleDone: {
-    textDecorationLine: 'line-through',
-    color: colors.textSecondary,
-  },
-  questXP: {
-    color: colors.xp,
-    fontWeight: '700',
-    fontSize: 14,
+  countdownText: {
+    ...type.bodySm,
+    color: colors.textMuted,
+    textAlign: 'center',
   },
   statsRow: {
     flexDirection: 'row',
-    gap: 8,
+    gap: spacing.md,
   },
-  statCard: {
-    flex: 1,
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    padding: 12,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
-    gap: 4,
+  remainingBlock: {
+    gap: spacing.xs,
+    paddingTop: spacing.sm,
   },
-  statIcon: {
-    fontSize: 20,
+  remainingLabel: {
+    ...type.label,
+    color: colors.textMuted,
   },
-  statValue: {
-    color: colors.textPrimary,
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  statLabel: {
+  remainingItem: {
+    ...type.bodySm,
     color: colors.textSecondary,
-    fontSize: 11,
-  },
-  addWaterButton: {
-    backgroundColor: colors.surfaceRaised,
-    borderRadius: 10,
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  addWaterText: {
-    color: colors.accent,
-    fontWeight: '600',
-    fontSize: 14,
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: colors.scrim,
     justifyContent: 'flex-end',
   },
   modalContent: {
     backgroundColor: colors.surface,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    gap: 12,
+    // Bottom sheet: only the top corners are rounded, so the sheet still meets
+    // the screen edge instead of floating.
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+    borderTopWidth: layout.hairline,
+    borderColor: colors.border,
+    padding: spacing.xl,
+    gap: spacing.md,
   },
   modalTitle: {
+    ...type.title,
     color: colors.textPrimary,
-    fontSize: 20,
-    fontWeight: '700',
   },
   modalSubtitle: {
+    ...type.body,
     color: colors.textSecondary,
-    fontSize: 14,
   },
   quickButtons: {
     flexDirection: 'row',
-    gap: 8,
-  },
-  quickButton: {
-    flex: 1,
-    backgroundColor: colors.surfaceRaised,
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  quickButtonText: {
-    color: colors.accent,
-    fontWeight: '700',
-    fontSize: 14,
+    gap: spacing.sm,
   },
   orText: {
-    color: colors.textSecondary,
-    fontSize: 12,
+    ...type.bodySm,
+    color: colors.textMuted,
     textAlign: 'center',
   },
-  input: {
-    backgroundColor: colors.bg,
-    borderRadius: 12,
-    padding: 14,
-    fontSize: 15,
-    color: colors.textPrimary,
-    borderWidth: 1,
-    borderColor: colors.border,
+  rowInputsSleep: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  error: {
+    ...type.bodySm,
+    color: colors.danger,
   },
   modalButtons: {
     flexDirection: 'row',
-    gap: 12,
+    gap: spacing.md,
   },
-  cancelButton: {
+  flexOne: {
     flex: 1,
-    backgroundColor: colors.surfaceRaised,
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
   },
-  cancelText: {
-    color: colors.textSecondary,
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  confirmButton: {
+  flexTwo: {
     flex: 2,
-    backgroundColor: colors.accent,
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  confirmText: {
-    color: colors.bg,
-    fontSize: 15,
-    fontWeight: '700',
   },
 });
