@@ -10,7 +10,7 @@ import Avatar from '../components/Avatar';
 import haptics from '../services/haptics';
 import { useUser } from '../context/UserContext';
 import { useLanguage } from '../i18n/LanguageContext';
-import { LeaderboardEntry } from '../firebase/leaderboard';
+import { LeaderboardEntry, parseDisplayName } from '../firebase/leaderboard';
 import {
   FriendRequest,
   getOrCreateFriendCode,
@@ -22,7 +22,7 @@ import {
   getFriends,
   removeFriend,
 } from '../firebase/friends';
-import { createChallenge } from '../firebase/challenges';
+import { createChallenge, hasActiveChallengeWith } from '../firebase/challenges';
 
 const AVATAR_SIZE = 44;
 
@@ -98,6 +98,9 @@ export default function FriendsScreen({ navigation }: any) {
       } else if (result === 'self') {
         haptics.error();
         message = t('friendCodeSelf');
+      } else if (result === 'already_pending') {
+        haptics.error();
+        message = t('friendRequestAlreadyPending');
       } else {
         haptics.error();
         message = t('friendAlreadyAdded');
@@ -156,6 +159,16 @@ export default function FriendsScreen({ navigation }: any) {
     if (!authUser) return;
     setBusyUid(friend.uid);
     try {
+      // Without this check, tapping Challenge twice on the same friend (an
+      // easy double-tap, or just forgetting one's already running) silently
+      // created a second, indistinguishable challenge document instead of
+      // either reusing or blocking it.
+      if (await hasActiveChallengeWith(authUser.uid, friend.uid)) {
+        haptics.selection();
+        AccessibilityInfo.announceForAccessibility(t('challengeAlreadyActive'));
+        navigation.navigate('Challenges');
+        return;
+      }
       await createChallenge(authUser.uid, friend.uid, t('challengeWorkoutsGoal'));
       haptics.setComplete();
       AccessibilityInfo.announceForAccessibility(t('challengeSent'));
@@ -263,7 +276,9 @@ export default function FriendsScreen({ navigation }: any) {
           <EmptyState icon="👥" title={t('noFriendsYet')} message={t('noFriendsYetHint')} />
         ) : (
           <Card style={styles.rowCard}>
-            {friends.map((friend, i) => (
+            {friends.map((friend, i) => {
+              const { firstName, lastInitial } = parseDisplayName(friend.displayName);
+              return (
               <View key={friend.uid}>
                 {i > 0 && <Divider style={styles.tightDivider} />}
                 <View style={styles.friendRow}>
@@ -271,8 +286,8 @@ export default function FriendsScreen({ navigation }: any) {
                     photoUrl={friend.avatar}
                     color={friend.avatarColor}
                     uid={friend.uid}
-                    firstName={friend.displayName.split(' ')[0]}
-                    lastInitial={friend.displayName.split(' ')[1]?.replace('.', '')}
+                    firstName={firstName}
+                    lastInitial={lastInitial}
                     size={AVATAR_SIZE}
                   />
                   <View style={styles.friendInfo}>
@@ -293,7 +308,8 @@ export default function FriendsScreen({ navigation }: any) {
                   )}
                 </View>
               </View>
-            ))}
+              );
+            })}
           </Card>
         )}
       </Enter>

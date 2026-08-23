@@ -10,7 +10,7 @@ import Avatar from '../components/Avatar';
 import { useUser } from '../context/UserContext';
 import { useLanguage } from '../i18n/LanguageContext';
 import { getDoc } from 'firebase/firestore';
-import { leaderboardDocRef, LeaderboardEntry } from '../firebase/leaderboard';
+import { leaderboardDocRef, LeaderboardEntry, parseDisplayName } from '../firebase/leaderboard';
 import {
   Challenge,
   getMyChallenges,
@@ -157,8 +157,8 @@ export default function ChallengesScreen({ navigation }: any) {
                     photoUrl={c.opponent?.avatar}
                     color={c.opponent?.avatarColor}
                     uid={c.opponentUid}
-                    firstName={c.opponent?.displayName.split(' ')[0]}
-                    lastInitial={c.opponent?.displayName.split(' ')[1]?.replace('.', '')}
+                    firstName={c.opponent ? parseDisplayName(c.opponent.displayName).firstName : undefined}
+                    lastInitial={c.opponent ? parseDisplayName(c.opponent.displayName).lastInitial : undefined}
                     size={AVATAR_SIZE}
                   />
                   <Text style={styles.participantLabel} numberOfLines={1}>

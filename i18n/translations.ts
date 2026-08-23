@@ -176,7 +176,9 @@ type TranslationKey =
   | 'itsATie'
   | 'friend'
   | 'challengeWorkoutsGoal'
-  | 'challengeSent';
+  | 'challengeSent'
+  | 'friendRequestAlreadyPending'
+  | 'challengeAlreadyActive';
 
 export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, string>>> = {
   en: {
@@ -334,6 +336,8 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     friend: 'Friend',
     challengeWorkoutsGoal: 'Most workouts this week',
     challengeSent: 'Challenge sent!',
+    friendRequestAlreadyPending: "You've already sent them a request.",
+    challengeAlreadyActive: "You already have a challenge with them.",
   },
   es: {
     goodMorning: 'Buenos días',
@@ -490,6 +494,8 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     friend: 'Amigo',
     challengeWorkoutsGoal: 'Más entrenamientos esta semana',
     challengeSent: '¡Desafío enviado!',
+    friendRequestAlreadyPending: 'Ya le enviaste una solicitud.',
+    challengeAlreadyActive: 'Ya tienes un desafío con esta persona.',
   },
   fr: {
     goodMorning: 'Bonjour',
@@ -646,6 +652,8 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     friend: 'Ami',
     challengeWorkoutsGoal: 'Le plus d’entraînements cette semaine',
     challengeSent: 'Défi envoyé !',
+    friendRequestAlreadyPending: 'Vous lui avez déjà envoyé une demande.',
+    challengeAlreadyActive: 'Vous avez déjà un défi avec cette personne.',
   },
   zh: {
     goodMorning: '早上好',
@@ -802,6 +810,8 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     friend: '好友',
     challengeWorkoutsGoal: '本周最多训练次数',
     challengeSent: '挑战已发送！',
+    friendRequestAlreadyPending: '你已经向他们发送过请求了。',
+    challengeAlreadyActive: '你已经和他们有一个进行中的挑战。',
   },
   te: {
     goodMorning: 'శుభోదయం',
@@ -958,5 +968,7 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     friend: 'స్నేహితుడు',
     challengeWorkoutsGoal: 'ఈ వారం అత్యధిక వర్కవుట్‌లు',
     challengeSent: 'సవాలు పంపబడింది!',
+    friendRequestAlreadyPending: 'మీరు ఇప్పటికే వారికి రిక్వెస్ట్ పంపారు.',
+    challengeAlreadyActive: 'మీకు వారితో ఇప్పటికే సవాలు ఉంది.',
   },
 };

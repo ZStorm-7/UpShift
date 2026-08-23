@@ -774,17 +774,24 @@ export default function DashboardScreen({ navigation }: any) {
   const questsDone = quests_.filter(q => q.completed).length;
   const currentStreakDays = liveStreak(streak, getQuestCycleKey());
 
-  // Ask for notification permission once, the first time the Dashboard
-  // mounts with notifications not explicitly turned off. Requesting it here
-  // rather than during onboarding keeps the permission prompt away from the
-  // five-step signup flow (one more system dialog there is one more chance
-  // to bounce), and shows it at the moment it's actually relevant — right
-  // as quests, the thing the reminder is about, are on screen.
+  // Ask for notification permission once profile has actually loaded, and
+  // only then. This used to run with an empty dependency array — "once, on
+  // mount" — which is wrong here specifically because `profile` loads
+  // asynchronously from Firestore and is still `null` on Dashboard's first
+  // render. `null?.notificationsEnabled === false` is false (it's
+  // `undefined === false`), so the guard silently passed and requested the
+  // OS permission prompt every time, completely ignoring a user who had
+  // already turned notifications off — the opt-out only ever "won" the
+  // race by accident, on whichever render happened to fire after profile
+  // finished loading, if the effect hadn't already fired first. The ref
+  // makes this fire exactly once, and only after `profile` is real.
+  const permissionRequestedRef = useRef(false);
   useEffect(() => {
-    if (profile?.notificationsEnabled === false) return;
+    if (!profile || permissionRequestedRef.current) return;
+    permissionRequestedRef.current = true;
+    if (profile.notificationsEnabled === false) return;
     requestNotificationPermission();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [profile]);
 
   // Local streak-risk reminder. Re-evaluated on every render where quest
   // completion or the streak count could have changed — see

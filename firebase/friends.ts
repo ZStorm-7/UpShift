@@ -91,13 +91,29 @@ export async function sendFriendRequest(
   fromDisplayName: string,
   fromAvatarColor: string | undefined,
   code: string
-): Promise<'sent' | 'invalid_code' | 'self' | 'already_friends'> {
+): Promise<'sent' | 'invalid_code' | 'self' | 'already_friends' | 'already_pending'> {
   const toUid = await resolveFriendCode(code);
   if (!toUid) return 'invalid_code';
   if (toUid === fromUid) return 'self';
 
   const social = await getFriendUids(fromUid);
   if (social.includes(toUid)) return 'already_friends';
+
+  // Without this, sending twice — a double-tap, or just forgetting a
+  // request is already out — created a second, independent pending
+  // request. The recipient would then see the same person twice in their
+  // incoming list, and accepting one would leave the other sitting there
+  // forever (accepting doesn't know to also resolve its duplicate).
+  const alreadyPending = await getDocs(
+    query(
+      collection(db, 'friendRequests'),
+      where('fromUid', '==', fromUid),
+      where('status', '==', 'pending')
+    )
+  );
+  if (alreadyPending.docs.some(d => (d.data() as { toUid: string }).toUid === toUid)) {
+    return 'already_pending';
+  }
 
   await addDoc(collection(db, 'friendRequests'), {
     fromUid,

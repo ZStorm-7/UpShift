@@ -29,14 +29,31 @@ export type Challenge = {
   winnerUid?: string;
 };
 
+// Local calendar date, NOT `new Date().toISOString().slice(0, 10)` — that
+// reads the UTC date, which is a real bug here: `countWorkoutsInRange`
+// compares this against day-doc IDs that are built from the LOCAL date (see
+// getTodayKey in firebase/progress.ts). For anyone west of UTC, there's a
+// stretch of local evening where the UTC date has already rolled to
+// tomorrow — a challenge created then would get a startDate one day ahead
+// of the user's actual today, silently excluding today's workouts from the
+// very challenge that just started. Mirrors getTodayKey()'s exact
+// local-field construction so the two can never disagree.
 function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
 }
 
 function addDaysIso(iso: string, days: number): string {
-  const d = new Date(iso + 'T00:00:00');
+  const [y, m, day] = iso.split('-').map(Number);
+  const d = new Date(y, m - 1, day);
   d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
 }
 
 // Creates a 7-day challenge starting today between the two participants.
@@ -93,6 +110,20 @@ export async function getMyChallenges(uid: string): Promise<Challenge[]> {
   const q = query(collection(db, 'challenges'), where('participants', 'array-contains', uid));
   const snap = await getDocs(q);
   return snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+}
+
+// True if there's already an ACTIVE challenge between these two people.
+// Without this check, tapping "Challenge" on the same friend twice (an easy
+// double-tap, or just tapping again after forgetting you already sent one)
+// silently created a second, independent challenge document rather than
+// reusing or blocking the first — two live challenges with the same two
+// participants and no way to tell them apart in the list beyond the start
+// date.
+export async function hasActiveChallengeWith(uid: string, friendUid: string): Promise<boolean> {
+  const existing = await getMyChallenges(uid);
+  return existing.some(
+    c => c.status === 'active' && c.participants.includes(friendUid)
+  );
 }
 
 // Self-reported, like every other client-trusted number in this app (see
