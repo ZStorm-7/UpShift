@@ -1,0 +1,202 @@
+@import "tailwindcss";
+
+:root {
+  --bg-1: #ffffff;
+  --bg-2: #fdf6e3;
+  --surface: #ffffff;
+  --surface-soft: #fdf6e3;
+  --ink: #3b2a1e;
+  --ink-soft: #6b5847;
+  --espresso: #2c1c10;
+  --accent: #f4c430;
+  --accent-soft: #ffd966;
+  --accent-ink: #2c1c10;
+  --border: #ece3d6;
+  --shadow-tint: rgba(60, 40, 10, 0.15);
+  --grad-a: var(--espresso);
+  --grad-b: #ffffff;
+
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  --bg-1: #0e0b08;
+  --bg-2: #171009;
+  --surface: #201709;
+  --surface-soft: #1a1309;
+  --ink: #f5ead6;
+  --ink-soft: #b9a487;
+  --espresso: #2c1c10;
+  --accent: #f4c430;
+  --accent-soft: #ffd966;
+  --accent-ink: #2c1c10;
+  --border: #33261a;
+  --shadow-tint: rgba(0, 0, 0, 0.45);
+  --grad-a: #6b4a30;
+  --grad-b: #000000;
+
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  font-family: 'Hanken Grotesk', system-ui, 'Segoe UI', Roboto, sans-serif;
+  color: var(--ink);
+  /* whole-page gradient: espresso -> white (light) / light-brown -> black (dark),
+     fixed so it reads as one continuous backdrop behind every section, not a
+     per-section flat color */
+  background-image: linear-gradient(
+    180deg,
+    var(--grad-a) 0%,
+    var(--bg-1) 42%,
+    var(--bg-1) 58%,
+    var(--grad-b) 100%
+  );
+  background-color: var(--bg-1);
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+::selection {
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+
+/* visible keyboard focus on every interactive element — mouse users never
+   see this (:focus-visible), keyboard users always do */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Headlines get a distinct editorial serif instead of the generic template
+   sans — this is the single biggest signal that separates a crafted brand
+   from a default AI-generated layout. Body copy and UI stay on the grotesk
+   for readability; only h1/h2 (section titles) switch over. */
+h1,
+h2 {
+  font-family: 'Fraunces', Georgia, serif;
+  font-optical-sizing: auto;
+  font-weight: 560;
+  letter-spacing: -0.01em;
+}
+
+.text-balance {
+  text-wrap: balance;
+}
+
+/* base diagonal gradient (white -> espresso in light, light-brown -> black in
+   dark) with yellow accent glows layered on top */
+.bg-mesh {
+  background-image:
+    radial-gradient(75% 70% at 12% 8%, color-mix(in srgb, var(--accent) 28%, transparent), transparent 75%),
+    radial-gradient(65% 60% at 88% 22%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 75%),
+    linear-gradient(155deg, var(--grad-a) 0%, transparent 80%),
+    linear-gradient(-25deg, var(--grad-b) 0%, transparent 85%);
+  background-size: 200% 200%;
+  animation: mesh-shift 18s ease-in-out infinite;
+}
+
+@keyframes mesh-shift {
+  0%, 100% { background-position: 0% 0%, 100% 0%, 50% 100%, 50% 100%; }
+  50% { background-position: 10% 10%, 90% 15%, 55% 90%, 55% 90%; }
+}
+
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.animate-marquee {
+  animation: marquee 28s linear infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+.animate-shimmer {
+  background-size: 200% auto;
+  animation: shimmer 3s linear infinite;
+}
+
+@keyframes float-slow {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-12px); }
+}
+.animate-float-slow {
+  animation: float-slow 6s ease-in-out infinite;
+}
+
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 45%, transparent); }
+  100% { box-shadow: 0 0 0 14px color-mix(in srgb, var(--accent) 0%, transparent); }
+}
+.animate-pulse-ring {
+  animation: pulse-ring 2s ease-out infinite;
+}
+
+@keyframes waveform {
+  0%, 100% { transform: scaleY(0.3); }
+  50% { transform: scaleY(1); }
+}
+
+@keyframes blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+.animate-blink {
+  animation: blink 1s step-end infinite;
+}
+
+/* brief RGB-split glitch flicker, fired once when GlitchText locks in */
+@keyframes glitch-flicker {
+  0% {
+    text-shadow: 0 0 transparent, 0 0 transparent;
+    transform: translate(0, 0);
+  }
+  12% {
+    text-shadow: -2px 0 #ff3b6b, 2px 0 #3bb4ff;
+    transform: translate(-1px, 0);
+  }
+  24% {
+    text-shadow: 2px 0 #ff3b6b, -2px 0 #3bb4ff;
+    transform: translate(1px, 0);
+  }
+  36% {
+    text-shadow: -1px 0 #ff3b6b, 1px 0 #3bb4ff;
+    transform: translate(0, -1px);
+  }
+  50% {
+    text-shadow: 0 0 transparent, 0 0 transparent;
+    transform: translate(0, 0);
+  }
+  100% {
+    text-shadow: 0 0 transparent, 0 0 transparent;
+    transform: translate(0, 0);
+  }
+}
+.glitch-flicker {
+  animation: glitch-flicker 0.26s steps(2, jump-none);
+}
