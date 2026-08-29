@@ -44,6 +44,16 @@ import {
   PlusJakartaSans_700Bold,
   PlusJakartaSans_800ExtraBold,
 } from '@expo-google-fonts/plus-jakarta-sans';
+import {
+  InstrumentSerif_400Regular,
+  InstrumentSerif_400Regular_Italic,
+} from '@expo-google-fonts/instrument-serif';
+import {
+  InstrumentSans_400Regular,
+  InstrumentSans_500Medium,
+  InstrumentSans_600SemiBold,
+  InstrumentSans_700Bold,
+} from '@expo-google-fonts/instrument-sans';
 
 /**
  * Family names, referenced only by the type scale in tokens.ts.
@@ -63,6 +73,21 @@ export const fontFamily = {
   sansSemi: 'PlusJakartaSans_600SemiBold',
   sansBold: 'PlusJakartaSans_700Bold',
   sansBlack: 'PlusJakartaSans_800ExtraBold',
+
+  /**
+   * Instrument Serif/Sans — used only by the minimalist Dashboard proof of
+   * concept (theme/minimal.ts, components/dashboardMinimal.tsx). Kept as its
+   * own pair rather than reused across the app: Fraunces/Plus Jakarta is the
+   * shipped identity everywhere else, and mixing the two pairings on one
+   * screen would read as an unfinished migration rather than a deliberate
+   * alternate direction.
+   */
+  editorialSerif: 'InstrumentSerif_400Regular',
+  editorialSerifItalic: 'InstrumentSerif_400Regular_Italic',
+  editorialSans: 'InstrumentSans_400Regular',
+  editorialSansMedium: 'InstrumentSans_500Medium',
+  editorialSansSemi: 'InstrumentSans_600SemiBold',
+  editorialSansBold: 'InstrumentSans_700Bold',
 } as const;
 
 /**
@@ -85,5 +110,11 @@ export function useAppFonts() {
     PlusJakartaSans_600SemiBold,
     PlusJakartaSans_700Bold,
     PlusJakartaSans_800ExtraBold,
+    InstrumentSerif_400Regular,
+    InstrumentSerif_400Regular_Italic,
+    InstrumentSans_400Regular,
+    InstrumentSans_500Medium,
+    InstrumentSans_600SemiBold,
+    InstrumentSans_700Bold,
   });
 }

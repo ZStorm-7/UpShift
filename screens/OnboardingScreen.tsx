@@ -71,6 +71,11 @@ export default function OnboardingScreen({ navigation }: any) {
   const [age, setAge] = useState('');
   const [heightFeet, setHeightFeet] = useState('');
   const [heightInches, setHeightInches] = useState('');
+  // `weight` and `setWeight` are still declared but the input that sets
+  // them was removed above — see the placeholder-weight comment. Kept
+  // rather than deleted so the surrounding step-index logic (which is
+  // linear array-indexed) doesn't shift; a future pass can renumber the
+  // steps and drop this pair together.
   const [weight, setWeight] = useState('');
   const [gender, setGender] = useState('');
   const [activityLevel, setActivityLevel] = useState('');
@@ -130,7 +135,7 @@ export default function OnboardingScreen({ navigation }: any) {
           Boolean
         ) as string[];
       case 2:
-        return [!age && t('age'), !heightFeet && t('heightFt'), !weight && t('weightLbs')].filter(
+        return [!age && t('age'), !heightFeet && t('heightFt')].filter(
           Boolean
         ) as string[];
       case 3:
@@ -258,9 +263,16 @@ export default function OnboardingScreen({ navigation }: any) {
     // permanent and invisible: Nutrition silently falls back to a generic
     // 2000 (NaN || 2000), the Dashboard falls back to 0, and every
     // calorie-goal quest becomes impossible to complete for that account.
+    // Weight is no longer collected during onboarding — the daily prompt
+    // captures it starting on the first Dashboard visit. Until then we
+    // need SOME value for the BMR calculation, so a reasonable adult
+    // default (165 lbs) is used; the first daily weight log will trigger
+    // a recalc via EditProfile → Save, or via the weight modal's own
+    // onSubmit handler on the Dashboard.
+    const PLACEHOLDER_WEIGHT_LBS = 165;
     const calorieGoal = calculateCalorieGoal(
       ageNum,
-      parseInt(weight),
+      PLACEHOLDER_WEIGHT_LBS,
       parseInt(heightFeet),
       parseInt(heightInches) || 0,
       gender,
@@ -281,7 +293,7 @@ export default function OnboardingScreen({ navigation }: any) {
       age: ageNum,
       heightFeet: parseInt(heightFeet),
       heightInches: parseInt(heightInches) || 0,
-      weightLbs: parseInt(weight),
+      weightLbs: PLACEHOLDER_WEIGHT_LBS,
       gender,
       activityLevel,
       goal,
@@ -497,14 +509,13 @@ export default function OnboardingScreen({ navigation }: any) {
                   <Text style={styles.conversionText}>= {heightInCm()} cm</Text>
                 ) : null}
               </View>
-              <Field
-                label={t('weightLbs')}
-                placeholder={t('weightLbs')}
-                value={weight}
-                onChangeText={(val) => setWeight(validateWeight(val))}
-                keyboardType="numeric"
-                maxLength={4}
-              />
+              {/* Weight field removed from Onboarding — daily weight is
+                  captured by the WeightPromptModal on the Dashboard
+                  instead. Removing this means calorie goal cannot be
+                  calculated at signup (BMR needs weight), so a placeholder
+                  goal is written on save; it recalculates on the first
+                  daily weight log. See DashboardScreen's weight modal
+                  handler and calculateCalorieGoal in UserContext. */}
             </Card>
           </Enter>
         );
@@ -573,7 +584,7 @@ export default function OnboardingScreen({ navigation }: any) {
                     // the app never stored.
                     value: `${calculateCalorieGoal(
                       parseInt(age),
-                      parseInt(weight),
+                      165, // placeholder — real weight arrives via daily prompt
                       parseInt(heightFeet),
                       parseInt(heightInches) || 0,
                       gender,

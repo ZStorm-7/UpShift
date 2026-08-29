@@ -34,9 +34,16 @@ export const colors = {
   surfaceSunken: '#050505',
 
   // The accent. Used for primary actions, active states and progress fills.
-  accent: '#03DAC6',
-  accentSoft: 'rgba(3, 218, 198, 0.14)',
-  accentBorder: 'rgba(3, 218, 198, 0.35)',
+  //
+  // Was #03DAC6 (cyan) originally; changed to Robinhood green #00C805 as
+  // part of the redesign so the legacy static-import components
+  // (LevelUpTakeover, LevelCard, CalorieRing, etc.) match the new
+  // themed-palette accent. Screens that use usePalette() get the same
+  // green from lightPalette/darkPalette in theme/themedColors.ts, so both
+  // paths agree.
+  accent: '#00C805',
+  accentSoft: 'rgba(0, 200, 5, 0.14)',
+  accentBorder: 'rgba(0, 200, 5, 0.35)',
 
   // XP / rewards. Deliberately the only other saturated colour.
   xp: '#F5A524',
@@ -48,7 +55,8 @@ export const colors = {
   textMuted: '#858585',
   // Sits on top of the accent — a near-black with a trace of the accent's own
   // hue in it, which reads as intentional where pure black reads as a hole.
-  textOnAccent: '#00201C',
+  // Updated to green-black now that the accent is the Robinhood green.
+  textOnAccent: '#001700',
 
   // Lines.
   //

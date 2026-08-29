@@ -210,7 +210,7 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     signUp: 'Sign Up',
     logIn: 'Log In',
     nextQuestReset: 'Quest resets in',
-    beforeDayEnds: 'Before the day ends',
+    beforeDayEnds: 'Still to go today',
     allDoneToday: "All done for today! 🎉",
     language: 'Language',
     errorSaveFailed: "Couldn't save — check your connection and try again.",

@@ -57,7 +57,10 @@ export default function AuthScreen({ navigation }: any) {
       // 50ms. See AUTH_TRANSITION_MS and utils/timing.ts.
       if (isSignUp) {
         await withMinDuration(signUp(email, password), AUTH_TRANSITION_MS);
-        navigation.replace('Onboarding');
+        // NEW: subscription gate — every new user sees the paywall / trial
+        // offer before onboarding. SubscriptionScreen will route them to
+        // Onboarding after they pick a plan or start the trial.
+        navigation.replace('Subscription');
       } else {
         const target = await withMinDuration(
           (async () => {
