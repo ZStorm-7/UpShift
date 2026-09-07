@@ -1,0 +1,22 @@
+# EAS ignore — files/folders EAS Build should not upload as part of the
+# project tarball.
+#
+# `.agents` and `.claude` contain skill folders that use SYMLINKS. On
+# Windows, EAS's shallow-clone step fails with EPERM: operation not
+# permitted, symlink ... because Windows blocks symlink creation unless
+# Developer Mode is on (or the process is elevated). These directories are
+# tooling metadata only — the app itself never reads from them at runtime —
+# so excluding them is safe and fixes the upload.
+
+.agents/
+.claude/
+
+# EAS handles node_modules on its own build server; uploading it would just
+# be slow. Keeping it here so a fresh clone of this repo also stays out.
+node_modules/
+
+# Local Expo caches.
+.expo/
+
+# Skill lockfile — same tooling metadata, not needed by the build.
+skills-lock.json

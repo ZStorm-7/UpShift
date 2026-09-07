@@ -1,0 +1,25 @@
+node_modules/
+.expo/
+dist/
+web-build/
+*.log
+.DS_Store
+
+# Native folders — only appear if you run `npx expo prebuild`. EAS generates
+# these during the cloud build, so committing them causes conflicts.
+/android
+/ios
+
+# Build artifacts
+*.apk
+*.aab
+*.keystore
+
+# Secrets.
+# NOTE: firebase/config.ts is deliberately NOT ignored — those values are
+# public by design (they identify your project; they don't authorize anything).
+# Real protection lives in firestore.rules. But anything that IS a true secret
+# — a Cloudinary API secret, a Google service-account key — goes here.
+.env
+.env.local
+google-services.json

@@ -1,0 +1,203 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---- Private per-user data ----
+    // Everything under users/{uid} is readable and writable ONLY by that user.
+    // The nested {document=**} wildcard covers every subcollection at once —
+    // days/{dayId}, meta/stats, meta/quests, meta/streak, meta/weightLog,
+    // meta/customFoods — so adding a new subcollection later can't silently
+    // fall through to the deny-all rule at the bottom, which is exactly the
+    // bug that broke XP saving when meta/ was first introduced.
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+
+      match /{document=**} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+
+    // ---- Public leaderboard ----
+    // A leaderboard fundamentally requires reading other people's rows, so
+    // this collection is readable by any signed-in user. Writes stay locked to
+    // the owner: the document ID must equal the writer's uid, making it
+    // impossible to edit someone else's score or invent an entry under a uid
+    // that isn't yours.
+    //
+    // This is why the leaderboard is a SEPARATE top-level collection rather
+    // than a field on the user document — opening up the user document would
+    // expose weight, age, meals and everything else along with it.
+    // The document ID check alone is not enough, which is subtle enough to be
+    // worth spelling out. The row also CONTAINS a `uid` field, and the client
+    // uses that field — not the document ID — to find "your position". So a
+    // user could write their own row with someone else's uid inside it, and
+    // the old rule would happily accept it: the victim would open the
+    // Leaderboard and see the attacker's fabricated score presented as their
+    // own standing, with their real row nowhere to be found.
+    //
+    // hasOnly() pins the shape so no extra fields can be smuggled in, and the
+    // type/range checks stop a hand-crafted request from writing totalXP as a
+    // string (which would break the orderBy) or as a negative number.
+    //
+    // What this still does NOT do is prove the score is honest — a determined
+    // user can write a well-formed but inflated total for themselves. Making
+    // that impossible needs a server-side write (a Cloud Function mirroring
+    // meta/stats), which the no-cost plan won't run.
+    match /leaderboard/{userId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.data.uid == userId
+        && request.resource.data.keys().hasOnly(
+             ['uid', 'displayName', 'avatar', 'avatarColor', 'level', 'totalXP', 'rank', 'streak'])
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() <= 40
+        && request.resource.data.avatar is string
+        && request.resource.data.avatar.size() <= 300
+        // avatarColor is new and optional — hasOnly() above already allows a
+        // document that omits it, this just makes sure that WHEN it's present
+        // it can't be smuggled in as some other type or an arbitrarily long
+        // string (it's only ever one of 7 short hex codes from
+        // theme/colors.ts's avatarPalette, but rules can't reference app
+        // code, so the bound here is a generous "any hex-length string").
+        && (!('avatarColor' in request.resource.data)
+            || (request.resource.data.avatarColor is string
+                && request.resource.data.avatarColor.size() <= 9))
+        && request.resource.data.rank is string
+        && request.resource.data.level is int
+        && request.resource.data.level >= 1
+        && request.resource.data.totalXP is int
+        && request.resource.data.totalXP >= 0
+        && request.resource.data.streak is int
+        && request.resource.data.streak >= 0;
+    }
+
+    // ---- Onboarding drop-off events (write-only) ----
+    // A flat log of step-view/complete/abandon events, one document per
+    // event. Nobody ever reads this from the client — not even their own
+    // events back — so `allow read: if false` here is deliberate, not an
+    // oversight: there is no product feature that needs it, and every read
+    // path removed is one less thing that can leak. Whoever wants the
+    // funnel numbers queries this collection directly from the Firebase
+    // console or an export, using an account with elevated (non-rules-
+    // governed) access.
+    match /onboardingEvents/{eventId} {
+      allow read: if false;
+      allow create: if request.auth != null
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.eventType in ['step_view', 'onboarding_complete', 'onboarding_abandoned']
+        && request.resource.data.step is int
+        && request.resource.data.keys().hasOnly(['uid', 'step', 'eventType', 'at']);
+      allow update, delete: if false;
+    }
+
+    // ---- Friend codes: public code -> uid lookup ----
+    // A short shareable code is how one user finds another to friend, since
+    // there's no username system and email lookup would leak who has an
+    // account. The code itself carries no personal info, so it's safe for
+    // any signed-in user to resolve.
+    //
+    // `allow create` only ever fires when the code doesn't already exist —
+    // that's what distinguishes a Firestore "create" from an "update" — so
+    // this is also what stops one user from overwriting someone else's
+    // claimed code. Once set, a code is permanent (no update/delete): a
+    // user who wants a different code gets a new one issued to them by the
+    // app instead of releasing the old one, which would let a second person
+    // claim a code that got shared with the wrong intent.
+    match /friendCodes/{code} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['uid']);
+      allow update, delete: if false;
+    }
+
+    // ---- Friend requests ----
+    // A pending/accepted/rejected request between two users. Read access is
+    // restricted to the two people involved — everyone else gets nothing,
+    // including for a plain `list` query, since Firestore evaluates this
+    // rule per matched document and a query filtered to `toUid == me` or
+    // `fromUid == me` can never surface a document that fails it.
+    //
+    // Only the recipient can move status out of 'pending', and only into
+    // 'accepted' or 'rejected' — a sender can't self-approve their own
+    // request by writing the field directly. Either side can delete a
+    // request outright, covering "cancel one I sent" and "remove one I
+    // already accepted."
+    match /friendRequests/{requestId} {
+      allow read: if request.auth != null
+        && (resource.data.fromUid == request.auth.uid || resource.data.toUid == request.auth.uid);
+      allow create: if request.auth != null
+        && request.resource.data.fromUid == request.auth.uid
+        && request.resource.data.toUid is string
+        && request.resource.data.toUid != request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.keys().hasOnly(
+             ['fromUid', 'toUid', 'fromDisplayName', 'fromAvatarColor', 'status', 'createdAt'])
+        && request.resource.data.fromDisplayName is string
+        && request.resource.data.fromDisplayName.size() <= 40;
+      allow update: if request.auth != null
+        && resource.data.toUid == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+        && request.resource.data.status in ['accepted', 'rejected'];
+      allow delete: if request.auth != null
+        && (resource.data.fromUid == request.auth.uid || resource.data.toUid == request.auth.uid);
+    }
+
+    // ---- Leaderboard reactions ----
+    // A subcollection under each leaderboard row: one document per reactor,
+    // keyed by their own uid, so tapping the same emoji again or a
+    // different one is a plain overwrite rather than needing separate
+    // add/remove logic. Public read (like the leaderboard row it hangs
+    // off), but a reactor can only ever write the document whose ID is
+    // their own uid — never anyone else's reaction.
+    match /leaderboard/{userId}/reactions/{reactorUid} {
+      allow read: if request.auth != null;
+      // Split from a single `allow write`, deliberately: on a delete,
+      // `request.resource` is null, so a combined rule that reads
+      // `request.resource.data.*` would throw on evaluation and silently
+      // deny every attempt to clear a reaction — the write-only-checks-
+      // create-and-update version of this rule looked right and would have
+      // made clearReaction() permanently broken.
+      allow create, update: if request.auth != null
+        && request.auth.uid == reactorUid
+        && request.resource.data.uid == reactorUid
+        && request.resource.data.emoji is string
+        && request.resource.data.emoji.size() <= 8
+        && request.resource.data.keys().hasOnly(['uid', 'emoji']);
+      allow delete: if request.auth != null && request.auth.uid == reactorUid;
+    }
+
+    // ---- Challenges ----
+    // A friendly, opt-in 1-on-1 competition between two people who already
+    // agreed to be friends. Both participants can read and update the full
+    // document, including each other's score field — this is intentionally
+    // more trusting than the leaderboard's per-field locking, because a
+    // challenge only ever involves two people who chose each other, unlike
+    // the leaderboard's read-by-everyone shared ranking. Same trust model
+    // this app already documents for XP generally (no server to referee
+    // it on the free plan): a participant COULD write a flattering score
+    // for themselves, same as they could on any client-trusted field
+    // elsewhere in this app.
+    match /challenges/{challengeId} {
+      allow read, update, delete: if request.auth != null
+        && request.auth.uid in resource.data.participants;
+      allow create: if request.auth != null
+        && request.auth.uid in request.resource.data.participants
+        && request.resource.data.participants.size() == 2
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.status == 'active'
+        && request.resource.data.keys().hasOnly(
+             ['createdBy', 'participants', 'goalType', 'goalLabel', 'startDate', 'endDate',
+              'status', 'scores', 'winnerUid', 'createdAt']);
+    }
+
+    // ---- Deny everything else ----
+    // Anything not explicitly allowed above is refused, so an unplanned or
+    // typo'd collection path fails closed rather than open.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
