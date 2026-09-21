@@ -508,7 +508,7 @@ export function AnimatedMeter({
       <Animated.View
         pointerEvents="none"
         style={[
-          StyleSheet.absoluteFillObject,
+          StyleSheet.absoluteFill,
           { backgroundColor: fillColor, borderRadius: height / 2 },
           glowStyle,
         ]}

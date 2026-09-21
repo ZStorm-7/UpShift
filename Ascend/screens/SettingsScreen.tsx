@@ -4,7 +4,7 @@
 //   Account      sign-out, trusted devices, delete account
 //   Privacy      the full privacy policy and legal text
 //   Subscription current plan and renewal
-//   Customize    theme, text size, language, notifications
+//   Customize    theme, text size, notifications
 //
 // Anything that WRITES profile data still lives on EditProfile; the General
 // tab shows those answers read-only with a link across, so there's exactly
@@ -12,9 +12,10 @@
 // about it writing the whole doc without merge).
 
 import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, Linking, Alert } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView, Linking, Alert, Platform } from 'react-native';
 import AnimatedToggle from '../components/AnimatedToggle';
-import { doc, setDoc, onSnapshot } from 'firebase/firestore';
+import AnimatedTabBar from '../components/AnimatedTabBar';
+import { doc, setDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { Screen, Field, Button } from '../components/ui';
 import { spacing, radius, layout } from '../theme/tokens';
@@ -22,12 +23,13 @@ import { fontFamily } from '../theme/fonts';
 import { usePalette, useTheme } from '../theme/themedColors';
 import { useUser } from '../context/UserContext';
 import { useSubscription } from '../context/SubscriptionContext';
-import { useLanguage } from '../i18n/LanguageContext';
-import { LANGUAGES, LanguageCode } from '../i18n/translations';
 import { withMinDuration, withTimeout, AUTH_TRANSITION_MS } from '../utils/timing';
 import { confirmAsync } from '../utils/confirm';
 import { displayNameFor, NO_BIO_PLACEHOLDER } from '../utils/profileDisplay';
 import haptics from '../services/haptics';
+import { clearPushToken } from '../services/notifications';
+import { isHealthAvailable, requestHealthPermission } from '../services/health';
+import { deleteAccount } from '../firebase/account';
 import PrivacyPolicyContent from '../components/PrivacyPolicyContent';
 import { safeGoBack } from '../utils/nav';
 import {
@@ -80,7 +82,6 @@ export default function SettingsScreen({ navigation }: any) {
     }
   }
   const { status, trialDaysRemaining, goToManageSubscription, presentCustomerCenter } = useSubscription();
-  const { language, setLanguage } = useLanguage();
   const [tab, setTab] = useState<Tab>('general');
   const [loggingOut, setLoggingOut] = useState(false);
 
@@ -88,7 +89,84 @@ export default function SettingsScreen({ navigation }: any) {
   const [nameDraft, setNameDraft] = useState(profile?.displayName ?? '');
   const [savingProfileBits, setSavingProfileBits] = useState(false);
 
+  // Full legal name and nickname — captured at onboarding, editable here
+  // rather than on EditProfile (which owns body-stats/avatar/goal instead).
+  const [firstNameDraft, setFirstNameDraft] = useState(profile?.firstName ?? '');
+  const [middleNameDraft, setMiddleNameDraft] = useState(profile?.middleName ?? '');
+  const [lastNameDraft, setLastNameDraft] = useState(profile?.lastName ?? '');
+  const [nicknameDraft, setNicknameDraft] = useState(profile?.nickname ?? '');
+  const [savingFullName, setSavingFullName] = useState(false);
+
+  async function saveFullName() {
+    if (!authUser || !profile || !firstNameDraft.trim() || !lastNameDraft.trim() || !nicknameDraft.trim()) return;
+    setSavingFullName(true);
+    try {
+      const updates = {
+        firstName: firstNameDraft.trim(),
+        ...(middleNameDraft.trim() ? { middleName: middleNameDraft.trim() } : {}),
+        lastName: lastNameDraft.trim(),
+        // Kept in sync — everything that still reads lastInitial (Avatar,
+        // the leaderboard fallback display name) derives it from lastName.
+        lastInitial: lastNameDraft.trim().slice(0, 1).toUpperCase(),
+        nickname: nicknameDraft.trim(),
+      };
+      await setDoc(doc(db, 'users', authUser.uid), updates, { merge: true });
+      setProfile({ ...profile, ...updates });
+      haptics.setComplete();
+    } catch {
+      Alert.alert('Could not save', 'Please check your connection and try again.');
+    } finally {
+      setSavingFullName(false);
+    }
+  }
+
   const notificationsEnabled = profile?.notificationsEnabled !== false;
+  const healthSyncEnabled = profile?.healthSyncEnabled === true;
+  const healthLabel = Platform.OS === 'ios' ? 'Apple Health' : 'Health Connect';
+  const [connectingHealth, setConnectingHealth] = useState(false);
+
+  // Turning ON asks for the OS permission right away (rather than just
+  // flipping a stored flag) so the toggle can't end up "on" with nothing
+  // actually granted — same reasoning as every other permission flow in
+  // this file (verification email, trusted devices). Turning OFF just stops
+  // Dashboard's health sync from running again; it deliberately does NOT
+  // try to revoke the OS-level grant, since neither HealthKit nor Health
+  // Connect lets an app do that from inside itself — only the user can, from
+  // the Health/Health Connect app's own settings.
+  async function handleToggleHealthSync(next: boolean) {
+    if (connectingHealth) return;
+    if (!next) {
+      await saveProfileBits({ healthSyncEnabled: false });
+      return;
+    }
+    setConnectingHealth(true);
+    try {
+      const available = await isHealthAvailable();
+      if (!available) {
+        Alert.alert(
+          `${healthLabel} isn't available`,
+          Platform.OS === 'ios'
+            ? 'HealthKit needs a physical device — it isn\'t available in the Simulator or on the web.'
+            : 'Install the Health Connect app from the Play Store, then try again.'
+        );
+        return;
+      }
+      const granted = await requestHealthPermission();
+      if (!granted) {
+        Alert.alert(
+          'Permission denied',
+          `UpShift wasn't given access to ${healthLabel}. You can turn this on again anytime, or grant access from your device's ${Platform.OS === 'ios' ? 'Health app' : 'Health Connect app'} settings.`
+        );
+        return;
+      }
+      await saveProfileBits({ healthSyncEnabled: true });
+      Alert.alert('Connected', `UpShift will pull in today's steps and offer your ${healthLabel} weight when you log in.`);
+    } catch {
+      Alert.alert('Could not connect', 'Please check your connection and try again.');
+    } finally {
+      setConnectingHealth(false);
+    }
+  }
 
   // Writes ONLY the fields this screen owns, with merge — deliberately not
   // the whole-document setDoc that EditProfile does, so the two can't
@@ -118,6 +196,17 @@ export default function SettingsScreen({ navigation }: any) {
     if (!confirmed) return;
     setLoggingOut(true);
     try {
+      // Best-effort, before logOut() invalidates the auth token this write
+      // needs — a device no longer signed into this account shouldn't stay
+      // a valid push-delivery target for it. Wrapped in its own withTimeout
+      // and its own catch: a genuinely HUNG request (not just a rejected
+      // one — a bad network can do either) would otherwise block the
+      // `await` below forever, leaving "Signing out…" up with no escape and
+      // logOut() never even called. This is best-effort cleanup, not a
+      // precondition for signing out — it must never be able to block it.
+      if (authUser) {
+        await withTimeout(clearPushToken(authUser.uid), 4000).catch(() => {});
+      }
       await withMinDuration(withTimeout(logOut()), AUTH_TRANSITION_MS);
       navigation.reset({ index: 0, routes: [{ name: 'Welcome' }] });
     } catch {
@@ -156,6 +245,27 @@ export default function SettingsScreen({ navigation }: any) {
     setLoggingOutAll(true);
     try {
       await invalidateAllSessions(authUser.uid);
+      // Every device this account has a push-token doc for, not just this
+      // one — "log out everywhere" should mean nothing keeps getting
+      // pushed to either. Falls back to just this device's token if the
+      // Trusted Devices list hasn't loaded (sessionsDoc is only fetched
+      // once the Account tab is opened — see the effect above).
+      //
+      // Each delete gets its own withTimeout, not just a .catch() — a
+      // REJECTED promise is handled by .catch() alone, but a HUNG one (a
+      // request that never settles either way, which a bad network can
+      // absolutely do) would sit inside Promise.all forever with only
+      // .catch() attached, blocking the sign-out below it indefinitely.
+      const deviceIds = sessionsDoc?.devices ? Object.keys(sessionsDoc.devices) : [];
+      await Promise.all(
+        deviceIds.map(id =>
+          withTimeout(
+            deleteDoc(doc(db, 'users', authUser.uid, 'meta', 'pushTokens', 'devices', id)),
+            4000
+          ).catch(() => {})
+        )
+      );
+      await withTimeout(clearPushToken(authUser.uid), 4000).catch(() => {});
       // Signs THIS device out immediately rather than waiting for its own
       // listener to catch the change — same instant feedback a normal
       // "Log out" tap gives.
@@ -182,12 +292,57 @@ export default function SettingsScreen({ navigation }: any) {
     if (!confirmed) return;
     try {
       await revokeDevice(authUser.uid, device.id);
+      // device.id IS the deviceId push tokens are keyed by (both come from
+      // the same getDeviceId()) — deleting it here works for the OTHER-
+      // device case too, unlike clearPushToken() elsewhere in this file,
+      // which only ever clears the CURRENT device's own token. A no-op,
+      // harmlessly, if that device never registered one.
+      await withTimeout(
+        deleteDoc(doc(db, 'users', authUser.uid, 'meta', 'pushTokens', 'devices', device.id)),
+        4000
+      ).catch(() => {});
       if (isThisDevice) {
         await withMinDuration(withTimeout(logOut()), AUTH_TRANSITION_MS);
         navigation.reset({ index: 0, routes: [{ name: 'Welcome' }] });
       }
     } catch {
       Alert.alert('Could not sign out that device', 'Please check your connection and try again.');
+    }
+  }
+
+  const [deletingAccount, setDeletingAccount] = useState(false);
+
+  async function handleDeleteAccount() {
+    if (!authUser || deletingAccount) return;
+    // A single confirm, matching this screen's own "Log out of all
+    // devices" precedent rather than a second type-to-confirm step — see
+    // confirmAsync's comment on why a two-button dialog is the ceiling on
+    // web anyway (window.confirm has no room for typed input). The wording
+    // carries the weight instead: spelling out exactly what's gone, not
+    // just that it's permanent.
+    const confirmed = await confirmAsync({
+      title: 'Delete your account?',
+      message: 'This permanently deletes your profile, logged food and workouts, streak, weight history, and leaderboard position. This cannot be undone.',
+      confirmLabel: 'Delete account',
+      destructive: true,
+    });
+    if (!confirmed) return;
+    setDeletingAccount(true);
+    try {
+      await deleteAccount();
+      // The Cloud Function has already deleted the Auth user server-side —
+      // this local signOut just clears the client's now-dangling cached
+      // session immediately, same as handleLogout, rather than leaving it
+      // to expire on its own the next time a token refresh fails.
+      await logOut();
+      navigation.reset({ index: 0, routes: [{ name: 'Welcome' }] });
+    } catch {
+      Alert.alert(
+        'Could not delete account',
+        'Please check your connection and try again. Nothing was deleted.'
+      );
+    } finally {
+      setDeletingAccount(false);
     }
   }
 
@@ -232,35 +387,63 @@ export default function SettingsScreen({ navigation }: any) {
         <View style={{ width: 60 }} />
       </View>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
+      <AnimatedTabBar
+        tabs={TABS}
+        activeKey={tab}
+        onChange={(key) => setTab(key as Tab)}
+        palette={palette}
+        scrollable
         style={styles.tabScroll}
-        contentContainerStyle={styles.tabRow}>
-        {TABS.map(item => {
-          const active = tab === item.key;
-          return (
-            <Pressable
-              key={item.key}
-              onPress={() => { haptics.selection(); setTab(item.key); }}
-              style={[
-                styles.tab,
-                { borderColor: palette.border },
-                active && { backgroundColor: palette.accent, borderColor: palette.accent },
-              ]}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: active }}>
-              <Text style={[styles.tabText, { color: active ? palette.textOnAccent : palette.textSecondary }]}>
-                {item.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
+      />
 
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {tab === 'general' && (
           <>
+            <Section title="Full name" palette={palette}>
+              <View style={styles.formBlock}>
+                <Field
+                  label="First name"
+                  placeholder="First name"
+                  value={firstNameDraft}
+                  onChangeText={setFirstNameDraft}
+                  autoCapitalize="words"
+                />
+                <Field
+                  label="Middle name (optional)"
+                  placeholder="Middle name"
+                  value={middleNameDraft}
+                  onChangeText={setMiddleNameDraft}
+                  autoCapitalize="words"
+                />
+                <Field
+                  label="Last name"
+                  placeholder="Last name"
+                  value={lastNameDraft}
+                  onChangeText={setLastNameDraft}
+                  autoCapitalize="words"
+                />
+                <Field
+                  label="Nickname"
+                  placeholder="Nickname"
+                  value={nicknameDraft}
+                  onChangeText={setNicknameDraft}
+                  autoCapitalize="words"
+                  maxLength={30}
+                />
+                <Text style={[styles.hint, { color: palette.textMuted }]}>
+                  Your full name is kept private. Other people only ever see
+                  "{profile?.firstName ?? 'First'} {(profile?.lastName ?? profile?.lastInitial ?? '').slice(0, 1).toUpperCase()}." —
+                  your nickname is just for how the app talks to you.
+                </Text>
+                <Button
+                  label={savingFullName ? 'Saving…' : 'Save'}
+                  onPress={saveFullName}
+                  disabled={savingFullName || !firstNameDraft.trim() || !lastNameDraft.trim() || !nicknameDraft.trim()}
+                  fullWidth
+                />
+              </View>
+            </Section>
+
             <Section title="How people see you" palette={palette}>
               <View style={styles.formBlock}>
                 <Field
@@ -295,24 +478,25 @@ export default function SettingsScreen({ navigation }: any) {
               </View>
             </Section>
 
-            <Section title="Ascend AI" palette={palette}>
-              <TappableRow
-                label="Open Ascend AI"
-                onPress={() => navigation.navigate('AscendAI')}
+            <Section title="Your answers" palette={palette}>
+              <Row
+                label="Date of birth"
+                value={profile?.dateOfBirth || '—'}
                 palette={palette}
               />
-            </Section>
-
-            <Section title="Your answers" palette={palette}>
               <Row label="Age" value={profile?.age != null ? String(profile.age) : '—'} palette={palette} />
               <Row
                 label="Height"
-                value={profile?.heightFeet != null ? `${profile.heightFeet}' ${profile.heightInches ?? 0}"` : '—'}
+                value={profile?.heightFeet != null ? `${profile.heightFeet} ft ${profile.heightInches ?? 0} in` : '—'}
                 palette={palette}
               />
               <Row label="Gender" value={profile?.gender || '—'} palette={palette} />
               <Row label="Activity level" value={profile?.activityLevel || '—'} palette={palette} />
-              <Row label="Goal" value={profile?.goal || '—'} palette={palette} />
+              <Row
+                label="Goals"
+                value={profile?.goals?.length ? profile.goals.join(', ') : (profile?.goal || '—')}
+                palette={palette}
+              />
               <Row
                 label="Birthday"
                 value={profile?.birthdayMonth && profile?.birthdayDay ? `${profile.birthdayMonth}/${profile.birthdayDay}` : '—'}
@@ -399,6 +583,15 @@ export default function SettingsScreen({ navigation }: any) {
                   </View>
                 ))
               )}
+            </Section>
+
+            <Section title="Danger zone" palette={palette}>
+              <TappableRow
+                label={deletingAccount ? 'Deleting…' : 'Delete account'}
+                onPress={handleDeleteAccount}
+                palette={palette}
+                destructive
+              />
             </Section>
           </>
         )}
@@ -508,41 +701,6 @@ export default function SettingsScreen({ navigation }: any) {
               </View>
             </Section>
 
-            <Section title="Language" palette={palette}>
-              <View style={styles.optionBlock}>
-                <View style={styles.langWrap}>
-                  {LANGUAGES.map(lang => {
-                    const active = language === lang.code;
-                    return (
-                      <Pressable
-                        key={lang.code}
-                        onPress={() => {
-                          haptics.selection();
-                          setLanguage(lang.code as LanguageCode);
-                          saveProfileBits({ language: lang.code });
-                        }}
-                        style={[
-                          styles.langChip,
-                          { borderColor: palette.border, backgroundColor: palette.surfaceSunken },
-                          active && { backgroundColor: palette.accentSoft, borderColor: palette.accent },
-                        ]}
-                        accessibilityRole="radio"
-                        accessibilityState={{ selected: active }}
-                        accessibilityLabel={lang.label}>
-                        <Text style={[styles.langChipText, { color: active ? palette.accent : palette.textSecondary }]}>
-                          {lang.nativeLabel}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-                <Text style={[styles.hint, { color: palette.textMuted }]}>
-                  Some languages are only partly translated — anything missing
-                  falls back to English.
-                </Text>
-              </View>
-            </Section>
-
             <Section title="Notifications" palette={palette}>
               <Row
                 label="Streak & quest reminders"
@@ -556,6 +714,33 @@ export default function SettingsScreen({ navigation }: any) {
                   />
                 }
               />
+            </Section>
+
+            {/* Requires a native EAS/dev-client build — see services/health.ts.
+                The toggle itself is always visible and always fails soft
+                (isHealthAvailable/requestHealthPermission never throw), so
+                this is harmless to show even in Expo Go or on web; it'll
+                just report "not available" there. */}
+            <Section title="Health sync" palette={palette}>
+              <Row
+                label={`Connect ${healthLabel}`}
+                palette={palette}
+                right={
+                  connectingHealth ? (
+                    <Text style={[styles.rowValue, { color: palette.textMuted }]}>Connecting…</Text>
+                  ) : (
+                    <AnimatedToggle
+                      value={healthSyncEnabled}
+                      onValueChange={handleToggleHealthSync}
+                      palette={palette}
+                      accessibilityLabel={`Connect ${healthLabel}`}
+                    />
+                  )
+                }
+              />
+              <Text style={[styles.hint, { color: palette.textMuted, padding: spacing.lg, paddingTop: 0 }]}>
+                Pulls in today's step count and offers your logged weight when you check in — read-only, nothing is ever written back to {healthLabel}.
+              </Text>
             </Section>
 
             <Section title="About" palette={palette}>
@@ -636,17 +821,6 @@ const styles = StyleSheet.create({
   // content ScrollView below from squeezing it, and the contentContainer
   // centers + pads the pills so they're never flush against the clip edge.
   tabScroll: { flexGrow: 0, flexShrink: 0, marginTop: spacing.md },
-  tabRow: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.xs,
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  tab: {
-    paddingHorizontal: spacing.lg, paddingVertical: spacing.sm,
-    borderRadius: radius.pill, borderWidth: layout.hairline,
-  },
-  tabText: { fontFamily: fontFamily.sansBold, fontSize: 13 },
 
   content: { padding: spacing.lg, paddingBottom: layout.bottomInset, gap: spacing.xl },
   section: { gap: spacing.sm },
@@ -674,11 +848,4 @@ const styles = StyleSheet.create({
   },
   switcherOption: { flex: 1, paddingVertical: 8, borderRadius: radius.pill, alignItems: 'center' },
   switcherText: { fontFamily: fontFamily.sansBold, fontSize: 13 },
-
-  langWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  langChip: {
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-    borderRadius: radius.pill, borderWidth: layout.hairline,
-  },
-  langChipText: { fontFamily: fontFamily.sans, fontSize: 13 },
 });

@@ -179,7 +179,7 @@ export default function Splash({ onDone, budget }: SplashProps) {
     <Animated.View
       pointerEvents="none"
       accessibilityLabel="UpShift"
-      style={[StyleSheet.absoluteFillObject, { width: winW, height: winH }, styles.root, rootStyle]}>
+      style={[StyleSheet.absoluteFill, { width: winW, height: winH }, styles.root, rootStyle]}>
       <Animated.View style={markStyle}>
         <Svg width={64} height={56} viewBox={MARK_VIEWBOX}>
           <AnimatedPath

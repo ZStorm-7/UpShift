@@ -68,11 +68,11 @@ export default function SubscriptionScreen({ navigation, route }: any) {
   // does (see App.tsx's needsEmailVerification comment for why).
   useEffect(() => {
     if (status === 'trial') {
-      navigation.replace('Liability');
+      navigation.replace('LegalGate');
       return;
     }
     if (status === 'active_monthly' || status === 'active_annual') {
-      navigation.replace(emailVerified ? 'Liability' : 'VerifyEmail');
+      navigation.replace(emailVerified ? 'LegalGate' : 'VerifyEmail');
     }
   }, [status, emailVerified]);
 
@@ -91,7 +91,7 @@ export default function SubscriptionScreen({ navigation, route }: any) {
         // but that's async — checked directly here rather than waiting on
         // it, since a just-completed purchase IS a real subscription
         // regardless of whether context has caught up yet.
-        navigation.replace(emailVerified ? 'Liability' : 'VerifyEmail');
+        navigation.replace(emailVerified ? 'LegalGate' : 'VerifyEmail');
       } else if (result === 'error') {
         Alert.alert(
           'Purchase failed',
@@ -116,7 +116,7 @@ export default function SubscriptionScreen({ navigation, route }: any) {
     const result = await presentPaywall();
     if (result === 'purchased' || result === 'restored') {
       haptics.goalMet();
-      navigation.replace(emailVerified ? 'Liability' : 'VerifyEmail');
+      navigation.replace(emailVerified ? 'LegalGate' : 'VerifyEmail');
     } else if (result === 'not_presented') {
       Alert.alert('Not available', 'This checkout option isn\'t set up yet — please use the plans above.');
     }
@@ -135,7 +135,7 @@ export default function SubscriptionScreen({ navigation, route }: any) {
     try {
       await startTrial();
       haptics.goalMet();
-      navigation.replace('Liability');
+      navigation.replace('LegalGate');
     } catch (err: any) {
       const alreadyUsed = err?.message?.includes('already used');
       Alert.alert(

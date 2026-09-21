@@ -5,6 +5,16 @@ import { Ionicons } from '@expo/vector-icons';
 // first time a threshold changed. Single source of truth.
 export type RankInfo = { rank: string; next: string; icon: keyof typeof Ionicons.glyphMap };
 
+// Level 100 is the intended ceiling — see xpRequiredForLevel in
+// firebase/progress.ts for why that's now a genuinely long climb (the
+// per-level XP cost grows exponentially, where it used to be flat). Apex is
+// the true highest rank, reached at level 100.
+//
+// Levels don't literally stop at 100 — a player who gets there keeps
+// earning XP and climbing levels forever ("prestige"), but getRankInfo
+// below has no tier above Apex to walk into, so the RANK TITLE freezes
+// there permanently. The level number is what keeps proving how far past
+// the cap someone has gone; the rank badge itself just stays capped.
 const RANKS: { minLevel: number; name: string; icon: keyof typeof Ionicons.glyphMap }[] = [
   { minLevel: 0, name: 'Rookie', icon: 'leaf' },
   { minLevel: 5, name: 'Grinder', icon: 'barbell' },
@@ -13,6 +23,7 @@ const RANKS: { minLevel: number; name: string; icon: keyof typeof Ionicons.glyph
   { minLevel: 35, name: 'Champion', icon: 'trophy' },
   { minLevel: 50, name: 'Legend', icon: 'ribbon' },
   { minLevel: 75, name: 'Mythic', icon: 'planet' },
+  { minLevel: 100, name: 'Apex', icon: 'flame' },
 ];
 
 export function getRankInfo(level: number): RankInfo {

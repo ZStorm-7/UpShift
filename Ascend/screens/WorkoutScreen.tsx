@@ -40,7 +40,6 @@ import {
 } from '../data/workoutPlans';
 import { getTodayKey } from '../firebase/progress';
 import haptics from '../services/haptics';
-import sound from '../services/sound';
 import WorkoutCalendar from '../components/WorkoutCalendar';
 import { xpMultiplier } from '../utils/birthday';
 import { safeGoBack } from '../utils/nav';
@@ -153,7 +152,6 @@ export default function WorkoutScreen({ navigation }: any) {
       return { ...prev, [exIndex]: next };
     });
     haptics.selection();
-    sound.questTick();
   }
 
   const totalSets = workout ? workout.exercises.reduce((s, e) => s + e.sets, 0) : 0;
@@ -199,7 +197,7 @@ export default function WorkoutScreen({ navigation }: any) {
 
     try {
       // Award XP + bump the daily "workoutsCompleted" counter
-      const { level, currentXP } = await awardXP(authUser.uid, gainedXP);
+      await awardXP(authUser.uid, gainedXP);
       await incrementTodayField(authUser.uid, 'workoutsCompleted', 1);
 
       // Advance workout progression
@@ -211,15 +209,16 @@ export default function WorkoutScreen({ navigation }: any) {
       // doesn't return to a "completed" workout that could be finished
       // again.
       navigation.replace('WorkoutSummary', {
-        xpGained: gainedXP,
-        level,
-        currentXP,
+        // Field names match WorkoutSummaryScreen's SummaryParams exactly —
+        // it defaults every field to 0/'' for a route reached without
+        // params, so a mismatched name here silently renders a "0 of
+        // everything" summary instead of erroring.
+        xpEarned: gainedXP,
+        completedSets: doneSets,
         totalSets,
-        workoutTitle: workout.title,
-        durationMin: workout.durationMin,
-        tierBefore: state.tier,
-        tierAfter: nextState.tier,
-        leveledUpTier: state.tier !== nextState.tier,
+        exerciseCount: workout.exercises.length,
+        muscleGroup: workout.title,
+        durationMinutes: workout.durationMin,
       });
     } catch {
       inFlight.current = false;
@@ -266,7 +265,7 @@ export default function WorkoutScreen({ navigation }: any) {
         <AppBar title="Workout" onBack={() => safeGoBack(navigation)} />
         <View style={styles.greetingBody}>
           <Text style={[styles.greetingText, { color: palette.textPrimary }]}>
-            {greeting}{profile?.firstName ? `, ${profile.firstName}` : ''}!
+            {greeting}{(profile?.nickname || profile?.firstName) ? `, ${profile?.nickname || profile?.firstName}` : ''}!
           </Text>
           <Text style={[styles.greetingSubtitle, { color: palette.textSecondary }]}>
             Today's plan: {workout.title} ({WORKOUT_TIER_LABELS[workout.tier]}).

@@ -1,4 +1,8 @@
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
+import { doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { db } from '../firebase/config';
+import { getDeviceId } from '../firebase/sessions';
 
 // Mirrors services/sound.ts's pattern exactly: lazy-load the native module
 // inside a try/catch so a missing/misconfigured native module degrades to
@@ -373,4 +377,66 @@ export async function cancelAllReminders(): Promise<void> {
 
 export function notificationsAvailable(): boolean {
   return Notifications !== null;
+}
+
+// ── Push token registration (real background push) ───────────────────
+//
+// A new-message push is now sent server-side: functions/src/index.ts runs
+// as a Cloud Function on every new conversations/{id}/messages/{id} doc and
+// posts to Expo's push API, which delivers via FCM (Android) / APNs (iOS)
+// even when this app is fully closed — the one thing the old purely-local
+// notifyNewMessage (fired from a live onSnapshot listener) could never do.
+// This section's only job is keeping that Cloud Function supplied with
+// somewhere to deliver to.
+//
+// Keyed by device, at users/{uid}/meta/pushTokens/{deviceId} — one doc per
+// signed-in device, mirroring firebase/sessions.ts's existing per-device
+// Trusted Devices doc (same getDeviceId()). A single shared field on the
+// profile would mean only the last device to sign in ever gets pushed to;
+// this app already tracks multiple simultaneous devices per account for
+// sessions, so push tokens follow the same shape and every signed-in device
+// gets notified.
+//
+// getExpoPushTokenAsync (unlike scheduleNotificationAsync elsewhere in this
+// file) needs a `projectId` — read from app.json's extra.eas.projectId via
+// expo-constants — and only ever resolves to a real token in an EAS build
+// (dev client or standalone); it throws in Expo Go, which the catch below
+// treats as just another "push isn't available right now" case, matching
+// this whole file's fail-open pattern.
+export async function registerPushToken(uid: string): Promise<void> {
+  if (!Notifications) return;
+  configureHandler();
+
+  const granted = await requestNotificationPermission();
+  if (!granted) return;
+
+  try {
+    const projectId = Constants.expoConfig?.extra?.eas?.projectId as string | undefined;
+    const tokenResponse = await Notifications.getExpoPushTokenAsync(
+      projectId ? { projectId } : undefined
+    );
+    const deviceId = await getDeviceId();
+    await setDoc(
+      doc(db, 'users', uid, 'meta', 'pushTokens', 'devices', deviceId),
+      { expoPushToken: tokenResponse.data, platform: Platform.OS, updatedAt: Date.now() },
+      { merge: true }
+    );
+  } catch {
+    // Expo Go, a denied permission, offline, or no projectId configured —
+    // any of these just means no push this session, not a crash.
+  }
+}
+
+// Called on sign-out so a device that's no longer logged into this account
+// stops being a valid delivery target for its pushes — see
+// components/PushTokenRegistrar.tsx and SettingsScreen's logout handlers.
+export async function clearPushToken(uid: string): Promise<void> {
+  try {
+    const deviceId = await getDeviceId();
+    await deleteDoc(doc(db, 'users', uid, 'meta', 'pushTokens', 'devices', deviceId));
+  } catch {
+    // Best-effort — worst case a stale token lingers until the Cloud
+    // Function's own DeviceNotRegistered cleanup (see functions/src/index.ts)
+    // removes it after the next failed send.
+  }
 }

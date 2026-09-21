@@ -73,6 +73,16 @@ export type Palette = {
   carbs: string;
   fat: string;
 
+  // History screen per-tab accents (Apple Health-style: each health category
+  // gets its own signature hue instead of every tab leaning on the same
+  // green ramp). Nutrition keeps `accent` — it's the app's core brand color
+  // and shows up everywhere else — these two exist purely to give the Body
+  // and Activity tabs a distinct identity of their own.
+  bodyAccent: string;
+  bodyAccentSoft: string;
+  activityAccent: string;
+  activityAccentSoft: string;
+
   scrim: string;
 };
 
@@ -126,6 +136,15 @@ export const darkPalette: Palette = {
   carbs: '#EB9F25',
   fat: '#AA76DE',
 
+  // Indigo for Body/weight, teal for Activity — both far enough from the
+  // green accent, the red loss/danger hue, and the existing amber (xp/carbs)
+  // and blue (protein/info) tokens that a chart using them can't be mistaken
+  // for one of those unrelated meanings.
+  bodyAccent: '#7C8CFF',
+  bodyAccentSoft: 'rgba(124, 140, 255, 0.14)',
+  activityAccent: '#2DD4BF',
+  activityAccentSoft: 'rgba(45, 212, 191, 0.14)',
+
   scrim: 'rgba(0, 0, 0, 0.78)',
 };
 
@@ -178,6 +197,15 @@ export const lightPalette: Palette = {
   protein: '#2C5FCC',
   carbs: '#B37800',
   fat: '#7A4EC4',
+
+  // Same hues as the dark palette's bodyAccent/activityAccent, darkened the
+  // same way `accentText`/`xp` are on light — these are chart strokes/fills
+  // on a white surface, not brand colors, so they only need to stay legible
+  // there rather than match the dark theme value exactly.
+  bodyAccent: '#4C5FD1',
+  bodyAccentSoft: 'rgba(76, 95, 209, 0.14)',
+  activityAccent: '#0F766E',
+  activityAccentSoft: 'rgba(15, 118, 110, 0.14)',
 
   scrim: 'rgba(0, 0, 0, 0.45)',
 };

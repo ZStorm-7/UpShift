@@ -35,20 +35,22 @@ function computeAutoMode(): ThemeMode {
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const { authUser } = useUser();
-  const [autoMode, setAutoModeState] = useState(true);
-  const [manualMode, setManualModeState] = useState<ThemeMode>('dark');
-  const [mode, setMode] = useState<ThemeMode>(computeAutoMode());
+  // Light by default, always — not auto/time-based. A fresh install (and
+  // any existing account that never touched Settings' theme controls) opens
+  // in light mode; dark is now something a user opts INTO via Settings, not
+  // something the clock or the app's dark-only history picks for them.
+  const [autoMode, setAutoModeState] = useState(false);
+  const [manualMode, setManualModeState] = useState<ThemeMode>('light');
+  const [mode, setMode] = useState<ThemeMode>('light');
   const loadedRef = useRef(false);
 
   // Load persisted prefs whenever the signed-in user changes. Defaults
-  // (autoMode: true, manualMode: 'dark') apply if nothing is stored yet —
-  // matching the app's dark-only history, new users still land on dark
-  // outside daylight hours rather than an unfamiliar default.
+  // (autoMode: false, manualMode: 'light') apply if nothing is stored yet.
   useEffect(() => {
     loadedRef.current = false;
     if (!authUser) {
-      setAutoModeState(true);
-      setManualModeState('dark');
+      setAutoModeState(false);
+      setManualModeState('light');
       loadedRef.current = true;
       return;
     }
@@ -56,8 +58,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       try {
         const snap = await getDoc(doc(db, 'users', authUser.uid, 'meta', 'prefs'));
         const data = snap.exists() ? (snap.data() as { themeAutoMode?: boolean; themeManualMode?: ThemeMode }) : {};
-        setAutoModeState(data.themeAutoMode ?? true);
-        setManualModeState(data.themeManualMode === 'light' || data.themeManualMode === 'dark' ? data.themeManualMode : 'dark');
+        setAutoModeState(data.themeAutoMode ?? false);
+        setManualModeState(data.themeManualMode === 'light' || data.themeManualMode === 'dark' ? data.themeManualMode : 'light');
       } catch {
         // silent — defaults already applied
       } finally {

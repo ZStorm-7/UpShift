@@ -18,14 +18,18 @@ import { Screen, AppBar, Card, SectionTitle, Button, Field, Pill } from '../comp
 import { PressableScale, AnimatedMeter, Shimmer } from '../components/anim';
 import { Enter } from '../components/dashboard';
 import haptics from '../services/haptics';
-import { useUser, calculateWaterGoal, calculateCalorieGoal } from '../context/UserContext';
+import { useUser, calculateWaterGoal, calculateCalorieGoal, calculateAge, ageGroupFor } from '../context/UserContext';
 import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useLanguage } from '../i18n/LanguageContext';
-import { LANGUAGES, LanguageCode } from '../i18n/translations';
 import { uploadProfilePhoto, photoUploadAvailable } from '../services/avatar';
 import AvatarView from '../components/Avatar';
 import { logOnboardingEvent } from '../firebase/analytics';
+import { clearPushToken } from '../services/notifications';
+import { withTimeout } from '../utils/timing';
+import { WheelDatePicker, HeightWheelPicker, WeightWheelPicker, type HeightUnit, type WeightUnit } from '../components/WheelPicker';
+import ScrollFadeOverlay, { useScrollOverflow } from '../components/ScrollFadeOverlay';
+import type { HealthPrefill } from './HealthSyncScreen';
 
 // Named for the same reason EditProfileScreen's preview one is — the
 // skeleton/preview have to agree on a size or the row jumps.
@@ -33,13 +37,48 @@ const AVATAR_SIZE = 56;
 
 // How many steps the flow has. Named so the progress bar and the "Step N of M"
 // line can never disagree with each other.
-const TOTAL_STEPS = 5;
+//
+// 1 name · 2 DOB · 3 height · 4 weight · 5 body fat · 6 gender ·
+// 7 exercise frequency · 8 activity level · 9 lifting experience ·
+// 10 cardio experience · 11 physical considerations · 12 expenditure teaching
+// · 13 goals · 14 how did you hear about us · 15 summary/avatar.
+//
+// Height and weight (3, 4) are skipped automatically when Apple Health /
+// Health Connect already supplied that value — see `isStepSkippable` below.
+const TOTAL_STEPS = 15;
 
 const activityOptions = [
   { label: 'Sedentary', description: 'Little to no exercise, desk job' },
   { label: 'Lightly active', description: 'Light exercise 1–3 days/week' },
   { label: 'Moderately active', description: 'Moderate exercise 3–5 days/week' },
   { label: 'Very active', description: 'Hard exercise 6–7 days/week' },
+];
+
+const exerciseFrequencyOptions = [
+  '0 sessions / week',
+  '1-3 sessions / week',
+  '4-6 sessions / week',
+  '7+ sessions / week',
+];
+
+const bodyFatOptions = [
+  '3-4%', '5-7%', '8-12%', '13-17%', '18-23%', '24-29%', '30-34%', '35-39%', '40%+',
+];
+
+function experienceOptions(kind: 'lifting' | 'cardio') {
+  const verb = kind === 'lifting' ? 'Lifting' : 'Doing cardio';
+  return [
+    { label: 'None', description: `Currently not ${kind === 'lifting' ? 'lifting' : 'doing cardio'}` },
+    { label: 'Beginner', description: `${verb} for the past year or less` },
+    { label: 'Intermediate', description: `${verb} for more than the past year, but less than 4 years` },
+    { label: 'Advanced', description: `${verb} for the past 4 years or more` },
+  ];
+}
+
+const referralOptions: { key: 'friend' | 'ai' | 'other'; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { key: 'friend', label: 'A friend', icon: 'people' },
+  { key: 'ai', label: 'AI (ChatGPT, Claude, etc.)', icon: 'sparkles' },
+  { key: 'other', label: 'Other', icon: 'ellipsis-horizontal' },
 ];
 
 const goalOptions = [
@@ -49,6 +88,10 @@ const goalOptions = [
   'Improve endurance',
   'Build better habits',
 ];
+
+// The minimum age UpShift will create an account for. Below this, onboarding
+// stops entirely — see `ageBlocked` below.
+const MIN_AGE = 13;
 
 // Generalized categories rather than a long medical checklist — broad enough
 // to cover the common cases in one tap, with a free-text field right below
@@ -68,18 +111,8 @@ const physicalConditionOptions = [
 const DEFAULT_CALORIE_GOAL = 2000;
 const DEFAULT_WATER_GOAL_ML = 2500;
 
-export default function OnboardingScreen({ navigation }: any) {
+export default function OnboardingScreen({ navigation, route }: any) {
   const palette = usePalette();
-  // Colour halves of styles.* that were hardcoded from the static dark-only
-  // `colors` object — usePalette() was already called in this file (for the
-  // few things below that used it), but the chip/option-picker styles used
-  // through every step of onboarding (language, gender, activity, goals)
-  // never got converted, so every chip stayed dark-themed. Same pattern as
-  // the fix already applied to Challenges/EditProfile/Friends/Leaderboard/
-  // WorkoutSummary — a plain object (not StyleSheet.create, which registers
-  // once and can't react to the theme changing) merging each static
-  // structural style with its palette-correct colour under the same key
-  // name.
   const dynamicStyles = {
     errorBanner: [styles.errorBanner, { backgroundColor: palette.dangerSoft, borderColor: palette.danger }],
     errorText: [styles.errorText, { color: palette.danger }],
@@ -98,33 +131,69 @@ export default function OnboardingScreen({ navigation }: any) {
     previewValue: [styles.previewValue, { color: palette.textPrimary }],
     missingHint: [styles.missingHint, { color: palette.textMuted }],
   };
-  const { authUser, setProfile } = useUser();
-  const { t, language, setLanguage } = useLanguage();
+  const { authUser, setProfile, logOut } = useUser();
+  const { t } = useLanguage();
   const [avatar, setAvatar] = useState('');
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [step, setStep] = useState(1);
   const [firstName, setFirstName] = useState('');
-  const [lastInitial, setLastInitial] = useState('');
-  const [age, setAge] = useState('');
-  const [heightFeet, setHeightFeet] = useState('');
-  const [heightInches, setHeightInches] = useState('');
-  // `weight` and `setWeight` are still declared but the input that sets
-  // them was removed above — see the placeholder-weight comment. Kept
-  // rather than deleted so the surrounding step-index logic (which is
-  // linear array-indexed) doesn't shift; a future pass can renumber the
-  // steps and drop this pair together.
-  const [weight, setWeight] = useState('');
+  const [middleName, setMiddleName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [nickname, setNickname] = useState('');
+
+  // Whatever HealthSyncScreen managed to read from Apple Health / Health
+  // Connect, if anything. Only ever set the moment this screen mounts (a
+  // brand-new signup's only path here) — never re-read afterward, so a
+  // later re-render can't silently re-apply a stale prefill.
+  const healthPrefill: HealthPrefill | undefined = route?.params?.healthPrefill;
+  const healthSyncEnabled: boolean = !!route?.params?.healthSyncEnabled;
+  const heightPrefilled = healthPrefill?.heightFeet != null;
+  const weightPrefilled = healthPrefill?.weightLbs != null;
+
+  // Date of birth — a scroll-wheel (month abbreviated / day / year) rather
+  // than plain numeric fields (see components/WheelPicker.tsx's
+  // WheelDatePicker). Defaults to a plausible adult birthdate so the wheel
+  // never renders empty.
+  const [dob, setDob] = useState(() => ({ month: 1, day: 1, year: new Date().getFullYear() - 20 }));
+  // Set once the entered birthdate makes the user under MIN_AGE. Blocks the
+  // rest of onboarding outright — see the render short-circuit below.
+  const [ageBlocked, setAgeBlocked] = useState(false);
+
+  const [heightUnit, setHeightUnit] = useState<HeightUnit>('ftin');
+  const [heightFeet, setHeightFeet] = useState(healthPrefill?.heightFeet ?? 5);
+  const [heightInches, setHeightInches] = useState(healthPrefill?.heightInches ?? 8);
+  const heightCm = Math.round(heightFeet * 30.48 + heightInches * 2.54);
+  const handleHeightChange = (v: { feet: number; inches: number; cm: number }) => {
+    if (heightUnit === 'ftin') {
+      setHeightFeet(v.feet);
+      setHeightInches(v.inches);
+    } else {
+      const totalInches = Math.round(v.cm / 2.54);
+      setHeightFeet(Math.floor(totalInches / 12));
+      setHeightInches(totalInches % 12);
+    }
+  };
+
+  const [weightUnit, setWeightUnit] = useState<WeightUnit>('lb');
+  const [weightLbs, setWeightLbs] = useState(healthPrefill?.weightLbs ?? 165);
+  const weightDisplay = weightUnit === 'lb' ? weightLbs : Math.round(weightLbs * 0.453592);
+  const handleWeightChange = (v: number) => {
+    setWeightLbs(weightUnit === 'lb' ? v : Math.round(v / 0.453592));
+  };
+
+  const [bodyFatLevel, setBodyFatLevel] = useState('');
   const [gender, setGender] = useState('');
+  const [exerciseFrequency, setExerciseFrequency] = useState('');
   const [activityLevel, setActivityLevel] = useState('');
-  const [goal, setGoal] = useState('');
+  const [liftingExperience, setLiftingExperience] = useState('');
+  const [cardioExperience, setCardioExperience] = useState('');
+  // Multi-select — a goal step where more than one answer can be true at
+  // once ("Lose weight" AND "Build better habits" isn't a contradiction).
+  const [goals, setGoals] = useState<string[]>([]);
   const [physicalConditions, setPhysicalConditions] = useState<string[]>([]);
   const [physicalNotes, setPhysicalNotes] = useState('');
-  // Month/day only — no year. Age is already collected separately above,
-  // and the birthday screen (BirthdayScreen.tsx) only needs to know which
-  // calendar day to fire on, not how old that makes the user.
-  const [birthdayMonth, setBirthdayMonth] = useState('');
-  const [birthdayDay, setBirthdayDay] = useState('');
-  const [displayName, setDisplayName] = useState('');
+  const [referralSource, setReferralSource] = useState<'friend' | 'ai' | 'other' | ''>('');
+  const [referralSourceNote, setReferralSourceNote] = useState('');
 
   const togglePhysicalCondition = (label: string) => {
     setPhysicalConditions(prev =>
@@ -132,51 +201,21 @@ export default function OnboardingScreen({ navigation }: any) {
     );
   };
 
+  const toggleGoal = (label: string) => {
+    setGoals(prev =>
+      prev.includes(label) ? prev.filter(g => g !== label) : [...prev, label]
+    );
+  };
+
+  // Parsed once per render and reused by validation, the preview card and
+  // the final save, so the displayed age and the saved age can never drift
+  // apart from each other.
+  const dobIso = `${String(dob.year).padStart(4, '0')}-${String(dob.month).padStart(2, '0')}-${String(dob.day).padStart(2, '0')}`;
+  const computedAge = calculateAge(dobIso);
+
   // Mirrors EditProfileScreen so the two profile forms fail the same way.
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
-
-  const validateAge = (val: string) => {
-    const num = parseInt(val);
-    if (isNaN(num)) return val;
-    if (num > 120) return '120';
-    return val;
-  };
-
-  const validateHeightFeet = (val: string) => {
-    const num = parseInt(val);
-    if (isNaN(num)) return val;
-    if (num > 8) return '8';
-    return val;
-  };
-
-  const validateHeightInches = (val: string) => {
-    const num = parseInt(val);
-    if (isNaN(num)) return val;
-    if (num > 11) return '11';
-    return val;
-  };
-
-  const clampNumeric = (val: string, min: number, max: number) => {
-    const num = parseInt(val);
-    if (isNaN(num)) return val;
-    if (num > max) return String(max);
-    if (num < min && val.length >= String(max).length) return String(min);
-    return val;
-  };
-
-  const validateWeight = (val: string) => {
-    const num = parseInt(val);
-    if (isNaN(num)) return val;
-    if (num > 1000) return '1000';
-    return val;
-  };
-
-  const heightInCm = () => {
-    const ft = parseInt(heightFeet) || 0;
-    const inches = parseInt(heightInches) || 0;
-    return Math.round((ft * 30.48) + (inches * 2.54));
-  };
 
   /* ---------------------------------------------------------------- *
    * Step gates
@@ -190,25 +229,53 @@ export default function OnboardingScreen({ navigation }: any) {
   const missingForStep = (s: number): string[] => {
     switch (s) {
       case 1:
-        return [!firstName && t('firstName'), !lastInitial && t('lastInitial')].filter(
-          Boolean
-        ) as string[];
-      case 2:
-        return [!age && t('age'), !heightFeet && t('heightFt')].filter(
-          Boolean
-        ) as string[];
-      case 3:
-        return [!gender && t('gender'), !activityLevel && t('activityLevel')].filter(
-          Boolean
-        ) as string[];
-      case 4:
-        return [!goal && t('goal')].filter(Boolean) as string[];
+        return [
+          !firstName && t('firstName'),
+          !lastName && 'Last name',
+          !nickname && 'Nickname',
+        ].filter(Boolean) as string[];
+      case 5:
+        return [!bodyFatLevel && 'Body fat level'].filter(Boolean) as string[];
+      case 6:
+        return [!gender && t('gender')].filter(Boolean) as string[];
+      case 7:
+        return [!exerciseFrequency && 'How often you exercise'].filter(Boolean) as string[];
+      case 8:
+        return [!activityLevel && t('activityLevel')].filter(Boolean) as string[];
+      case 9:
+        return [!liftingExperience && 'Lifting experience'].filter(Boolean) as string[];
+      case 10:
+        return [!cardioExperience && 'Cardio experience'].filter(Boolean) as string[];
+      case 11:
+        // Optional — physical considerations never gate advancing.
+        return [];
+      case 12:
+        // Teaching/expenditure reveal — informational only, never gates.
+        return [];
+      case 13:
+        return [goals.length === 0 && t('goal')].filter(Boolean) as string[];
+      case 14:
+        return [!referralSource && 'How you heard about us'].filter(Boolean) as string[];
       default:
+        // 2 (DOB), 3 (height), 4 (weight) are wheel pickers — always have a
+        // value the moment they render, so there is nothing to be "missing".
         return [];
     }
   };
 
   const missing = missingForStep(step);
+
+  // Height (3) and weight (4) are skipped automatically when Health
+  // sync already supplied that value — see HealthSyncScreen. The user can
+  // still reach either by navigating back onto it manually is
+  // intentionally not offered here (there'd be nothing to edit back to
+  // without re-opening health sync); EditProfile remains the place to
+  // correct a synced value after onboarding.
+  const isStepSkippable = (s: number): boolean => {
+    if (s === 3) return heightPrefilled;
+    if (s === 4) return weightPrefilled;
+    return false;
+  };
 
   // Advancing is a completed unit of work, so it gets the same medium tap a
   // finished set does. A blocked advance gets the error buzz AND a spoken
@@ -221,8 +288,19 @@ export default function OnboardingScreen({ navigation }: any) {
       AccessibilityInfo.announceForAccessibility(`Still needed: ${blockers.join(', ')}`);
       return;
     }
+    // The age gate lives here rather than in missingForStep — a young
+    // birthdate isn't a "still needed" field, it's a hard stop. Checked the
+    // moment step 2 (which collects the birthdate) is left, before the user
+    // can reach any further step.
+    if (step === 2 && Number.isFinite(computedAge) && computedAge < MIN_AGE) {
+      haptics.error();
+      setAgeBlocked(true);
+      return;
+    }
+    let target = next;
+    while (target < TOTAL_STEPS && isStepSkippable(target)) target += 1;
     haptics.setComplete();
-    setStep(next);
+    setStep(target);
   };
 
   // Selecting an option is the lightest thing that happens on this screen —
@@ -236,11 +314,15 @@ export default function OnboardingScreen({ navigation }: any) {
   // earlier step was already filled in (or the user couldn't have advanced
   // past it), so this just needs to move the index, not re-validate it. Not
   // available on step 1: there's nowhere earlier to go, and the AppBar's
-  // back button only renders when onBack is provided.
+  // back button only renders when onBack is provided. Mirrors advanceTo's
+  // skip loop so a health-synced height/weight step is never landed on
+  // going backward either.
   const goToPrevStep = () => {
     if (step <= 1) return;
     haptics.selection();
-    setStep(step - 1);
+    let target = step - 1;
+    while (target > 1 && isStepSkippable(target)) target -= 1;
+    setStep(target);
   };
 
   // Driven off the state rather than from inside handleFinish, so the save
@@ -257,17 +339,7 @@ export default function OnboardingScreen({ navigation }: any) {
   // query can answer "what fraction of people who saw step 2 ever reached
   // step 3?" — the actual question a funnel needs, not just "how many people
   // finished."
-  //
-  // `finishedRef` distinguishes a real abandonment (closing the app or
-  // navigating away mid-flow) from the normal unmount that happens on a
-  // successful finish — without it, every completed onboarding would ALSO
-  // log as abandoned the instant the screen unmounts, making the whole
-  // funnel meaningless.
   const finishedRef = useRef(false);
-  // Mirrors `step`/`authUser` into a ref so the unmount cleanup below — whose
-  // closure is fixed at mount time because its effect has empty deps — can
-  // still read the CURRENT step and user rather than the step the user was
-  // on when the screen first opened.
   const latestRef = useRef({ step, uid: authUser?.uid });
   useEffect(() => {
     latestRef.current = { step, uid: authUser?.uid };
@@ -282,10 +354,6 @@ export default function OnboardingScreen({ navigation }: any) {
         logOnboardingEvent(uid, lastStep, 'onboarding_abandoned');
       }
     };
-    // Deliberately empty deps — this should only run its cleanup once, on
-    // real unmount, not re-arm on every step change (which would fire a
-    // spurious "abandoned at step N" for every step the user completes on
-    // their way through).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -323,72 +391,56 @@ export default function OnboardingScreen({ navigation }: any) {
     setSaving(true);
     setSaveError('');
 
-    const ageNum = parseInt(age);
+    const ageNum = computedAge;
     const waterGoal = calculateWaterGoal(ageNum);
-    // `|| 0` on inches, matching EditProfileScreen. The step-2 gate only
-    // requires age, feet and weight, so inches can legitimately be blank —
-    // "5 feet" is a complete answer. But parseInt('') is NaN, and NaN
-    // propagates through the whole BMR calculation, so the preview rendered
-    // "Calorie Goal: NaN kcal" and NaN went into Firestore. From there it's
-    // permanent and invisible: Nutrition silently falls back to a generic
-    // 2000 (NaN || 2000), the Dashboard falls back to 0, and every
-    // calorie-goal quest becomes impossible to complete for that account.
-    // Weight is no longer collected during onboarding — the daily prompt
-    // captures it starting on the first Dashboard visit. Until then we
-    // need SOME value for the BMR calculation, so a reasonable adult
-    // default (165 lbs) is used; the first daily weight log will trigger
-    // a recalc via EditProfile → Save, or via the weight modal's own
-    // onSubmit handler on the Dashboard.
-    const PLACEHOLDER_WEIGHT_LBS = 165;
     const calorieGoal = calculateCalorieGoal(
       ageNum,
-      PLACEHOLDER_WEIGHT_LBS,
-      parseInt(heightFeet),
-      parseInt(heightInches) || 0,
+      weightLbs,
+      heightFeet,
+      heightInches,
       gender,
       activityLevel,
-      goal
+      goals[0] || ''
     );
 
-    // Belt and braces. The `|| 0` above fixes the known path, but a goal of
-    // NaN is the kind of bad value that leaves no trace at the point it's
-    // written and only surfaces weeks later as "quests don't work" — so
-    // refuse to persist a non-finite number under any circumstances.
     const safeCalorieGoal = Number.isFinite(calorieGoal) ? calorieGoal : DEFAULT_CALORIE_GOAL;
     const safeWaterGoal = Number.isFinite(waterGoal) ? waterGoal : DEFAULT_WATER_GOAL_ML;
 
     const newProfile = {
       firstName,
-      lastInitial,
+      ...(middleName.trim() ? { middleName: middleName.trim() } : {}),
+      lastName,
+      lastInitial: lastName.slice(0, 1).toUpperCase(),
+      nickname: nickname.trim(),
+      dateOfBirth: dobIso,
       age: ageNum,
-      heightFeet: parseInt(heightFeet),
-      heightInches: parseInt(heightInches) || 0,
-      weightLbs: PLACEHOLDER_WEIGHT_LBS,
+      ageGroup: ageGroupFor(ageNum),
+      heightFeet,
+      heightInches,
+      weightLbs,
+      bodyFatLevel,
       gender,
+      exerciseFrequency,
       activityLevel,
-      goal,
+      liftingExperience,
+      cardioExperience,
+      goal: goals[0] || '',
+      goals,
       waterGoalMl: safeWaterGoal,
       calorieGoal: safeCalorieGoal,
-      // Both chosen during onboarding now, rather than being
-      // absent until the user happened to visit Settings.
       avatar,
-      language,
+      language: 'en',
       physicalConditions,
       physicalNotes: physicalNotes.trim(),
-      // Optional and BOTH-or-neither — Firestore rejects `undefined`
-      // outright, so a half-filled birthday (e.g. month typed, day left
-      // blank) is simply not written rather than written as NaN.
-      ...(birthdayMonth && birthdayDay
-        ? { birthdayMonth: parseInt(birthdayMonth), birthdayDay: parseInt(birthdayDay) }
+      birthdayMonth: dob.month,
+      birthdayDay: dob.day,
+      healthSyncEnabled,
+      ...(referralSource ? { referralSource } : {}),
+      ...(referralSource === 'other' && referralSourceNote.trim()
+        ? { referralSourceNote: referralSourceNote.trim() }
         : {}),
-      ...(displayName.trim() ? { displayName: displayName.trim() } : {}),
     };
 
-    // Previously unguarded. A rejected write skipped setProfile and the
-    // navigation, so the user tapped Finish and quite literally nothing
-    // happened — five steps of input gone with no error and no clue that it
-    // hadn't saved. The `saving` flag also stops a double-tap firing two
-    // writes.
     try {
       await setDoc(doc(db, 'users', authUser.uid), newProfile);
       finishedRef.current = true;
@@ -402,18 +454,37 @@ export default function OnboardingScreen({ navigation }: any) {
     }
   };
 
-  // The title shown in the AppBar for the current step. Same t() keys the
-  // old inline step heading used.
+  // The title shown in the AppBar for the current step.
   const stepTitle = () => {
     switch (step) {
       case 1:
         return t('onboardingNameTitle');
       case 2:
-        return t('bodyStatsSection');
+        return t('onboardingDobTitle');
       case 3:
-        return t('onboardingAboutTitle');
+        return t('height');
       case 4:
+        return 'Weight';
+      case 5:
+        return 'Body fat level';
+      case 6:
+        return t('gender');
+      case 7:
+        return 'Exercise frequency';
+      case 8:
+        return t('activityLevel');
+      case 9:
+        return 'Lifting experience';
+      case 10:
+        return 'Cardio experience';
+      case 11:
+        return t('onboardingPhysicalTitle');
+      case 12:
+        return 'Your expenditure';
+      case 13:
         return t('onboardingGoalTitle');
+      case 14:
+        return 'How did you hear about us?';
       default:
         return `${t('onboardingReadyTitle')}, ${firstName}!`;
     }
@@ -424,11 +495,31 @@ export default function OnboardingScreen({ navigation }: any) {
       case 1:
         return t('onboardingNameSubtitle');
       case 2:
-        return t('onboardingBodySubtitle');
+        return t('onboardingDobSubtitle');
       case 3:
-        return t('onboardingAboutSubtitle');
+        return 'What is your height?';
       case 4:
+        return 'What is your weight?';
+      case 5:
+        return "Use a visual estimate and don't worry about being too precise.";
+      case 6:
+        return t('onboardingGenderSubtitle');
+      case 7:
+        return 'Estimate the number of recreational sports, cardio, or resistance training sessions.';
+      case 8:
+        return t('onboardingActivitySubtitle');
+      case 9:
+        return 'How long have you been strength training?';
+      case 10:
+        return 'How long have you been doing cardio?';
+      case 11:
+        return t('onboardingPhysicalSubtitle');
+      case 12:
+        return 'Understanding your expenditure is key to managing your weight.';
+      case 13:
         return t('onboardingGoalSubtitle');
+      case 14:
+        return "So we know what's working — pick the one that fits best.";
       default:
         return t('onboardingReadySubtitle');
     }
@@ -436,10 +527,6 @@ export default function OnboardingScreen({ navigation }: any) {
 
   /* ---------------------------------------------------------------- *
    * Option surfaces
-   *
-   * One renderer per shape rather than a styled Pressable per call site, so
-   * every option on the flow compresses by the same amount, marks itself the
-   * same way and announces itself as a radio with a checked state.
    * ---------------------------------------------------------------- */
 
   const renderChip = (
@@ -468,11 +555,12 @@ export default function OnboardingScreen({ navigation }: any) {
     label: string,
     description: string | undefined,
     selected: boolean,
-    onSelect: () => void
+    onSelect: () => void,
+    role: 'radio' | 'checkbox' = 'radio'
   ) => (
     <PressableScale
       key={key}
-      accessibilityRole="radio"
+      accessibilityRole={role}
       accessibilityLabel={description ? `${label}. ${description}` : label}
       accessibilityState={{ selected, checked: selected }}
       onPress={() => selectOption(onSelect)}>
@@ -481,255 +569,315 @@ export default function OnboardingScreen({ navigation }: any) {
           <Text style={[dynamicStyles.chipLabel, selected && dynamicStyles.chipLabelSelected]}>{label}</Text>
           {!!description && <Text style={dynamicStyles.chipDescription}>{description}</Text>}
         </View>
-        {/* A word, not just a tick: "Selected" survives being read aloud,
-            being magnified, and being looked at by someone who reads the
-            glyph as decoration. */}
         {selected ? (
           <Pill label="Selected" filled />
         ) : (
-          // Reserves the badge's slot so selecting an option doesn't reflow
-          // the row it sits in.
           <View style={styles.selectedBadgeSpacer} />
         )}
       </View>
     </PressableScale>
   );
 
+  // Teaching/expenditure reveal — deliberately not a chat-bubble Q&A (that
+  // pattern doesn't exist anywhere else in this app and wasn't wanted here);
+  // this is a single illustrated stat card instead, the same "one concept,
+  // one card" shape as the summary preview at the end. Reuses the plain
+  // TDEE branch of calculateCalorieGoal (goal='' takes neither the
+  // deficit nor surplus branch) since goals haven't been chosen yet at this
+  // point in the flow.
+  const expenditure = calculateCalorieGoal(computedAge, weightLbs, heightFeet, heightInches, gender, activityLevel, '');
+  const safeExpenditure = Number.isFinite(expenditure) ? expenditure : DEFAULT_CALORIE_GOAL;
+
   const renderStep = () => {
     switch (step) {
       case 1:
         return (
-          <>
-            {/* Language first, so the rest of signup can be read in it.
-                Calling setLanguage() applies it immediately even though there's
-                no profile to save it to yet — it's persisted at step 5. */}
-            <Enter index={1}>
-              <SectionTitle><Ionicons name="globe" size={13} color={palette.textMuted} /> {t('language')}</SectionTitle>
-              <Card>
-                <View style={styles.chipWrap}>
-                  {LANGUAGES.map(lang =>
-                    renderChip(
-                      lang.code,
-                      lang.nativeLabel,
-                      language === lang.code,
-                      () => setLanguage(lang.code as LanguageCode)
-                    )
-                  )}
-                </View>
-              </Card>
-            </Enter>
-
-            <Enter index={2}>
-              <SectionTitle>{t('profileSection')}</SectionTitle>
-              <Card style={styles.formCard}>
-                <Field
-                  label={t('firstName')}
-                  placeholder={t('firstName')}
-                  value={firstName}
-                  onChangeText={setFirstName}
-                  autoCapitalize="words"
-                  onSubmitEditing={() => advanceTo(2)}
-                  returnKeyType="next"
-                />
-                <Field
-                  label={t('lastInitial')}
-                  placeholder={t('lastInitial')}
-                  value={lastInitial}
-                  onChangeText={(val) => setLastInitial(val.slice(0, 1).toUpperCase())}
-                  onSubmitEditing={() => advanceTo(2)}
-                  returnKeyType="done"
-                  maxLength={1}
-                />
-                {/* Optional. Left blank, the leaderboard and friend lists
-                    keep showing "FirstName L." exactly as they always
-                    have — see displayNameFor() in utils/profileDisplay.ts. */}
-                <Field
-                  label="Name people will see you as (optional)"
-                  placeholder={firstName ? `${firstName} ${lastInitial}.` : 'Display name'}
-                  value={displayName}
-                  onChangeText={setDisplayName}
-                  autoCapitalize="words"
-                  maxLength={30}
-                />
-              </Card>
-            </Enter>
-          </>
+          <Enter index={2}>
+            <SectionTitle>{t('profileSection')}</SectionTitle>
+            <Card style={styles.formCard}>
+              <Field
+                label={t('firstName')}
+                placeholder={t('firstName')}
+                value={firstName}
+                onChangeText={setFirstName}
+                autoCapitalize="words"
+                returnKeyType="next"
+              />
+              <Field
+                label="Middle name (optional)"
+                placeholder="Middle name"
+                value={middleName}
+                onChangeText={setMiddleName}
+                autoCapitalize="words"
+                returnKeyType="next"
+              />
+              <Field
+                label="Last name"
+                placeholder="Last name"
+                value={lastName}
+                onChangeText={setLastName}
+                autoCapitalize="words"
+                returnKeyType="next"
+              />
+              <Field
+                label="What should we call you?"
+                placeholder="Nickname"
+                value={nickname}
+                onChangeText={setNickname}
+                autoCapitalize="words"
+                onSubmitEditing={() => advanceTo(2)}
+                returnKeyType="done"
+                maxLength={30}
+              />
+            </Card>
+          </Enter>
         );
 
       case 2:
         return (
           <Enter index={1}>
-            <SectionTitle>{t('bodyStatsSection')}</SectionTitle>
-            <Card style={styles.formCard}>
-              <Field
-                label={t('age')}
-                placeholder={t('age')}
-                value={age}
-                onChangeText={(val) => setAge(validateAge(val))}
-                keyboardType="numeric"
-                maxLength={3}
-              />
-              <View style={styles.heightGroup}>
-                <Text style={dynamicStyles.groupLabel}>{t('height')}</Text>
-                <View style={styles.rowInputs}>
-                  <Field
-                    label={t('heightFt')}
-                    placeholder={t('heightFt')}
-                    value={heightFeet}
-                    onChangeText={(val) => setHeightFeet(validateHeightFeet(val))}
-                    keyboardType="numeric"
-                    maxLength={1}
-                    style={styles.rowInputItem}
-                    // The visible label is an abbreviation; the announced one
-                    // has to be the whole measurement or "ft" is read as a word.
-                    accessibilityLabel={`${t('height')} — ${t('heightFt')}`}
-                  />
-                  <Field
-                    label={t('heightIn')}
-                    placeholder={t('heightIn')}
-                    value={heightInches}
-                    onChangeText={(val) => setHeightInches(validateHeightInches(val))}
-                    keyboardType="numeric"
-                    maxLength={2}
-                    style={styles.rowInputItem}
-                    accessibilityLabel={`${t('height')} — ${t('heightIn')}`}
-                  />
-                </View>
-                {heightFeet ? (
-                  <Text style={dynamicStyles.conversionText}>= {heightInCm()} cm</Text>
-                ) : null}
-              </View>
-
-              {/* Optional — month/day only. Powers the birthday screen
-                  placeholder (see BirthdayScreen.tsx); doesn't gate
-                  advancing past this step. */}
-              <View style={styles.heightGroup}>
-                <Text style={dynamicStyles.groupLabel}>Birthday (optional)</Text>
-                <View style={styles.rowInputs}>
-                  <Field
-                    label="Month"
-                    placeholder="MM"
-                    value={birthdayMonth}
-                    onChangeText={(val) => setBirthdayMonth(clampNumeric(val, 1, 12))}
-                    keyboardType="numeric"
-                    maxLength={2}
-                    style={styles.rowInputItem}
-                    accessibilityLabel="Birthday month"
-                  />
-                  <Field
-                    label="Day"
-                    placeholder="DD"
-                    value={birthdayDay}
-                    onChangeText={(val) => setBirthdayDay(clampNumeric(val, 1, 31))}
-                    keyboardType="numeric"
-                    maxLength={2}
-                    style={styles.rowInputItem}
-                    accessibilityLabel="Birthday day"
-                  />
-                </View>
-              </View>
-              {/* Weight field removed from Onboarding — daily weight is
-                  captured by the WeightPromptModal on the Dashboard
-                  instead. Removing this means calorie goal cannot be
-                  calculated at signup (BMR needs weight), so a placeholder
-                  goal is written on save; it recalculates on the first
-                  daily weight log. See DashboardScreen's weight modal
-                  handler and calculateCalorieGoal in UserContext. */}
-            </Card>
+            <WheelDatePicker value={dob} onChange={setDob} />
           </Enter>
         );
 
       case 3:
         return (
-          <>
-            <Enter index={1}>
-              <SectionTitle>{t('gender')}</SectionTitle>
-              <Card>
-                <View style={styles.chipWrap} accessibilityRole="radiogroup">
-                  {[{ v: 'Male', k: 'male' }, { v: 'Female', k: 'female' }, { v: 'Other', k: 'other' }].map(
-                    ({ v: g, k: gKey }) =>
-                      renderChip(g, t(gKey), gender === g, () => setGender(g), true)
-                  )}
-                </View>
-              </Card>
-            </Enter>
-
-            <Enter index={2}>
-              <SectionTitle>{t('activityLevel')}</SectionTitle>
-              <Card>
-                <View style={styles.chipColumn} accessibilityRole="radiogroup">
-                  {activityOptions.map(a =>
-                    renderOptionCard(a.label, a.label, a.description, activityLevel === a.label, () =>
-                      setActivityLevel(a.label)
-                    )
-                  )}
-                </View>
-              </Card>
-            </Enter>
-
-            {/* Optional — never gates advancing past this step. Generalized
-                categories first (a multi-select, since more than one can
-                apply at once), then a free-text field for anyone who wants
-                to say more than a category name can. */}
-            <Enter index={3}>
-              <SectionTitle>Any physical considerations?</SectionTitle>
-              <Card style={styles.formCard}>
-                <Text style={dynamicStyles.conditionsHint}>
-                  Optional — helps us tailor your workouts safely. Select any that apply.
-                </Text>
-                <View style={styles.chipWrap}>
-                  {physicalConditionOptions.map(label =>
-                    renderChip(
-                      label,
-                      label,
-                      physicalConditions.includes(label),
-                      () => togglePhysicalCondition(label)
-                    )
-                  )}
-                </View>
-                {physicalConditions.length > 0 && (
-                  <Field
-                    label="Anything more specific we should know?"
-                    placeholder="e.g. surgery last year, chronic knee pain"
-                    value={physicalNotes}
-                    onChangeText={setPhysicalNotes}
-                    autoCapitalize="sentences"
-                  />
-                )}
-              </Card>
-            </Enter>
-          </>
+          <Enter index={1}>
+            <HeightWheelPicker
+              unit={heightUnit}
+              onUnitChange={setHeightUnit}
+              value={{ feet: heightFeet, inches: heightInches, cm: heightCm }}
+              onChange={handleHeightChange}
+            />
+          </Enter>
         );
 
       case 4:
         return (
           <Enter index={1}>
-            <SectionTitle>{t('goal')}</SectionTitle>
+            <WeightWheelPicker
+              unit={weightUnit}
+              onUnitChange={setWeightUnit}
+              value={weightDisplay}
+              onChange={handleWeightChange}
+            />
+          </Enter>
+        );
+
+      case 5:
+        return (
+          <Enter index={1}>
+            <View style={styles.chipWrap} accessibilityRole="radiogroup">
+              {bodyFatOptions.map(label =>
+                renderOptionCard(label, label, undefined, bodyFatLevel === label, () => setBodyFatLevel(label))
+              )}
+            </View>
+          </Enter>
+        );
+
+      case 6:
+        return (
+          <Enter index={1}>
             <Card>
-              <View style={styles.chipColumn} accessibilityRole="radiogroup">
-                {goalOptions.map(g =>
-                  renderOptionCard(g, g, undefined, goal === g, () => setGoal(g))
+              <View style={styles.chipWrap} accessibilityRole="radiogroup">
+                {[{ v: 'Male', k: 'male' }, { v: 'Female', k: 'female' }, { v: 'Other', k: 'other' }].map(
+                  ({ v: g, k: gKey }) =>
+                    renderChip(g, t(gKey), gender === g, () => setGender(g), true)
                 )}
               </View>
             </Card>
           </Enter>
         );
 
-      case 5:
+      case 7:
+        return (
+          <Enter index={1}>
+            <View style={styles.chipColumn} accessibilityRole="radiogroup">
+              {exerciseFrequencyOptions.map(label =>
+                renderOptionCard(label, label, undefined, exerciseFrequency === label, () =>
+                  setExerciseFrequency(label)
+                )
+              )}
+            </View>
+          </Enter>
+        );
+
+      case 8:
+        return (
+          <Enter index={1}>
+            <Card>
+              <View style={styles.chipColumn} accessibilityRole="radiogroup">
+                {activityOptions.map(a =>
+                  renderOptionCard(a.label, a.label, a.description, activityLevel === a.label, () =>
+                    setActivityLevel(a.label)
+                  )
+                )}
+              </View>
+            </Card>
+          </Enter>
+        );
+
+      case 9:
+        return (
+          <Enter index={1}>
+            <View style={styles.chipColumn} accessibilityRole="radiogroup">
+              {experienceOptions('lifting').map(o =>
+                renderOptionCard(o.label, o.label, o.description, liftingExperience === o.label, () =>
+                  setLiftingExperience(o.label)
+                )
+              )}
+            </View>
+          </Enter>
+        );
+
+      case 10:
+        return (
+          <Enter index={1}>
+            <View style={styles.chipColumn} accessibilityRole="radiogroup">
+              {experienceOptions('cardio').map(o =>
+                renderOptionCard(o.label, o.label, o.description, cardioExperience === o.label, () =>
+                  setCardioExperience(o.label)
+                )
+              )}
+            </View>
+          </Enter>
+        );
+
+      case 11:
+        return (
+          <Enter index={1}>
+            <Card style={styles.formCard}>
+              <Text style={dynamicStyles.conditionsHint}>
+                Optional — helps us tailor your workouts safely. Select any that apply.
+              </Text>
+              <View style={styles.chipWrap}>
+                {physicalConditionOptions.map(label =>
+                  renderChip(
+                    label,
+                    label,
+                    physicalConditions.includes(label),
+                    () => togglePhysicalCondition(label)
+                  )
+                )}
+              </View>
+              {physicalConditions.length > 0 && (
+                <Field
+                  label="Anything more specific we should know?"
+                  placeholder="e.g. surgery last year, chronic knee pain"
+                  value={physicalNotes}
+                  onChangeText={setPhysicalNotes}
+                  autoCapitalize="sentences"
+                />
+              )}
+            </Card>
+          </Enter>
+        );
+
+      case 12:
+        return (
+          <Enter index={1}>
+            <View style={[styles.expenditureCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+              <Ionicons name="flame" size={28} color={palette.accent} />
+              <Text style={[styles.expenditureValue, { color: palette.textPrimary }]}>
+                {safeExpenditure} kcal
+              </Text>
+              <Text style={[styles.expenditureLabel, { color: palette.textSecondary }]}>
+                Estimated calories you burn each day — what you'd eat to maintain your current weight.
+              </Text>
+              <Text style={[styles.expenditureLabel, { color: palette.textMuted }]}>
+                This is a starting point. It'll get more accurate as you log food and weight in the app.
+              </Text>
+            </View>
+          </Enter>
+        );
+
+      case 13:
+        return (
+          <Enter index={1}>
+            <Text style={dynamicStyles.conditionsHint}>Select as many as apply.</Text>
+            <Card>
+              <View style={styles.chipColumn}>
+                {goalOptions.map(g =>
+                  renderOptionCard(g, g, undefined, goals.includes(g), () => toggleGoal(g), 'checkbox')
+                )}
+              </View>
+            </Card>
+          </Enter>
+        );
+
+      case 14:
+        return (
+          <Enter index={1}>
+            <View style={styles.chipColumn} accessibilityRole="radiogroup">
+              {referralOptions.map(o => (
+                <PressableScale
+                  key={o.key}
+                  accessibilityRole="radio"
+                  accessibilityLabel={o.label}
+                  accessibilityState={{ selected: referralSource === o.key, checked: referralSource === o.key }}
+                  onPress={() => selectOption(() => setReferralSource(o.key))}>
+                  <View
+                    style={[
+                      dynamicStyles.chip,
+                      styles.optionCard,
+                      referralSource === o.key && dynamicStyles.chipSelected,
+                    ]}>
+                    <Ionicons name={o.icon} size={18} color={palette.textSecondary} style={styles.previewIcon} />
+                    <View style={styles.optionText}>
+                      <Text style={[dynamicStyles.chipLabel, referralSource === o.key && dynamicStyles.chipLabelSelected]}>
+                        {o.label}
+                      </Text>
+                    </View>
+                    {referralSource === o.key ? (
+                      <Pill label="Selected" filled />
+                    ) : (
+                      <View style={styles.selectedBadgeSpacer} />
+                    )}
+                  </View>
+                </PressableScale>
+              ))}
+            </View>
+            {referralSource === 'other' && (
+              <Field
+                label="Tell us more (optional)"
+                placeholder="How did you hear about us?"
+                value={referralSourceNote}
+                onChangeText={setReferralSourceNote}
+                autoCapitalize="sentences"
+              />
+            )}
+          </Enter>
+        );
+
+      case 15:
         return (
           <>
-            {/* One card of rows, not five floating lines: this is a summary of
-                one thing — the day the user is about to start. */}
+            {(physicalConditions.length > 0 || physicalNotes.trim()) && (
+              <Enter index={0}>
+                <View style={[styles.disclaimerBanner, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+                  <Ionicons name="information-circle" size={18} color={palette.textSecondary} />
+                  <Text style={[styles.disclaimerText, { color: palette.textSecondary }]}>
+                    UpShift is a guide app to help you work out — it isn't medical advice.
+                    Please check with a doctor before starting a new program, especially
+                    with the condition(s) you mentioned.
+                  </Text>
+                </View>
+              </Enter>
+            )}
+            {ageGroupFor(computedAge) === 'teen' && (
+              <Enter index={0}>
+                <View style={[styles.disclaimerBanner, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+                  <Ionicons name="information-circle" size={18} color={palette.textSecondary} />
+                  <Text style={[styles.disclaimerText, { color: palette.textSecondary }]}>
+                    UpShift is for general fitness and wellness and isn't medical advice.
+                    Workouts and goals are kept age-appropriate — no extreme diets or
+                    intense training plans.
+                  </Text>
+                </View>
+              </Enter>
+            )}
             <Enter index={1}>
               <SectionTitle>{t('goalsSection')}</SectionTitle>
-              {/* This card is themed to the light/dark system (usePalette)
-                  even though the rest of Onboarding still runs on the
-                  older static `colors` import — a full Onboarding
-                  conversion is a separate, larger pass. This card was
-                  called out specifically (it renders after the theme
-                  system existed, and was left on the old dark-only
-                  colors, so it looked broken next to a light-mode
-                  Dashboard). */}
               <View style={[
                 styles.previewCard,
                 { backgroundColor: palette.surface, borderColor: palette.border, borderWidth: layout.hairline, borderRadius: radius.lg, overflow: 'hidden' },
@@ -737,23 +885,8 @@ export default function OnboardingScreen({ navigation }: any) {
                 {[
                   { icon: 'flash' as const, label: 'Daily XP Goal', value: '100 XP' },
                   { icon: 'list' as const, label: 'Daily Quests', value: '3' },
-                  { icon: 'water' as const, label: 'Water Goal', value: `${calculateWaterGoal(parseInt(age))}ml` },
-                  {
-                    icon: 'flame' as const,
-                    label: 'Calorie Goal',
-                    // parseInt(heightInches) || 0 here too: the preview and the
-                    // saved value have to agree, or the user is shown a number
-                    // the app never stored.
-                    value: `${calculateCalorieGoal(
-                      parseInt(age),
-                      165, // placeholder — real weight arrives via daily prompt
-                      parseInt(heightFeet),
-                      parseInt(heightInches) || 0,
-                      gender,
-                      activityLevel,
-                      goal
-                    )} kcal`,
-                  },
+                  { icon: 'water' as const, label: 'Water Goal', value: `${calculateWaterGoal(computedAge)}ml` },
+                  { icon: 'flame' as const, label: 'Calorie Goal', value: `${safeExpenditure} kcal` },
                   { icon: 'moon' as const, label: 'Sleep Goal', value: '8 hours' },
                 ].map((row, index) => (
                   <View key={row.label}>
@@ -771,12 +904,6 @@ export default function OnboardingScreen({ navigation }: any) {
             <Enter index={2}>
               <SectionTitle>{t('chooseProfilePicture')}</SectionTitle>
               <Card style={styles.formCard}>
-                {/* No emoji grid, and no color picker here either — this step
-                    is meant to be the fast path through onboarding. The
-                    initials avatar with its deterministic default color is
-                    already a real, professional-looking result with zero
-                    taps; choosing a different color is one of Edit Profile's
-                    settings for later, not a decision to make on the way in. */}
                 <View style={styles.avatarPreviewRow}>
                   {uploadingPhoto ? (
                     <Shimmer width={AVATAR_SIZE} height={AVATAR_SIZE} style={styles.avatarSkeleton} />
@@ -785,7 +912,7 @@ export default function OnboardingScreen({ navigation }: any) {
                       photoUrl={avatar}
                       uid={authUser?.uid ?? ''}
                       firstName={firstName}
-                      lastInitial={lastInitial}
+                      lastInitial={lastName.slice(0, 1).toUpperCase()}
                       size={AVATAR_SIZE}
                     />
                   )}
@@ -806,6 +933,37 @@ export default function OnboardingScreen({ navigation }: any) {
     }
   };
 
+  const overflow = useScrollOverflow();
+
+  // Hard stop, not a step in the flow: an under-13 birthdate never reaches
+  // the rest of onboarding, there's nothing to advance past and no account
+  // gets created. Signing out (rather than just showing a dead-end screen)
+  // means they can't reach Dashboard by any other route either.
+  if (ageBlocked) {
+    return (
+      <Screen>
+        <View style={styles.ageBlockContainer}>
+          <Ionicons name="alert-circle" size={40} color={palette.textSecondary} />
+          <Text style={[styles.ageBlockTitle, { color: palette.textPrimary }]}>
+            You must be at least {MIN_AGE} years old to use UpShift
+          </Text>
+          <Text style={[styles.ageBlockBody, { color: palette.textSecondary }]}>
+            We weren't able to create an account for the birthdate you entered.
+          </Text>
+          <Button
+            label="Sign out"
+            onPress={async () => {
+              if (authUser) await withTimeout(clearPushToken(authUser.uid), 4000).catch(() => {});
+              await logOut();
+              navigation.reset({ index: 0, routes: [{ name: 'Welcome' }] });
+            }}
+            fullWidth
+          />
+        </View>
+      </Screen>
+    );
+  }
+
   // The bottom action is rendered outside the scroller so it stays in the same
   // place on every step — the one control that never moves as the flow advances.
   const renderPrimaryAction = () => {
@@ -817,9 +975,6 @@ export default function OnboardingScreen({ navigation }: any) {
               <Text style={dynamicStyles.errorText}>{saveError}</Text>
             </View>
           )}
-          {/* The visible label becomes "please wait" mid-save; the announced
-              name doesn't, so the control stays the same control while it's
-              busy rather than reading as a new button appearing. */}
           <Button
             label={saving ? t('pleaseWait') : t('finish')}
             accessibilityLabel={t('finish')}
@@ -827,6 +982,7 @@ export default function OnboardingScreen({ navigation }: any) {
             onPress={handleFinish}
             disabled={saving}
             fullWidth
+            glow
           />
         </>
       );
@@ -834,8 +990,6 @@ export default function OnboardingScreen({ navigation }: any) {
 
     return (
       <>
-        {/* A disabled button says "not yet" and nothing else. This says what's
-            still blank, which is the only reason the button is dead. */}
         {missing.length > 0 && (
           <Text style={dynamicStyles.missingHint}>Still needed: {missing.join(', ')}</Text>
         )}
@@ -853,51 +1007,44 @@ export default function OnboardingScreen({ navigation }: any) {
     <Screen>
       <AppBar title={stepTitle()} onBack={step > 1 ? goToPrevStep : undefined} />
 
-      {/* Without this the number pads on step 2 sit on top of the weight field
-          — the one input furthest down the card. */}
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}>
-          {/* Progress is shown two ways on purpose: the bar gives the shape of
-              the flow at a glance, the sentence below states it in words so
-              progress is never conveyed by colour or position alone.
+        <View style={styles.scrollWrap}>
+          <ScrollView
+            style={styles.scroll}
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            onContentSizeChange={overflow.onContentSizeChange}
+            onLayout={overflow.onLayout}
+            onScroll={overflow.onScroll}
+            scrollEventThrottle={16}>
+            <View
+              style={styles.progressBlock}
+              accessible
+              accessibilityRole="progressbar"
+              accessibilityLabel={`${t('stepOf')} ${step} / ${TOTAL_STEPS}`}
+              accessibilityValue={{ min: 1, max: TOTAL_STEPS, now: step }}>
+              <AnimatedMeter
+                progress={step / TOTAL_STEPS}
+                height={spacing.xs + 2}
+                celebrateAtFull={false}
+              />
+              <Text style={dynamicStyles.stepText}>
+                {t('stepOf')} {step} / {TOTAL_STEPS}
+              </Text>
+            </View>
 
-              A meter rather than five segments because a meter TRANSITIONS —
-              advancing slides the fill to the next fifth instead of a segment
-              blinking on, which is what makes the flow read as one journey
-              rather than five unrelated screens. */}
-          <View
-            style={styles.progressBlock}
-            accessible
-            accessibilityRole="progressbar"
-            accessibilityLabel={`${t('stepOf')} ${step} / ${TOTAL_STEPS}`}
-            accessibilityValue={{ min: 1, max: TOTAL_STEPS, now: step }}>
-            <AnimatedMeter
-              progress={step / TOTAL_STEPS}
-              height={spacing.xs + 2}
-              // Reaching the last step isn't the payoff — saving is. A bar that
-              // celebrates here would spend the moment early.
-              celebrateAtFull={false}
-            />
-            <Text style={dynamicStyles.stepText}>
-              {t('stepOf')} {step} / {TOTAL_STEPS}
-            </Text>
-          </View>
-
-          {/* Re-keyed on `step` so each step's blocks animate in as the user
-              advances, instead of only the first one arriving on mount. */}
-          <View key={step}>
-            <Enter index={0}>
-              <Text style={dynamicStyles.subtitle}>{stepSubtitle()}</Text>
-            </Enter>
-            {renderStep()}
-          </View>
-        </ScrollView>
+            <View key={step}>
+              <Enter index={0}>
+                <Text style={dynamicStyles.subtitle}>{stepSubtitle()}</Text>
+              </Enter>
+              {renderStep()}
+            </View>
+          </ScrollView>
+          <ScrollFadeOverlay visible={overflow.showFade} />
+        </View>
 
         <View style={styles.footer}>{renderPrimaryAction()}</View>
       </KeyboardAvoidingView>
@@ -909,10 +1056,7 @@ const styles = StyleSheet.create({
   flex: {
     flex: 1,
   },
-  // Same shape as AuthScreen's error banner, so a failed save looks the same
-  // wherever the user hits one.
   errorBanner: {
-    // backgroundColor/borderColor applied via dynamicStyles.errorBanner.
     borderWidth: layout.hairline,
     borderRadius: radius.md,
     paddingVertical: spacing.md,
@@ -921,8 +1065,11 @@ const styles = StyleSheet.create({
   },
   errorText: {
     ...type.bodySm,
-    // color applied via dynamicStyles.errorText.
     textAlign: 'center',
+  },
+  scrollWrap: {
+    flex: 1,
+    position: 'relative',
   },
   scroll: {
     flex: 1,
@@ -936,40 +1083,23 @@ const styles = StyleSheet.create({
   },
   stepText: {
     ...type.label,
-    // color applied via dynamicStyles.stepText.
     textTransform: 'uppercase',
   },
   subtitle: {
     ...type.body,
-    // color applied via dynamicStyles.subtitle.
     marginTop: spacing.md,
   },
   formCard: {
     gap: spacing.lg,
   },
-  // Feet, inches and the cm readout are one answer, so they sit closer to each
-  // other than to the fields above and below them.
-  heightGroup: {
-    gap: spacing.sm,
-  },
   groupLabel: {
     ...type.label,
-    // color applied via dynamicStyles.groupLabel.
     textTransform: 'uppercase',
-  },
-  rowInputs: {
-    flexDirection: 'row',
-    gap: spacing.md,
-  },
-  rowInputItem: {
-    flex: 1,
   },
   conversionText: {
     ...type.bodySm,
-    // color applied via dynamicStyles.conversionText.
   },
 
-  // Option chips.
   chipWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -980,45 +1110,49 @@ const styles = StyleSheet.create({
   },
   conditionsHint: {
     ...type.bodySm,
-    // color applied via dynamicStyles.conditionsHint.
   },
   chip: {
-    // backgroundColor/borderColor applied via dynamicStyles.chip.
     borderWidth: layout.hairline,
     borderRadius: radius.md,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
+  disclaimerBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    borderWidth: layout.hairline,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  disclaimerText: {
+    ...type.bodySm,
+    flex: 1,
   },
   chipRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
   },
-  // PressableScale wraps its child in an Animated.View, so growth has to be
-  // applied to the wrapper — flexing the inner card would leave the tap target
-  // narrower than the thing it looks like.
   chipGrowWrap: {
     flexGrow: 1,
   },
   chipGrow: {
     justifyContent: 'center',
   },
-  // chipSelected is now entirely in dynamicStyles (it was color-only).
   chipLabel: {
     ...type.body,
-    // color applied via dynamicStyles.chipLabel.
   },
-  // chipLabelSelected is now entirely in dynamicStyles (it was color-only).
   chipDescription: {
     ...type.bodySm,
-    // color applied via dynamicStyles.chipDescription.
     marginTop: spacing.xs,
   },
   optionCard: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: spacing.md,
+    gap: spacing.sm,
   },
   optionText: {
     flex: 1,
@@ -1036,14 +1170,11 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
   },
 
-  // One card of rows separated by hairlines: the five goals are one summary,
-  // and the values line up on the right so they can be read as a column.
   previewCard: {
     paddingVertical: 0,
   },
   rowDivider: {
     height: layout.hairline,
-    // backgroundColor applied via dynamicStyles.rowDivider.
   },
   previewRow: {
     flexDirection: 'row',
@@ -1056,18 +1187,32 @@ const styles = StyleSheet.create({
   },
   previewLabel: {
     ...type.body,
-    // color applied via dynamicStyles.previewLabel.
     flex: 1,
   },
   previewValue: {
     ...type.body,
-    // color applied via dynamicStyles.previewValue.
     fontFamily: fontFamily.sansBold,
+  },
+
+  expenditureCard: {
+    borderWidth: layout.hairline,
+    borderRadius: radius.lg,
+    padding: spacing.xl,
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  expenditureValue: {
+    ...type.display,
+    fontFamily: fontFamily.sansBlack,
+    fontSize: 34,
+  },
+  expenditureLabel: {
+    ...type.bodySm,
+    textAlign: 'center',
   },
 
   missingHint: {
     ...type.bodySm,
-    // color applied via dynamicStyles.missingHint.
     textAlign: 'center',
     marginBottom: spacing.sm,
   },
@@ -1075,5 +1220,22 @@ const styles = StyleSheet.create({
   footer: {
     paddingTop: spacing.md,
     paddingBottom: spacing.xxl,
+  },
+
+  ageBlockContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.md,
+    paddingHorizontal: spacing.xl,
+  },
+  ageBlockTitle: {
+    ...type.title,
+    textAlign: 'center',
+  },
+  ageBlockBody: {
+    ...type.body,
+    textAlign: 'center',
+    marginBottom: spacing.md,
   },
 });

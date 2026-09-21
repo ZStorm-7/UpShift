@@ -39,9 +39,9 @@ import { spacing, radius, type, layout } from '../theme/tokens';
 import { fontFamily } from '../theme/fonts';
 import { Screen, Card, Pill } from '../components/ui';
 import { CountUp, PulseRing, PressableScale } from '../components/anim';
+import ConfettiBurst from '../components/ConfettiBurst';
 import { beat, easing, summary as summaryBeats } from '../animation/motion';
 import haptics from '../services/haptics';
-import sound from '../services/sound';
 import { useLanguage } from '../i18n/LanguageContext';
 
 type SummaryParams = {
@@ -131,9 +131,6 @@ export default function WorkoutSummaryScreen({ navigation, route }: any) {
     // a word of the screen.
     if (perfect) haptics.levelUp();
     else haptics.setComplete();
-    // Held and consonant either way — the summary confirms, the level-up
-    // celebrates, and only one of them gets to be the biggest sound.
-    sound.sessionComplete();
 
     // The result is otherwise carried entirely by a glyph, a colour and a
     // sequence of movements, none of which a screen reader can see.
@@ -230,6 +227,10 @@ export default function WorkoutSummaryScreen({ navigation, route }: any) {
             cannot keep — a heartbeat that never stops is the whole problem
             the setting exists to solve. */}
         {perfect && <PulseRing size={150} color={palette.xp} active={!reduced} />}
+        {/* One-shot, not a loop like the ring/glow above it — a perfect
+            session is a single instant worth marking, not an ongoing state
+            to keep drawing attention to. */}
+        {perfect && <ConfettiBurst colors={[palette.xp, palette.accent]} count={14} radius={72} />}
 
         <Animated.View style={[styles.medal, { backgroundColor: palette.surfaceRaised, borderColor: palette.xp }, medalStyle]}>
           <Ionicons name={perfect ? 'trophy' : 'barbell'} size={48} color={palette.xp} />

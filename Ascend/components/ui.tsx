@@ -492,7 +492,7 @@ type FieldProps = {
   value: string;
   onChangeText: (text: string) => void;
   placeholder?: string;
-  keyboardType?: 'default' | 'numeric' | 'email-address' | 'decimal-pad';
+  keyboardType?: 'default' | 'numeric' | 'email-address' | 'decimal-pad' | 'phone-pad';
   secureTextEntry?: boolean;
   autoCapitalize?: 'none' | 'sentences' | 'words';
   error?: string;
@@ -570,6 +570,11 @@ export function Field({
         textContentType={textContentType}
         autoCorrect={autoCorrect}
         blurOnSubmit={blurOnSubmit}
+        // Vertical centering, not horizontal — see `input`'s comment below
+        // for why this needs three properties working together rather than
+        // just `textAlignVertical`.
+        textAlignVertical="center"
+        underlineColorAndroid="transparent"
       />
       {!!error && <Text style={[styles.fieldError, { color: palette.danger }]}>{error}</Text>}
     </View>
@@ -879,6 +884,22 @@ const styles = StyleSheet.create({
     paddingVertical: 13,
     color: colors.textPrimary,
     fontSize: 15,
+    // BUG FIX (placeholder + typed text sat above center, not centered, in
+    // every Field across the app — first spotted in the email/password
+    // form): `fontSize` alone leaves the line box undefined, so RN falls
+    // back to the font's own metrics for line height, and on Android that
+    // box also carries built-in leading (ascent/descent padding) above and
+    // below the glyphs. Symmetric `paddingVertical` centers that whole box,
+    // but the box itself isn't symmetric around the text inside it — so the
+    // text renders visibly high. Three things fix it together: an explicit
+    // `lineHeight` close to `fontSize` removes the ambiguity RN was filling
+    // in, `includeFontPadding: false` (Android-only; no-op on iOS) strips
+    // the extra leading that padding couldn't reach, and `textAlignVertical:
+    // 'center'` (set as a prop on the TextInput itself, not here — it isn't
+    // a real style property) tells Android to center the now-known-size line
+    // box within the input's full height instead of pinning it to the top.
+    lineHeight: 18,
+    includeFontPadding: false,
   },
   inputError: {
     borderColor: colors.danger,

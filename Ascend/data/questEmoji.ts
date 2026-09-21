@@ -42,7 +42,7 @@ const KEYWORD_EMOJI: [string, string][] = [
   ['set a goal', '🎯'],
 
   // Variety / app actions
-  ['avatar', '🙂'], ['settings', '⚙️'], ['language', '🌐'],
+  ['avatar', '🙂'], ['settings', '⚙️'],
   ['share your rank', '🤝'], ['friend', '🤝'], ['weekend', '📅'],
 ];
 

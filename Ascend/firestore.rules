@@ -3,6 +3,54 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // ---- Shared helpers for the direct-message rules below ----
+    //
+    // A conversation's id is ALWAYS "<uidA>_<uidB>" with the two uids sorted
+    // (see firebase/messages.ts's conversationIdFor) — so unlike every other
+    // collection in this file, membership here is checked by splitting the
+    // document id itself rather than by reading a `participants` field. That
+    // means a message's read/write rule never needs a `get()` on its parent
+    // conversation doc just to find out who's allowed to touch it.
+    function dmUids(conversationId) {
+      return conversationId.split('_');
+    }
+    function isDmParticipant(conversationId) {
+      return request.auth.uid in dmUids(conversationId);
+    }
+    function otherDmUid(conversationId) {
+      return dmUids(conversationId)[0] == request.auth.uid ? dmUids(conversationId)[1] : dmUids(conversationId)[0];
+    }
+    // "has `blockerUid` blocked `maybeBlockedUid`" — reads the BLOCKER's own
+    // meta/social doc via `get()`, which (unlike a normal client read) isn't
+    // subject to that doc's own users/{uid} rule, so this can answer the
+    // question even though the sender could never read the recipient's
+    // private doc directly. `blockedUids` is optional on that doc (most
+    // users have never blocked anyone), so the `'blockedUids' in ...`
+    // guard comes first — evaluating `x in <missing field>` throws and
+    // fails the whole rule closed instead of just this clause.
+    function isBlockedBy(blockerUid, maybeBlockedUid) {
+      return exists(/databases/$(database)/documents/users/$(blockerUid)/meta/social)
+        && ('blockedUids' in get(/databases/$(database)/documents/users/$(blockerUid)/meta/social).data)
+        && maybeBlockedUid in get(/databases/$(database)/documents/users/$(blockerUid)/meta/social).data.blockedUids;
+    }
+    // "does `uid` list `friendUid` as a friend" — same privileged-read
+    // reasoning as isBlockedBy, used so DMs can be gated to friends
+    // server-side and not just by the client choosing to call
+    // getOrCreateConversation.
+    function isFriendOf(uid, friendUid) {
+      return exists(/databases/$(database)/documents/users/$(uid)/meta/social)
+        && ('friendUids' in get(/databases/$(database)/documents/users/$(uid)/meta/social).data)
+        && friendUid in get(/databases/$(database)/documents/users/$(uid)/meta/social).data.friendUids;
+    }
+    // Checked in EITHER direction — the accept/sync handshake documented in
+    // firebase/friends.ts means there's a real window where one side's
+    // friendUids already has the other but the reverse hasn't synced yet,
+    // and a DM shouldn't be refused just because of which side happens to
+    // be ahead.
+    function areDmFriends(uidA, uidB) {
+      return isFriendOf(uidA, uidB) || isFriendOf(uidB, uidA);
+    }
+
     // ---- Private per-user data ----
     // Everything under users/{uid} is readable and writable ONLY by that user.
     // The nested {document=**} wildcard covers every subcollection at once —
@@ -191,6 +239,121 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly(
              ['createdBy', 'participants', 'goalType', 'goalLabel', 'startDate', 'endDate',
               'status', 'scores', 'winnerUid', 'createdAt']);
+    }
+
+    // ---- Direct messages: conversations ----
+    // One doc per friend pair, id-derived (see dmUids above) rather than
+    // queried for. Both participants trust each other with the WHOLE doc,
+    // same reasoning `challenges` already documents for a 2-person
+    // collaborative doc: lastMessage/lastMessageAt/lastMessageSenderId get
+    // written by whichever side just sent, and lastReadAt is a map so each
+    // side's own key can be bumped independently without either being able
+    // to forge the OTHER's read receipt as anything but "now" (there's
+    // nothing to gain by lying about your own read time).
+    match /conversations/{conversationId} {
+      allow read: if request.auth != null && isDmParticipant(conversationId);
+      allow create: if request.auth != null
+        && isDmParticipant(conversationId)
+        && dmUids(conversationId).size() == 2
+        && request.resource.data.participants == dmUids(conversationId)
+        && request.resource.data.keys().hasOnly(
+             ['participants', 'lastMessage', 'lastMessageAt', 'lastMessageSenderId', 'lastReadAt'])
+        && request.resource.data.lastReadAt is map
+        // Only a friend of the OTHER participant may open a new DM thread —
+        // enforced here (not just client-side in getOrCreateConversation) so
+        // a stranger can't message someone by hand-crafting this write.
+        && areDmFriends(dmUids(conversationId)[0], dmUids(conversationId)[1]);
+      allow update: if request.auth != null
+        && isDmParticipant(conversationId)
+        && request.resource.data.participants == resource.data.participants
+        && request.resource.data.keys().hasOnly(
+             ['participants', 'lastMessage', 'lastMessageAt', 'lastMessageSenderId', 'lastReadAt']);
+      allow delete: if false;
+    }
+
+    // ---- Direct messages: messages ----
+    // A message can only be CREATED by the participant it claims as its
+    // sender, and only if the recipient — the other uid embedded in
+    // conversationId — hasn't blocked them. This is the one rule in this
+    // file that has to reach outside the document being written to check
+    // another user's private data, which is exactly what `get()` in a rule
+    // is for: it's a privileged read used to evaluate the rule, not a grant
+    // of read access to the sender.
+    //
+    // Delete/unsend is a SOFT delete (see firebase/messages.ts's
+    // deleteMessage) — only the sender may flip `deleted` to true and blank
+    // `text`, and every other field is frozen once written, including
+    // `senderId` and `createdAt`, so a delete can't be reused to rewrite
+    // history.
+    match /conversations/{conversationId}/messages/{messageId} {
+      allow read: if request.auth != null && isDmParticipant(conversationId);
+      allow create: if request.auth != null
+        && isDmParticipant(conversationId)
+        && request.resource.data.senderId == request.auth.uid
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0
+        && request.resource.data.text.size() <= 2000
+        && request.resource.data.deleted == false
+        && request.resource.data.keys().hasOnly(['senderId', 'text', 'createdAt', 'deleted'])
+        && !isBlockedBy(otherDmUid(conversationId), request.auth.uid)
+        // Same friends-only gate as the conversation doc's create rule,
+        // repeated here because a message can be written into this
+        // subcollection whether or not the parent conversation doc exists
+        // yet — without this, that ordering gap would be a way around the
+        // conversation-create check above.
+        && areDmFriends(dmUids(conversationId)[0], dmUids(conversationId)[1]);
+      allow update: if request.auth != null
+        && resource.data.senderId == request.auth.uid
+        && request.resource.data.senderId == resource.data.senderId
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.deleted == true
+        && request.resource.data.text == ''
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['deleted', 'text']);
+      allow delete: if false;
+    }
+
+    // ---- Reports ----
+    // Create-only, deliberately mirroring onboardingEvents' write-only shape
+    // below: a report is meant to be reviewed by whoever administers the
+    // project directly, not read back by any client, including the
+    // reporter's own.
+    match /reports/{reportId} {
+      allow read, update, delete: if false;
+      allow create: if request.auth != null
+        && request.resource.data.reporterUid == request.auth.uid
+        && request.resource.data.reportedUid is string
+        && request.resource.data.reportedUid != request.auth.uid
+        && request.resource.data.reason is string
+        && request.resource.data.reason.size() <= 500
+        && request.resource.data.keys().hasOnly(['reportedUid', 'reporterUid', 'reason', 'createdAt']);
+    }
+
+    // ---- Crash reports ----
+    // Written by components/ErrorBoundary.tsx whenever a render-phase error
+    // is caught, so "our team has been notified" on the maintenance screen
+    // is literally true. Create-only, same write-only shape as `reports`
+    // above — nobody reviews these from inside the app.
+    //
+    // Unlike every other collection in this file, signed-out writes are
+    // allowed: a crash can happen on the Welcome/Auth screen before anyone
+    // has signed in, and THAT crash is exactly the kind worth capturing,
+    // not one to silently drop because auth.currentUser was null.
+    match /crashReports/{reportId} {
+      allow read, update, delete: if false;
+      allow create: if
+        // Either genuinely signed out (uid: null), or the uid claimed
+        // matches whoever is actually making the request — never someone
+        // else's.
+        (request.resource.data.uid == null || request.resource.data.uid == request.auth.uid)
+        && request.resource.data.message is string
+        && request.resource.data.message.size() <= 1000
+        && request.resource.data.stack is string
+        && request.resource.data.stack.size() <= 2000
+        && request.resource.data.componentStack is string
+        && request.resource.data.componentStack.size() <= 2000
+        && request.resource.data.platform is string
+        && request.resource.data.keys().hasOnly(
+             ['uid', 'message', 'stack', 'componentStack', 'platform', 'createdAt']);
     }
 
     // ---- Deny everything else ----

@@ -1,4 +1,20 @@
-import { useRef, useState } from 'react';
+// Plain email/password entry — reached only via AuthMethodScreen's
+// "Continue with email" row. Apple/Google/phone sign-in used to live on
+// this same screen behind an isSignUp toggle; they've moved to
+// AuthMethodScreen (see that file), which is now the fork point between
+// this form and those credential flows. This screen kept everything that
+// isn't one of those three: the form itself, its validation/password-
+// strength checklist, the submit logic, and the crossfading AuthBackground.
+//
+// `route.params.mode` ('login' | 'signup') comes from AuthMethodScreen,
+// which itself got it from WelcomeScreen — so which of the two forms
+// (heading, submit label, background variant) renders here is decided two
+// screens up, not by a toggle local to this one. A user can still flip
+// between them from here (the text link below the submit button) without
+// having to back out to AuthMethodScreen and re-choose "Continue with
+// email" — that in-place toggle is unchanged from before.
+
+import { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,7 +23,6 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
-  AccessibilityInfo,
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,24 +34,24 @@ import { Screen, Field, Button } from '../components/ui';
 import { Enter } from '../components/dashboard';
 import { MARK, MARK_VIEWBOX, MARK_STROKE } from '../components/Splash';
 import AuthTransition from '../components/AuthTransition';
+import AuthBackground from '../components/AuthBackground';
 import { PasswordStrengthChecklist, isPasswordStrong } from '../components/PasswordStrength';
 import { getAuthErrorMessage } from '../firebase/authErrors';
-import haptics from '../services/haptics';
 import { useLanguage } from '../i18n/LanguageContext';
 import { withMinDuration, withTimeout, AUTH_TRANSITION_MS, AUTH_TIMEOUT_MS } from '../utils/timing';
 
-// The chevron only, at two-thirds of the splash's size. Welcome has just shown
-// the full lockup one screen ago; repeating the wordmark here would restate the
-// brand instead of continuing it, and the mark alone is enough to say this is
-// still the same app.
+// The chevron only, at two-thirds of the splash's size — Welcome has just
+// shown the full lockup one screen ago; repeating the wordmark here would
+// restate the brand instead of continuing it.
 const MARK_WIDTH = 44;
 const MARK_HEIGHT = 38;
 
-export default function AuthScreen({ navigation }: any) {
-  const { signUp, logIn, loadProfile } = useUser();
+export default function AuthScreen({ navigation, route }: any) {
+  const { signUp, logIn, loadProfile, registerDeviceSession } = useUser();
   const { t } = useLanguage();
   const palette = usePalette();
-  const [isSignUp, setIsSignUp] = useState(true);
+  const initialMode: 'login' | 'signup' = route?.params?.mode === 'login' ? 'login' : 'signup';
+  const [isSignUp, setIsSignUp] = useState(initialMode === 'signup');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -49,6 +64,10 @@ export default function AuthScreen({ navigation }: any) {
   // synchronously, so the second tap sees the flag the first one set.
   const inFlight = useRef(false);
 
+  function reportError(err: any) {
+    setError(getAuthErrorMessage(err));
+  }
+
   async function handleSubmit() {
     if (inFlight.current) return;
     inFlight.current = true;
@@ -60,9 +79,14 @@ export default function AuthScreen({ navigation }: any) {
       // 50ms. See AUTH_TRANSITION_MS and utils/timing.ts.
       if (isSignUp) {
         await withMinDuration(withTimeout(signUp(email, password), AUTH_TIMEOUT_MS), AUTH_TRANSITION_MS);
-        // NEW: subscription gate — every new user sees the paywall / trial
-        // offer before onboarding. SubscriptionScreen will route them to
-        // Onboarding after they pick a plan or start the trial.
+        // A brand-new signup's next stop is Subscription — every new user
+        // sees the paywall/trial offer before anything else. Routing here
+        // explicitly rather than relying on RootNavigator's initialRouteName
+        // is required because the navigator, once mounted, never remounts on
+        // sign-in (see App.tsx's comment on why BootSkeleton/isLoading can't
+        // be used to re-route here) — so this is the one place a fresh
+        // signup's next screen is actually decided. SubscriptionScreen's own
+        // trial/purchase handlers continue on to 'LegalGate' from there.
         navigation.replace('Subscription');
       } else {
         const target = await withMinDuration(
@@ -79,13 +103,7 @@ export default function AuthScreen({ navigation }: any) {
         navigation.replace(target);
       }
     } catch (err: any) {
-      const message = getAuthErrorMessage(err);
-      setError(message);
-      // A failure that only appears as red text is silent to a screen reader
-      // and invisible to someone who has already looked away from the phone.
-      // Announcing and buzzing are the two channels that reach them.
-      AccessibilityInfo.announceForAccessibility?.(message);
-      haptics.error();
+      reportError(err);
     } finally {
       inFlight.current = false;
       setSubmitting(false);
@@ -100,6 +118,11 @@ export default function AuthScreen({ navigation }: any) {
 
   return (
     <Screen style={[styles.screen, { backgroundColor: palette.bg }]}>
+      {/* Bottom-most layer, behind every other element on the screen. See
+          components/AuthBackground.tsx for why sign-up and log-in get two
+          different treatments here rather than one shared background. */}
+      <AuthBackground variant={isSignUp ? 'signup' : 'login'} />
+
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.fill}>
@@ -168,6 +191,21 @@ export default function AuthScreen({ navigation }: any) {
                 submit — the whole point is the user sees the bar to clear
                 before they hit it, not after. */}
             {isSignUp && <PasswordStrengthChecklist password={password} palette={palette} />}
+            {/* Log-in only — a sign-up form has no existing password to
+                forget yet. */}
+            {!isSignUp && (
+              <Pressable
+                onPress={() => navigation.navigate('ForgotPassword')}
+                disabled={submitting}
+                hitSlop={8}
+                style={styles.forgotPasswordRow}
+                accessibilityRole="button"
+                accessibilityLabel="Forgot password?">
+                <Text style={[styles.toggleText, { color: palette.textSecondary }]}>
+                  Forgot password?
+                </Text>
+              </Pressable>
+            )}
           </Enter>
 
           {/* The error sits directly above the button it relates to, so the
@@ -289,5 +327,8 @@ const styles = StyleSheet.create({
   },
   toggleAction: {
     fontFamily: fontFamily.sansBold,
+  },
+  forgotPasswordRow: {
+    alignSelf: 'flex-end',
   },
 });

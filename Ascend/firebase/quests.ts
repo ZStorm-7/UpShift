@@ -238,7 +238,6 @@ const RAW_QUESTS: { category: string; quests: RawQuest[] }[] = [
       [85, "Try a new exercise from a muscle group you haven't picked lately", 'Medium'],
       [86, 'Change your profile avatar', 'Easy'],
       [87, "Update your goal in Settings if it's changed", 'Easy'],
-      [88, 'Log a meal in a language other than English', 'Easy'],
       [89, 'Build a combo meal with 3+ ingredients', 'Medium'],
       [90, 'Log a workout on a weekend', 'Easy'],
       [91, 'Complete a quest before anyone else in your house', 'Medium'],

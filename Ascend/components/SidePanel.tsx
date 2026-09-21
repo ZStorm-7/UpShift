@@ -3,9 +3,9 @@
 //
 // Those four moved OUT of the always-visible nav row so that row could be
 // repurposed for the things a user actually opens every day (Nutrition,
-// Workout, Motivation) — Friends/Leaderboard/History/Weight/Settings are
-// still one tap away, just behind the hamburger button instead of competing
-// for space in the daily row.
+// Workout) — Friends/Leaderboard/History/Weight/Settings are still one tap
+// away, just behind the hamburger button instead of competing for space in
+// the daily row.
 //
 // Styled after Jitter's "Liquid Glass Menu" reference: a frosted vertical
 // rail of icon-only buttons (not a horizontal bar — this app's version runs

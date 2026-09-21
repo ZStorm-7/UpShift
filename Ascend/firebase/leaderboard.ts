@@ -1,6 +1,6 @@
 import { doc, collection, query, orderBy, limit, getDocs, setDoc, deleteDoc } from 'firebase/firestore';
 import { db } from './config';
-import { TOTAL_XP_PER_LEVEL } from './progress';
+import { xpRequiredForLevel } from './progress';
 
 // Everything else in this app lives under users/{uid}/… and is readable only
 // by that user — which is exactly right for private data, but it makes a
@@ -53,8 +53,17 @@ export function parseDisplayName(displayName: string): { firstName: string; last
 // Level and current-XP alone can't be sorted meaningfully (someone at level 9
 // with 90 XP has earned more than someone at level 10 with 0), so we store a
 // single cumulative number and rank on that.
+//
+// Sums each completed level's own requirement rather than multiplying by a
+// flat constant — see progress.ts's xpRequiredForLevel: per-level XP grows
+// exponentially now, so level 50's "100 XP" worth of prior levels is a very
+// different number than level 5's.
 export function computeTotalXP(level: number, currentXP: number): number {
-  return (level - 1) * TOTAL_XP_PER_LEVEL + currentXP;
+  let total = currentXP;
+  for (let l = 1; l < level; l++) {
+    total += xpRequiredForLevel(l);
+  }
+  return total;
 }
 
 // Called whenever a user's XP or profile changes. Uses their uid as the

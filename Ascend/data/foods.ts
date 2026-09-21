@@ -7,6 +7,14 @@ export type FoodDatabaseItem = {
   protein: number;
   carbs: number;
   fat: number;
+  // Optional — most sources here (this static list, USDA search) don't
+  // report these, but a barcode lookup (Open Food Facts) usually does.
+  // Left undefined rather than defaulted to 0 wherever a source doesn't
+  // have them, so utils/foodHealth.ts's health-score heuristic can treat
+  // "unknown" and "genuinely zero" differently.
+  sugar?: number;
+  fiber?: number;
+  sodium?: number;
 };
 
 // Nutrition values are approximate, per the stated serving. Quantities are

@@ -1,8 +1,15 @@
 // Daily weight prompt. Pops on the first Dashboard visit each day; user
 // can log a weight or dismiss with "Skip today". Skipping writes a marker
 // to Firestore so the modal doesn't reappear until tomorrow.
+//
+// `healthSuggestion` (optional): when Dashboard finds a same-day weight
+// sample from Apple Health / Health Connect that the user hasn't already
+// logged manually, it's passed here and used to PRE-FILL the input — never
+// to silently write a value on the user's behalf. The field stays a normal
+// editable TextInput, so overriding it is just typing over the pre-filled
+// number, same as clearing any other pre-filled form field.
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TextInput, Pressable, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { spacing, radius, layout } from '../theme/tokens';
 import { fontFamily } from '../theme/fonts';
@@ -14,12 +21,22 @@ type Props = {
   currentWeight: number | null;
   onSubmit: (weightLbs: number) => Promise<void>;
   onSkip: () => Promise<void>;
+  healthSuggestion?: { value: number; source: string } | null;
 };
 
-export default function WeightPromptModal({ visible, currentWeight, onSubmit, onSkip }: Props) {
+export default function WeightPromptModal({ visible, currentWeight, onSubmit, onSkip, healthSuggestion }: Props) {
   const palette = usePalette();
   const [value, setValue] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // Pre-fills the input the moment the modal opens WITH a Health suggestion
+  // in hand — not on every render, so a user who deliberately clears the
+  // field doesn't get it silently refilled out from under them.
+  useEffect(() => {
+    if (visible && healthSuggestion) {
+      setValue(String(healthSuggestion.value));
+    }
+  }, [visible, healthSuggestion]);
 
   async function handleSubmit() {
     const num = parseFloat(value);
@@ -58,6 +75,11 @@ export default function WeightPromptModal({ visible, currentWeight, onSubmit, on
               ? `Last: ${currentWeight} lbs · Log today's to keep your trend accurate.`
               : 'Log daily to track your trend over time.'}
           </Text>
+          {healthSuggestion && (
+            <Text style={[styles.healthHint, { color: palette.accent }]}>
+              Pre-filled from {healthSuggestion.source} — edit if this isn't right.
+            </Text>
+          )}
 
           <View style={[styles.inputRow, { borderColor: valid || value === '' ? palette.borderStrong : palette.danger }]}>
             <TextInput
@@ -90,7 +112,17 @@ export default function WeightPromptModal({ visible, currentWeight, onSubmit, on
             </Text>
           </Pressable>
 
-          <Pressable onPress={handleSkip} hitSlop={12} style={styles.skip}>
+          {/* Every other pressable surface in the app declares its role (see
+              the Save button above, and components/ui.tsx's Button) — without
+              it a screen reader reads this as ordinary underlined text and
+              never announces that it can be tapped, which for the ONLY
+              dismiss control on a blocking modal means no way out. */}
+          <Pressable
+            onPress={handleSkip}
+            hitSlop={12}
+            style={styles.skip}
+            accessibilityRole="button"
+            accessibilityLabel="Skip today">
             <Text style={[styles.skipText, { color: palette.textMuted }]}>Skip today</Text>
           </Pressable>
         </View>
@@ -108,6 +140,7 @@ const styles = StyleSheet.create({
   },
   title: { fontFamily: fontFamily.serif, fontSize: 24 },
   subtitle: { fontFamily: fontFamily.sans, fontSize: 14, lineHeight: 20 },
+  healthHint: { fontFamily: fontFamily.sansBold, fontSize: 12, marginTop: -spacing.xs },
   inputRow: {
     flexDirection: 'row', alignItems: 'baseline', justifyContent: 'center', gap: spacing.xs,
     borderBottomWidth: 2, paddingVertical: spacing.sm, marginTop: spacing.sm,

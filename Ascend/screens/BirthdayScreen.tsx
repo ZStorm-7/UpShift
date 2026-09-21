@@ -22,7 +22,7 @@ export default function BirthdayScreen({ navigation }: any) {
       <View style={styles.body}>
         <Ionicons name="gift" size={56} color={palette.accent} style={styles.icon} />
         <Text style={[styles.title, { color: palette.textPrimary }]}>
-          Happy Birthday{profile?.firstName ? `, ${profile.firstName}` : ''}!
+          Happy Birthday{(profile?.nickname || profile?.firstName) ? `, ${profile?.nickname || profile?.firstName}` : ''}!
         </Text>
         <Text style={[styles.subtitle, { color: palette.textSecondary }]}>
           Here's to another year of leveling up.

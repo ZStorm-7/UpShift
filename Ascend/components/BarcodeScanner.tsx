@@ -11,10 +11,12 @@ import { useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, Modal, ActivityIndicator } from 'react-native';
 import { CameraView, useCameraPermissions, BarcodeScanningResult } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { spacing, radius, type } from '../theme/tokens';
 import { Palette } from '../theme/themedColors';
 import { Button } from './ui';
+import { easing } from '../animation/motion';
 import haptics from '../services/haptics';
 import { lookupBarcode } from '../data/barcodeApi';
 import { FoodDatabaseItem } from '../data/foods';
@@ -37,11 +39,18 @@ export default function BarcodeScanner({ visible, onClose, onFound, palette }: B
   const insets = useSafeAreaInsets();
   const [permission, requestPermission] = useCameraPermissions();
   const [torch, setTorch] = useState(false);
-  const [status, setStatus] = useState<'scanning' | 'looking-up' | 'not-found'>('scanning');
+  const [status, setStatus] = useState<'scanning' | 'looking-up' | 'found' | 'not-found'>('scanning');
+  const [foundName, setFoundName] = useState('');
   // Guards against the same barcode firing onBarcodeScanned a dozen times a
   // second while it's still in frame, and against a second scan starting
   // while the first is still looking a product up.
   const lockedRef = useRef(false);
+  const foundScale = useSharedValue(0.6);
+  const foundOpacity = useSharedValue(0);
+  const foundStyle = useAnimatedStyle(() => ({
+    opacity: foundOpacity.value,
+    transform: [{ scale: foundScale.value }],
+  }));
 
   useEffect(() => {
     if (visible) {
@@ -65,7 +74,17 @@ export default function BarcodeScanner({ visible, onClose, onFound, palette }: B
     const item = await lookupBarcode(data);
     if (item) {
       haptics.goalMet();
-      onFound(item);
+      setFoundName(item.name);
+      setStatus('found');
+      foundScale.value = 0.6;
+      foundOpacity.value = 0;
+      foundScale.value = withTiming(1, { duration: 300, easing: easing.standard });
+      foundOpacity.value = withTiming(1, { duration: 220, easing: easing.standard });
+      // A beat to actually see the confirmation before the scanner closes —
+      // onFound unmounts this component (the parent flips `visible` off and
+      // adds the item), so anything faster would read as the scan being cut
+      // off rather than confirmed.
+      setTimeout(() => onFound(item), 650);
     } else {
       haptics.selection();
       setStatus('not-found');
@@ -118,17 +137,28 @@ export default function BarcodeScanner({ visible, onClose, onFound, palette }: B
           </View>
 
           {permission?.granted ? (
-            <>
+            status === 'found' ? (
               <View style={styles.frameWrap}>
-                <View style={[styles.frame, status === 'not-found' && styles.frameError]} />
-                <Text style={styles.hint}>
-                  {status === 'looking-up' ? 'Looking it up…'
-                    : status === 'not-found' ? "Couldn't find that product — try search instead"
-                    : "Line up the barcode inside the box"}
-                </Text>
+                <Animated.View style={[styles.foundBadge, foundStyle]}>
+                  <Ionicons name="checkmark-circle" size={56} color={palette.accent} />
+                </Animated.View>
+                <Animated.Text style={[styles.hint, styles.foundName, foundStyle]} numberOfLines={2}>
+                  {foundName}
+                </Animated.Text>
               </View>
-              {status === 'looking-up' && <ActivityIndicator color="#fff" style={{ marginTop: spacing.md }} />}
-            </>
+            ) : (
+              <>
+                <View style={styles.frameWrap}>
+                  <View style={[styles.frame, status === 'not-found' && styles.frameError]} />
+                  <Text style={styles.hint}>
+                    {status === 'looking-up' ? 'Looking it up…'
+                      : status === 'not-found' ? "Couldn't find that product — try search instead"
+                      : "Line up the barcode inside the box"}
+                  </Text>
+                </View>
+                {status === 'looking-up' && <ActivityIndicator color="#fff" style={{ marginTop: spacing.md }} />}
+              </>
+            )
           ) : (
             <View style={styles.permissionPrompt}>
               <Ionicons name="camera-outline" size={40} color="#fff" />
@@ -195,6 +225,14 @@ const styles = StyleSheet.create({
     color: '#fff',
     textAlign: 'center',
     paddingHorizontal: spacing.xxl,
+  },
+  foundBadge: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  foundName: {
+    ...type.heading,
+    fontSize: 17,
   },
   // Anchored a third of the way down rather than dead-centered in the full
   // remaining height — there's no camera feed behind this state (permission

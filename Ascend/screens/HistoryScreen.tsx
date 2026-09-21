@@ -1,11 +1,13 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, LayoutChangeEvent } from 'react-native';
 import Svg, { Path, Circle, Rect, Line, G, Text as SvgText } from 'react-native-svg';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { runOnJS } from 'react-native-reanimated';
 import { getDoc } from 'firebase/firestore';
-import { spacing, radius, layout } from '../theme/tokens';
+import { spacing, radius, layout, type } from '../theme/tokens';
 import { fontFamily } from '../theme/fonts';
 import { usePalette, Palette } from '../theme/themedColors';
-import { Screen, AppBar } from '../components/ui';
+import { Screen, AppBar, Card } from '../components/ui';
 import { Shimmer } from '../components/anim';
 import { Enter } from '../components/dashboard';
 import { useUser } from '../context/UserContext';
@@ -58,10 +60,14 @@ const NUTRITION_UNITS: Record<NutritionKey, string> = {
 const ACTIVITY_KEYS = ['water', 'sleep', 'workouts'] as const;
 type ActivityKey = typeof ACTIVITY_KEYS[number];
 
-const ACTIVITY_COLORS: Record<ActivityKey, string> = {
-  water: '#00C805',
-  sleep: '#388E3C',
-  workouts: '#1B5E20',
+// All three lines share the Activity tab's one accent color (palette.activityAccent
+// — see theme/themedColors.ts) rather than three unrelated hues; opacity is what
+// tells them apart, the same "one family, several tints" idea the old green ramp
+// used, just no longer the same green every other tab also uses.
+const ACTIVITY_OPACITY: Record<ActivityKey, number> = {
+  workouts: 1,
+  sleep: 0.7,
+  water: 0.45,
 };
 
 const ACTIVITY_LABELS: Record<ActivityKey, string> = {
@@ -76,17 +82,10 @@ const ACTIVITY_GOALS: Record<ActivityKey, number> = {
   workouts: 1,
 };
 
-// Four fixed bands, top (far from goal) to bottom (at goal): red, orange,
-// yellow, green — always in this order, regardless of which direction the
-// user's goal points weight in. A single unconditional ramp so "red = far,
-// green = at goal" reads the same way for every account instead of flipping
-// definitions depending on the stored goal string.
-const WEIGHT_ZONES = [
-  'rgba(229, 57, 53, 0.18)',   // red — far from goal
-  'rgba(255, 152, 0, 0.18)',   // orange — getting there
-  'rgba(255, 193, 7, 0.18)',   // yellow — on track
-  'rgba(76, 175, 80, 0.18)',   // green — at goal
-];
+// Ranges wider than this get bucketed into weekly averages (see bucketByWeek)
+// instead of plotting a raw point per day — past ~90 daily points the line
+// reads as noise rather than a trend.
+const BUCKET_THRESHOLD_DAYS = 90;
 
 export default function HistoryScreen({ navigation }: any) {
   const palette = usePalette();
@@ -165,6 +164,30 @@ export default function HistoryScreen({ navigation }: any) {
     };
   }, [filteredDaily]);
 
+  // Past ~90 days, a raw daily point per day is too dense to read as a trend —
+  // fold it into weekly averages instead. Shorter ranges stay at full daily
+  // granularity, where it's already fine.
+  const shouldBucket = timeRange === 'ALL' || RANGE_DAYS[timeRange] > BUCKET_THRESHOLD_DAYS;
+
+  const chartWeight = useMemo(() => {
+    if (!shouldBucket) return filteredWeight;
+    return bucketByWeek(filteredWeight.map(w => ({ date: w.date, value: w.weightLbs })))
+      .map(p => ({ date: p.date, weightLbs: p.value }));
+  }, [filteredWeight, shouldBucket]);
+
+  const chartActivity = useMemo(() => {
+    if (!shouldBucket) return filteredDaily;
+    return bucketDailyByWeek(filteredDaily);
+  }, [filteredDaily, shouldBucket]);
+
+  // Highlights are deliberately independent of the selected time range — they
+  // describe "how's it going lately", drawn from the full loaded history
+  // (`daily`/`weightEntries`), not whatever window the chart happens to be
+  // zoomed to.
+  const nutritionHighlight = useMemo(() => computeNutritionHighlight(daily), [daily]);
+  const weightHighlight = useMemo(() => computeWeightHighlight(weightEntries), [weightEntries]);
+  const activityHighlight = useMemo(() => computeActivityHighlight(daily), [daily]);
+
   return (
     <Screen scroll contentStyle={{ backgroundColor: palette.bg, padding: spacing.lg, gap: spacing.md, paddingBottom: 120 }}>
       <AppBar title={t('history') || 'History'} onBack={() => safeGoBack(navigation)} />
@@ -215,6 +238,22 @@ export default function HistoryScreen({ navigation }: any) {
         <View style={{ gap: spacing.md }}>
           {tab === 'nutrition' && (
             <Enter index={0}>
+              <HighlightCard highlight={nutritionHighlight} accentColor={palette.accent} palette={palette} />
+            </Enter>
+          )}
+          {tab === 'body' && (
+            <Enter index={0}>
+              <HighlightCard highlight={weightHighlight} accentColor={palette.bodyAccent} palette={palette} />
+            </Enter>
+          )}
+          {tab === 'activity' && (
+            <Enter index={0}>
+              <HighlightCard highlight={activityHighlight} accentColor={palette.activityAccent} palette={palette} />
+            </Enter>
+          )}
+
+          {tab === 'nutrition' && (
+            <Enter index={1}>
               <NutritionPieChart
                 totals={nutritionTotals}
                 selected={selectedSlice}
@@ -224,19 +263,20 @@ export default function HistoryScreen({ navigation }: any) {
             </Enter>
           )}
           {tab === 'body' && (
-            <Enter index={0}>
+            <Enter index={1}>
               <WeightScatterplot
-                data={filteredWeight}
+                data={chartWeight}
                 selected={selectedDot}
                 onSelect={setSelectedDot}
+                referenceWeight={profile?.weightLbs}
                 palette={palette}
               />
             </Enter>
           )}
           {tab === 'activity' && (
-            <Enter index={0}>
+            <Enter index={1}>
               <ActivityCombinedChart
-                data={filteredDaily}
+                data={chartActivity}
                 waterGoal={profile?.waterGoalMl || 2500}
                 palette={palette}
               />
@@ -246,6 +286,190 @@ export default function HistoryScreen({ navigation }: any) {
       )}
     </Screen>
   );
+}
+
+// ── Highlights ──────────────────────────────────────────────────────────
+
+type Highlight = { title: string; value: string };
+
+/** One or two honest sentences about how the metric is trending, computed
+ *  from real data already loaded for this screen — never shown until there's
+ *  enough history to say something true (see the compute* functions below). */
+function HighlightCard({
+  highlight,
+  accentColor,
+  palette,
+}: {
+  highlight: Highlight | null;
+  accentColor: string;
+  palette: Palette;
+}) {
+  if (!highlight) return null;
+  return (
+    <Card style={{ gap: spacing.xs }}>
+      <Text style={[type.label, { color: palette.textMuted, textTransform: 'uppercase' }]}>Highlights</Text>
+      <Text style={[type.body, { color: palette.textPrimary }]}>{highlight.title}</Text>
+      <Text style={[type.metric, { color: accentColor }]}>{highlight.value}</Text>
+    </Card>
+  );
+}
+
+function computeNutritionHighlight(daily: DailyData[]): Highlight | null {
+  const active = daily.filter(hasActivity);
+  // Fewer than four logged days isn't enough to say anything true about a
+  // trend — show nothing rather than a stat built on almost no data.
+  if (active.length < 4) return null;
+
+  const last7 = daily.slice(-7);
+  const prev7 = daily.slice(-14, -7);
+  const sumCal = (arr: DailyData[]) => arr.reduce((s, r) => s + r.calories, 0);
+  const last7Cal = sumCal(last7);
+  const prev7Cal = sumCal(prev7);
+
+  if (prev7.length === 7 && prev7Cal > 0) {
+    const pctChange = Math.round(((last7Cal - prev7Cal) / prev7Cal) * 100);
+    if (pctChange !== 0) {
+      const dir = pctChange < 0 ? 'down' : 'up';
+      return {
+        title: `Calories ${dir} ${Math.abs(pctChange)}% vs the week before`,
+        value: `${Math.round(last7Cal / 7)} kcal/day avg`,
+      };
+    }
+  }
+
+  // Not enough history for a week-over-week comparison (or it came out flat)
+  // — fall back to a plain average over whatever's logged, capped at a week.
+  const recentActive = active.slice(-7);
+  const avgProtein = recentActive.reduce((s, r) => s + r.protein, 0) / recentActive.length;
+  return { title: 'Protein averaged', value: `${Math.round(avgProtein)}g/day` };
+}
+
+function computeWeightHighlight(entries: WeightEntry[]): Highlight | null {
+  if (entries.length < 2) return null; // nothing to compare against yet
+
+  const last7 = entries.slice(-7);
+  const earlier = entries.slice(0, -7);
+  const minLast7 = Math.min(...last7.map(e => e.weightLbs));
+  const priorMin = earlier.length > 0 ? Math.min(...earlier.map(e => e.weightLbs)) : Infinity;
+  if (earlier.length > 0 && minLast7 < priorMin) {
+    return { title: 'New 7-day weight low', value: `${minLast7} lbs` };
+  }
+
+  // Simple trend: change per week across the most recent stretch of entries,
+  // normalized by however many calendar days that stretch actually spans
+  // (weigh-ins aren't guaranteed to be daily).
+  const window = entries.slice(-14);
+  if (window.length >= 2) {
+    const deltaLbs = window[window.length - 1].weightLbs - window[0].weightLbs;
+    const days = daysBetween(window[0].date, window[window.length - 1].date) || 1;
+    const perWeek = Math.round(((deltaLbs / days) * 7) * 10) / 10;
+    if (Math.abs(perWeek) >= 0.1) {
+      const dir = perWeek < 0 ? 'down' : 'up';
+      return { title: `Trending ${dir} ${Math.abs(perWeek)} lb/week`, value: `${entries[entries.length - 1].weightLbs} lbs now` };
+    }
+  }
+
+  return { title: 'Weight holding steady', value: `${entries[entries.length - 1].weightLbs} lbs` };
+}
+
+function computeActivityHighlight(daily: DailyData[]): Highlight | null {
+  const active = daily.filter(hasActivity);
+  // Need a full week's spread of days before "most active day" means
+  // anything more than "the only day logged".
+  if (active.length < 7) return null;
+
+  const weekdayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const totals = new Array(7).fill(0);
+  const counts = new Array(7).fill(0);
+  active.forEach(d => {
+    const [y, m, dd] = d.date.split('-').map(Number);
+    const weekday = new Date(y, m - 1, dd).getDay();
+    // A simple, honest activity score — workouts weighted heaviest since
+    // they're the most deliberate signal, water/sleep goal-hits worth less.
+    const score = d.workouts * 3 + (d.water > 0 ? 1 : 0) + (d.sleep >= 7 ? 1 : 0);
+    totals[weekday] += score;
+    counts[weekday] += 1;
+  });
+
+  let bestDay = -1;
+  let bestAvg = 0;
+  for (let i = 0; i < 7; i++) {
+    if (counts[i] === 0) continue;
+    const avg = totals[i] / counts[i];
+    if (avg > bestAvg) { bestAvg = avg; bestDay = i; }
+  }
+  if (bestDay === -1) return null;
+  return { title: 'Most active day', value: weekdayNames[bestDay] };
+}
+
+function daysBetween(aDate: string, bDate: string): number {
+  const [ay, am, ad] = aDate.split('-').map(Number);
+  const [by, bm, bd] = bDate.split('-').map(Number);
+  const a = Date.UTC(ay, am - 1, ad);
+  const b = Date.UTC(by, bm - 1, bd);
+  return Math.round((b - a) / 86400000);
+}
+
+// ── Bucketing & trend math ────────────────────────────────────────────────
+
+// The Monday (in local time) of the calendar week containing `dateStr`,
+// itself formatted the same "YYYY-MM-DD" way — so it sorts and groups
+// exactly like the raw dates do.
+function getWeekKey(dateStr: string): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  const dayOfWeek = date.getDay(); // 0 = Sun .. 6 = Sat
+  const daysSinceMonday = (dayOfWeek + 6) % 7;
+  date.setDate(date.getDate() - daysSinceMonday);
+  const yy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  return `${yy}-${mm}-${dd}`;
+}
+
+/** Groups daily points into calendar weeks and averages the value within
+ *  each — turns 365+ noisy daily points into a smooth weekly trend. Pure and
+ *  reusable across any single-value time series in this screen. */
+function bucketByWeek(points: { date: string; value: number }[]): { date: string; value: number }[] {
+  if (points.length === 0) return [];
+  const buckets = new Map<string, { sum: number; count: number }>();
+  for (const p of points) {
+    const key = getWeekKey(p.date);
+    const b = buckets.get(key) ?? { sum: 0, count: 0 };
+    b.sum += p.value;
+    b.count += 1;
+    buckets.set(key, b);
+  }
+  return Array.from(buckets.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([date, b]) => ({ date, value: b.sum / b.count }));
+}
+
+/** bucketByWeek applied independently to each of DailyData's numeric fields,
+ *  then re-zipped by index. Every field is grouped from the same source
+ *  dates, so each field's bucketed array lines up with the others one-to-one
+ *  — no separate alignment step needed. */
+function bucketDailyByWeek(data: DailyData[]): DailyData[] {
+  if (data.length === 0) return [];
+  const keys = ['calories', 'protein', 'carbs', 'fat', 'sugar', 'water', 'sleep', 'workouts'] as const;
+  const perKey = keys.map(k => bucketByWeek(data.map(d => ({ date: d.date, value: d[k] }))));
+  return perKey[0].map((_, i) => {
+    const row = { date: perKey[0][i].date } as DailyData;
+    keys.forEach((k, ki) => { (row as any)[k] = perKey[ki][i].value; });
+    return row;
+  });
+}
+
+/** Simple moving average, anchored to the real first point rather than
+ *  padded with zeros — window widens from 1 point up to `windowSize` over the
+ *  first few entries, then stays a rolling `windowSize`-point average. */
+function movingAverage(points: { date: string; value: number }[], windowSize = 7): { date: string; value: number }[] {
+  return points.map((p, i) => {
+    const start = Math.max(0, i - windowSize + 1);
+    const slice = points.slice(start, i + 1);
+    const avg = slice.reduce((s, q) => s + q.value, 0) / slice.length;
+    return { date: p.date, value: avg };
+  });
 }
 
 function hasActivity(d: DailyData): boolean {
@@ -451,11 +675,18 @@ function WeightScatterplot({
   data,
   selected,
   onSelect,
+  referenceWeight,
   palette,
 }: {
   data: WeightEntry[];
   selected: WeightEntry | null;
   onSelect: (w: WeightEntry | null) => void;
+  /** Onboarding's one-time starting weight (UserProfile.weightLbs) — there's
+   *  no separate numeric goal-weight field in the profile, so this is the
+   *  only real number worth drawing a reference line against. Labelled
+   *  "Starting weight" rather than "Goal" so the line never claims to be
+   *  something the data doesn't actually say. */
+  referenceWeight?: number;
   palette: Palette;
 }) {
   const [width, setWidth] = useState(0);
@@ -474,8 +705,6 @@ function WeightScatterplot({
   const padB = 32;
   const plotW = width - padL - padR;
   const plotH = height - padT - padB;
-
-  const zoneColors = WEIGHT_ZONES;
 
   const todayKey = getTodayKey();
 
@@ -505,104 +734,144 @@ function WeightScatterplot({
     return labels;
   }, [data]);
 
-  // Nearest-dot hit test off a Pressable overlay — see the comment on
-  // handlePieTap above for why this doesn't use SVG onPress.
-  // Uses pageX rather than nativeEvent.locationX to find the tap position.
-  // `locationX` is a React Native-only, non-standard field: on the web
-  // target, Pressable's onPress often fires from a plain browser click
-  // event, whose nativeEvent is a real DOM MouseEvent with no `locationX` at
-  // all — so this read silently came back `undefined`, every distance
-  // calculation below went NaN, and NaN never compares less than 24, so the
-  // hit test always failed and tapping the chart did nothing. `pageX` is a
-  // real, always-present field on both a native touch event and a web
-  // MouseEvent, so it works identically on every platform once combined
-  // with the container's own measured page position (captured in onLayout).
-  const handleChartTap = (evt: any) => {
+  // 7-point trend, drawn bold over the lightened raw dots (see the Circle
+  // fill opacity below) — MacroFactor's "smoothed line over raw scatter"
+  // pattern. Pure movingAverage() lives with the other chart math up top.
+  const trendPoints = useMemo(
+    () => movingAverage(data.map(d => ({ date: d.date, value: d.weightLbs }))),
+    [data]
+  );
+  const trendPath = useMemo(
+    () => trendPoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${xFor(i)} ${yFor(p.value)}`).join(' '),
+    [trendPoints, padL, plotW, padT, plotH, yMin, yMax]
+  );
+
+  // Continuous scrub: dragging anywhere across the chart tracks the nearest
+  // point to the finger's x position and keeps updating as it moves, rather
+  // than only registering a discrete tap. Reuses the same pageX-vs-locationX
+  // reasoning as the rest of this file's chart handlers (see the comment on
+  // handlePieTap) — `absoluteX` is the gesture-handler equivalent of pageX,
+  // a real screen coordinate on every platform including web.
+  const selectNearest = (absoluteX: number) => {
     if (data.length === 0) return;
-    const locationX = evt.nativeEvent.pageX - originRef.current.x;
+    const locationX = absoluteX - originRef.current.x;
     let closestIdx = 0;
     let closestDist = Infinity;
     data.forEach((_, i) => {
       const dist = Math.abs(xFor(i) - locationX);
       if (dist < closestDist) { closestDist = dist; closestIdx = i; }
     });
-    // Only register a hit within a reasonable radius of the nearest dot's
-    // x position, so a tap in empty space next to a sparse chart doesn't
-    // always grab whichever dot happens to be closest.
-    if (closestDist > 24) return;
-    const hit = data[closestIdx];
-    onSelect(selected?.date === hit.date ? null : hit);
+    onSelect(data[closestIdx]);
   };
+
+  // activeOffsetX (the same guard SwipeToDelete uses) means a mostly-vertical
+  // drag is released back to the screen's own ScrollView instead of being
+  // captured here — only a deliberately horizontal drag starts the scrub.
+  const pan = Gesture.Pan()
+    .activeOffsetX([-10, 10])
+    .onUpdate(e => { runOnJS(selectNearest)(e.absoluteX); })
+    .onEnd(e => { runOnJS(selectNearest)(e.absoluteX); });
+
+  const guideX = selected ? xFor(data.findIndex(d => d.date === selected.date)) : null;
 
   return (
     <View style={[styles.chartCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
       <Text style={[styles.chartTitle, { color: palette.textPrimary }]}>Weight</Text>
-      <Pressable ref={containerRef} onLayout={onLayout} onPress={handleChartTap} style={{ height }}>
-        {width > 0 && data.length > 0 && (
-          <Svg width={width} height={height}>
-            {/* 4 color zones */}
-            {zoneColors.map((color, zi) => (
-              <Rect
-                key={zi}
-                x={padL}
-                y={padT + (zi / 4) * plotH}
-                width={plotW}
-                height={plotH / 4}
-                fill={color}
-              />
-            ))}
+      <GestureDetector gesture={pan}>
+        <View ref={containerRef} onLayout={onLayout} style={{ height }}>
+          {width > 0 && data.length > 0 && (
+            <Svg width={width} height={height}>
+              {/* Y axis ticks */}
+              {yTicks.map(v => (
+                <G key={v}>
+                  <Line x1={padL} x2={padL + plotW} y1={yFor(v)} y2={yFor(v)}
+                    stroke={palette.divider} strokeWidth={0.5} />
+                  <SvgText x={padL - 6} y={yFor(v) + 4} textAnchor="end"
+                    fill={palette.textMuted} fontSize={10} fontFamily={fontFamily.sans}>
+                    {Math.round(v)}
+                  </SvgText>
+                </G>
+              ))}
 
-            {/* Y axis ticks */}
-            {yTicks.map(v => (
-              <G key={v}>
-                <Line x1={padL} x2={padL + plotW} y1={yFor(v)} y2={yFor(v)}
-                  stroke={palette.divider} strokeWidth={0.5} />
-                <SvgText x={padL - 6} y={yFor(v) + 4} textAnchor="end"
-                  fill={palette.textMuted} fontSize={10} fontFamily={fontFamily.sans}>
-                  {Math.round(v)}
-                </SvgText>
-              </G>
-            ))}
-
-            {/* X axis labels */}
-            {xLabels.map(({ i, label }) => (
-              <SvgText key={i} x={xFor(i)} y={height - 6} textAnchor="middle"
-                fill={palette.textMuted} fontSize={9} fontFamily={fontFamily.sans}>
-                {label}
-              </SvgText>
-            ))}
-
-            {/* Data dots */}
-            {data.map((d, i) => {
-              const isToday = d.date === todayKey;
-              const isSelected = selected?.date === d.date;
-              return (
-                <Circle
-                  key={d.date}
-                  cx={xFor(i)}
-                  cy={yFor(d.weightLbs)}
-                  r={isSelected ? 8 : isToday ? 6 : 5}
-                  fill={isToday ? '#00C805' : 'rgba(0, 200, 5, 0.4)'}
-                  stroke={isSelected ? palette.textPrimary : 'none'}
-                  strokeWidth={isSelected ? 2 : 0}
+              {/* Starting-weight reference — a single thin dashed line
+                  instead of the old 4-band gradient, same convention the
+                  Activity chart's goal line already uses. */}
+              {typeof referenceWeight === 'number' && referenceWeight >= yMin && referenceWeight <= yMax && (
+                <Line
+                  x1={padL} x2={padL + plotW}
+                  y1={yFor(referenceWeight)} y2={yFor(referenceWeight)}
+                  stroke={palette.textMuted} strokeWidth={1.5} strokeDasharray="4 4"
                 />
-              );
-            })}
-          </Svg>
-        )}
-        {data.length === 0 && (
-          <View style={styles.empty}>
-            <Text style={[styles.emptyText, { color: palette.textMuted }]}>
-              Log today's weight from the Dashboard to start your body graph.
-            </Text>
-          </View>
-        )}
-      </Pressable>
+              )}
+
+              {/* X axis labels */}
+              {xLabels.map(({ i, label }) => (
+                <SvgText key={i} x={xFor(i)} y={height - 6} textAnchor="middle"
+                  fill={palette.textMuted} fontSize={9} fontFamily={fontFamily.sans}>
+                  {label}
+                </SvgText>
+              ))}
+
+              {/* Raw daily dots — lightened so the trend line below reads as
+                  the hero, per MacroFactor's raw-scatter-under-smoothed-line
+                  treatment. */}
+              {data.map((d, i) => {
+                const isToday = d.date === todayKey;
+                const isSelected = selected?.date === d.date;
+                return (
+                  <Circle
+                    key={d.date}
+                    cx={xFor(i)}
+                    cy={yFor(d.weightLbs)}
+                    r={isSelected ? 8 : isToday ? 6 : 5}
+                    fill={palette.bodyAccent}
+                    opacity={isSelected ? 1 : isToday ? 0.85 : 0.35}
+                    stroke={isSelected ? palette.textPrimary : 'none'}
+                    strokeWidth={isSelected ? 2 : 0}
+                  />
+                );
+              })}
+
+              {/* Trend line — bold, full opacity, drawn last so it sits on
+                  top of the raw dots. */}
+              {trendPoints.length > 1 && (
+                <Path d={trendPath} stroke={palette.bodyAccent} strokeWidth={3}
+                  fill="none" strokeLinejoin="round" strokeLinecap="round" />
+              )}
+
+              {/* Scrub guideline + floating callout, tracking the nearest
+                  point to wherever the pan gesture currently is. */}
+              {guideX !== null && selected && (
+                <G>
+                  <Line x1={guideX} x2={guideX} y1={padT} y2={padT + plotH}
+                    stroke={palette.textSecondary} strokeWidth={1} strokeDasharray="2 3" />
+                  <ScrubCallout
+                    x={guideX}
+                    plotLeft={padL}
+                    plotRight={padL + plotW}
+                    y={padT + 4}
+                    text={`${selected.weightLbs} lbs`}
+                    palette={palette}
+                    accentColor={palette.bodyAccent}
+                  />
+                </G>
+              )}
+            </Svg>
+          )}
+          {data.length === 0 && (
+            <View style={styles.empty}>
+              <Text style={[styles.emptyText, { color: palette.textMuted }]}>
+                Log today's weight from the Dashboard to start your body graph.
+              </Text>
+            </View>
+          )}
+        </View>
+      </GestureDetector>
 
       {/* Selected dot detail */}
       {selected && (
         <View style={[styles.detailCard, { backgroundColor: palette.surfaceSunken, borderColor: palette.border }]}>
-          <View style={[styles.detailDot, { backgroundColor: selected.date === todayKey ? '#00C805' : 'rgba(0,200,5,0.4)' }]} />
+          <View style={[styles.detailDot, { backgroundColor: palette.bodyAccent }]} />
           <View style={{ flex: 1 }}>
             <Text style={[styles.detailTitle, { color: palette.textPrimary }]}>
               {selected.date === todayKey ? 'Today' : formatDateLabel(selected.date)}
@@ -614,6 +883,43 @@ function WeightScatterplot({
         </View>
       )}
     </View>
+  );
+}
+
+/** Small pill-shaped label that floats above the scrub guideline, clamped so
+ *  it never runs past the plot's own left/right edges near the ends of the
+ *  chart. Shared by the Weight and Activity charts' scrub interaction. */
+function ScrubCallout({
+  x,
+  plotLeft,
+  plotRight,
+  y,
+  text,
+  palette,
+  accentColor,
+}: {
+  x: number;
+  plotLeft: number;
+  plotRight: number;
+  y: number;
+  text: string;
+  palette: Palette;
+  accentColor: string;
+}) {
+  const boxW = Math.max(44, text.length * 7 + 16);
+  const boxH = 22;
+  const cx = Math.min(Math.max(x, plotLeft + boxW / 2), plotRight - boxW / 2);
+  return (
+    <G>
+      <Rect
+        x={cx - boxW / 2} y={y} width={boxW} height={boxH}
+        rx={radius.sm} fill={palette.surfaceRaised} stroke={accentColor} strokeWidth={1}
+      />
+      <SvgText x={cx} y={y + boxH / 2 + 4} textAnchor="middle"
+        fill={palette.textPrimary} fontSize={11} fontFamily={fontFamily.sansBold}>
+        {text}
+      </SvgText>
+    </G>
   );
 }
 
@@ -629,7 +935,14 @@ function ActivityCombinedChart({
   palette: Palette;
 }) {
   const [width, setWidth] = useState(0);
-  const onLayout = (e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width);
+  const containerRef = useRef<View>(null);
+  const originRef = useRef({ x: 0, y: 0 });
+  const onLayout = (e: LayoutChangeEvent) => {
+    setWidth(e.nativeEvent.layout.width);
+    containerRef.current?.measure((_x, _y, _w, _h, pageX, pageY) => {
+      originRef.current = { x: pageX, y: pageY };
+    });
+  };
   const height = 320;
   const padL = 42;
   const padR = 12;
@@ -637,6 +950,10 @@ function ActivityCombinedChart({
   const padB = 32;
   const plotW = width - padL - padR;
   const plotH = height - padT - padB;
+
+  // Scrub selection — a day index into `data`/`normalized`, driven by the
+  // pan gesture below rather than a discrete tap.
+  const [scrubIdx, setScrubIdx] = useState<number | null>(null);
 
   const goals: Record<ActivityKey, number> = {
     water: waterGoal,
@@ -673,6 +990,30 @@ function ActivityCombinedChart({
     return labels;
   }, [normalized]);
 
+  // Same continuous-scrub approach as the Weight chart — see the comment on
+  // WeightScatterplot's selectNearest for why absoluteX (not locationX) is
+  // what makes this work on web too.
+  const selectNearest = (absoluteX: number) => {
+    if (normalized.length === 0) return;
+    const locationX = absoluteX - originRef.current.x;
+    let closestIdx = 0;
+    let closestDist = Infinity;
+    normalized.forEach((_, i) => {
+      const dist = Math.abs(xFor(i) - locationX);
+      if (dist < closestDist) { closestDist = dist; closestIdx = i; }
+    });
+    setScrubIdx(closestIdx);
+  };
+
+  // Same activeOffsetX guard as the Weight chart's pan — see its comment.
+  const pan = Gesture.Pan()
+    .activeOffsetX([-10, 10])
+    .onUpdate(e => { runOnJS(selectNearest)(e.absoluteX); })
+    .onEnd(e => { runOnJS(selectNearest)(e.absoluteX); });
+
+  const scrubDay = scrubIdx !== null ? data[scrubIdx] : null;
+  const guideX = scrubIdx !== null ? xFor(scrubIdx) : null;
+
   return (
     <View style={[styles.chartCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
       <Text style={[styles.chartTitle, { color: palette.textPrimary }]}>Activity</Text>
@@ -681,11 +1022,12 @@ function ActivityCombinedChart({
       {/* Legend — colored line swatches at the TOP, above the plot, same
           layout as a standard multi-series line chart: each series' color
           and label read left to right before the eye ever hits the lines
-          themselves. */}
+          themselves. All three share the Activity tab's one accent color;
+          opacity (ACTIVITY_OPACITY) is what tells them apart. */}
       <View style={styles.lineLegendRow}>
         {ACTIVITY_KEYS.map(k => (
           <View key={k} style={styles.lineLegendItem}>
-            <View style={[styles.lineLegendSwatch, { backgroundColor: ACTIVITY_COLORS[k] }]} />
+            <View style={[styles.lineLegendSwatch, { backgroundColor: palette.activityAccent, opacity: ACTIVITY_OPACITY[k] }]} />
             <Text style={[styles.legendLabel, { color: palette.textSecondary }]}>
               {ACTIVITY_LABELS[k]}
             </Text>
@@ -693,80 +1035,117 @@ function ActivityCombinedChart({
         ))}
       </View>
 
-      <View onLayout={onLayout} style={{ height }}>
-        {width > 0 && normalized.length > 0 && (
-          <Svg width={width} height={height}>
-            {/* Horizontal gridlines at every tick, spanning the full plot
-                width — the reference chart's grid, not just a single goal
-                dash. */}
-            {yTicks.map(v => (
-              <Line key={`grid-${v}`}
-                x1={padL} x2={padL + plotW}
-                y1={yFor(v)} y2={yFor(v)}
-                stroke={palette.divider} strokeWidth={1}
-              />
-            ))}
-
-            {/* Goal line at 100%, called out on top of the plain grid. */}
-            <Line
-              x1={padL} x2={padL + plotW}
-              y1={yFor(100)} y2={yFor(100)}
-              stroke={palette.textMuted} strokeWidth={1.5} strokeDasharray="4 4"
-            />
-
-            {/* Y axis labels */}
-            {yTicks.map(v => (
-              <SvgText key={v} x={padL - 6} y={yFor(v) + 4} textAnchor="end"
-                fill={palette.textMuted} fontSize={10} fontFamily={fontFamily.sans}>
-                {v}%
-              </SvgText>
-            ))}
-
-            {/* X axis labels */}
-            {xLabels.map(({ i, label }) => (
-              <SvgText key={i} x={xFor(i)} y={height - 6} textAnchor="middle"
-                fill={palette.textMuted} fontSize={9} fontFamily={fontFamily.sans}>
-                {label}
-              </SvgText>
-            ))}
-
-            {/* Lines for each activity */}
-            {ACTIVITY_KEYS.map(k => (
-              <Path
-                key={k}
-                d={linePath(k)}
-                stroke={ACTIVITY_COLORS[k]}
-                strokeWidth={3}
-                fill="none"
-                strokeLinejoin="round"
-                strokeLinecap="round"
-              />
-            ))}
-
-            {/* Dots when few data points */}
-            {normalized.length <= 14 && ACTIVITY_KEYS.map(k =>
-              normalized.map((d, i) => (
-                <Circle
-                  key={`${k}-${i}`}
-                  cx={xFor(i)}
-                  cy={yFor(d[k])}
-                  r={3}
-                  fill={palette.bg}
-                  stroke={ACTIVITY_COLORS[k]}
-                  strokeWidth={2}
+      <GestureDetector gesture={pan}>
+        <View ref={containerRef} onLayout={onLayout} style={{ height }}>
+          {width > 0 && normalized.length > 0 && (
+            <Svg width={width} height={height}>
+              {/* Horizontal gridlines at every tick, spanning the full plot
+                  width — the reference chart's grid, not just a single goal
+                  dash. */}
+              {yTicks.map(v => (
+                <Line key={`grid-${v}`}
+                  x1={padL} x2={padL + plotW}
+                  y1={yFor(v)} y2={yFor(v)}
+                  stroke={palette.divider} strokeWidth={1}
                 />
-              ))
-            )}
-          </Svg>
-        )}
-        {normalized.length === 0 && (
-          <View style={styles.empty}>
-            <Text style={[styles.emptyText, { color: palette.textMuted }]}>
-              No activity data yet for this period.
+              ))}
+
+              {/* Goal line at 100%, called out on top of the plain grid. */}
+              <Line
+                x1={padL} x2={padL + plotW}
+                y1={yFor(100)} y2={yFor(100)}
+                stroke={palette.textMuted} strokeWidth={1.5} strokeDasharray="4 4"
+              />
+
+              {/* Y axis labels */}
+              {yTicks.map(v => (
+                <SvgText key={v} x={padL - 6} y={yFor(v) + 4} textAnchor="end"
+                  fill={palette.textMuted} fontSize={10} fontFamily={fontFamily.sans}>
+                  {v}%
+                </SvgText>
+              ))}
+
+              {/* X axis labels */}
+              {xLabels.map(({ i, label }) => (
+                <SvgText key={i} x={xFor(i)} y={height - 6} textAnchor="middle"
+                  fill={palette.textMuted} fontSize={9} fontFamily={fontFamily.sans}>
+                  {label}
+                </SvgText>
+              ))}
+
+              {/* Lines for each activity */}
+              {ACTIVITY_KEYS.map(k => (
+                <Path
+                  key={k}
+                  d={linePath(k)}
+                  stroke={palette.activityAccent}
+                  strokeOpacity={ACTIVITY_OPACITY[k]}
+                  strokeWidth={3}
+                  fill="none"
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
+                />
+              ))}
+
+              {/* Dots when few data points */}
+              {normalized.length <= 14 && ACTIVITY_KEYS.map(k =>
+                normalized.map((d, i) => (
+                  <Circle
+                    key={`${k}-${i}`}
+                    cx={xFor(i)}
+                    cy={yFor(d[k])}
+                    r={3}
+                    fill={palette.bg}
+                    stroke={palette.activityAccent}
+                    strokeOpacity={ACTIVITY_OPACITY[k]}
+                    strokeWidth={2}
+                  />
+                ))
+              )}
+
+              {/* Scrub guideline + floating callout — tracks the nearest day
+                  to wherever the pan gesture currently is. */}
+              {guideX !== null && scrubDay && (
+                <G>
+                  <Line x1={guideX} x2={guideX} y1={padT} y2={padT + plotH}
+                    stroke={palette.textSecondary} strokeWidth={1} strokeDasharray="2 3" />
+                  <ScrubCallout
+                    x={guideX}
+                    plotLeft={padL}
+                    plotRight={padL + plotW}
+                    y={padT + 4}
+                    text={shortDate(scrubDay.date)}
+                    palette={palette}
+                    accentColor={palette.activityAccent}
+                  />
+                </G>
+              )}
+            </Svg>
+          )}
+          {normalized.length === 0 && (
+            <View style={styles.empty}>
+              <Text style={[styles.emptyText, { color: palette.textMuted }]}>
+                No activity data yet for this period.
+              </Text>
+            </View>
+          )}
+        </View>
+      </GestureDetector>
+
+      {/* Scrubbed day detail — same card treatment as the Weight chart's. */}
+      {scrubDay && (
+        <View style={[styles.detailCard, { backgroundColor: palette.surfaceSunken, borderColor: palette.border }]}>
+          <View style={[styles.detailDot, { backgroundColor: palette.activityAccent }]} />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.detailTitle, { color: palette.textPrimary }]}>
+              {formatDateLabel(scrubDay.date)}
+            </Text>
+            <Text style={[styles.detailValue, { color: palette.textSecondary }]}>
+              {Math.round(scrubDay.water)} ml · {scrubDay.sleep.toFixed(1)}h sleep · {scrubDay.workouts} workout{scrubDay.workouts === 1 ? '' : 's'}
             </Text>
           </View>
-        )}
-      </View>
+        </View>
+      )}
     </View>
   );
 }

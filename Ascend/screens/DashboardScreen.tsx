@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, Modal, ScrollView, AccessibilityInfo } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Modal, ScrollView, AccessibilityInfo, Platform } from 'react-native';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 // Dashboard redesign proof of concept — reads its own light/editorial theme
@@ -21,25 +21,28 @@ import AuthTransition from '../components/AuthTransition';
 import Avatar from '../components/Avatar';
 import CircularRankBadge from '../components/CircularRankBadge';
 import WeightPromptModal from '../components/WeightPromptModal';
+import BedtimePromptModal from '../components/BedtimePromptModal';
 import { withMinDuration, withTimeout, AUTH_TRANSITION_MS } from '../utils/timing';
 import { isBirthdayToday, xpMultiplier, BIRTHDAY_XP_MULTIPLIER } from '../utils/birthday';
 import { displayNameFor } from '../utils/profileDisplay';
 import { confirmAsync } from '../utils/confirm';
 import { Enter } from '../components/dashboard';
 import SidePanel from '../components/SidePanel';
+import PulsingIcon from '../components/PulsingIcon';
+import BottomSheet from '../components/BottomSheet';
 import { Ionicons } from '@expo/vector-icons';
 import { useLevelUp } from '../context/LevelUpContext';
 import haptics from '../services/haptics';
-import sound from '../services/sound';
 import { useUser } from '../context/UserContext';
 import { useLanguage } from '../i18n/LanguageContext';
 import {
   dayDocRef,
   statsDocRef,
-  TOTAL_XP_PER_LEVEL,
+  xpRequiredForLevel,
   countLoggedHistoryDays,
   getTodayKey,
   awardXP,
+  setTodayField,
 } from '../firebase/progress';
 import {
   Quest,
@@ -83,6 +86,7 @@ import {
   cancelWorkoutReminder,
 } from '../services/notifications';
 import { getRankInfo } from '../data/ranks';
+import { fetchTodaySteps, fetchRecentWeight } from '../services/health';
 
 // Header avatar diameter. Named because Avatar derives its font size and
 // AuthTransition-style pressable frame from it — a bare `36` scattered across
@@ -101,7 +105,7 @@ export default function DashboardScreen({ navigation }: any) {
   // be. Called once per render so every `styles.X` reference below
   // reflects the CURRENT theme, not whatever it was at module load.
   const styles = makeStyles(palette);
-  const { authUser, profile, logOut } = useUser();
+  const { authUser, profile, setProfile, logOut } = useUser();
   const { t } = useLanguage();
 
   // The reverse of AuthScreen's sign-in transition: the same 500ms-floor
@@ -144,8 +148,8 @@ export default function DashboardScreen({ navigation }: any) {
 
   // Friends/Leaderboard/History/Settings moved off the always-visible nav
   // row and behind this hamburger-triggered panel, freeing that row for the
-  // five things opened every day (Nutrition/Workout/Sleep/Weight/Motivation)
-  // instead of splitting attention across nine destinations in one row.
+  // two things opened every day (Nutrition/Workout) instead of splitting
+  // attention across many destinations in one row.
   const [sidePanelVisible, setSidePanelVisible] = useState(false);
 
   const [loading, setLoading] = useState(true);
@@ -184,6 +188,18 @@ export default function DashboardScreen({ navigation }: any) {
   const [totalCalories, setTotalCalories] = useState(0);
   const [workoutsCompleted, setWorkoutsCompleted] = useState(0);
 
+  // Today's step count, synced from Apple Health / Health Connect once the
+  // user has connected it in Settings (Customize tab). null until a sync has
+  // actually run, so the UI can tell "not connected" apart from "connected,
+  // 0 steps so far" — see the effect below and the small stats-row line it
+  // feeds.
+  const [healthSteps, setHealthSteps] = useState<number | null>(null);
+  // A same-day weight sample read from Health, offered as a PRE-FILL for the
+  // daily weight prompt below rather than written on the user's behalf — see
+  // the effect near dailyPromptOpen and WeightPromptModal's healthSuggestion
+  // prop.
+  const [healthWeightSuggestion, setHealthWeightSuggestion] = useState<{ value: number; source: string } | null>(null);
+
   // Extra facts about today's food log, needed so quests like "Log 4 meals
   // today" and "Log a snack under 200 kcal" can be checked automatically
   // rather than taken on trust.
@@ -212,8 +228,6 @@ export default function DashboardScreen({ navigation }: any) {
   // both end up open at once, which is the popup-ordering bug this fixes.
   const [weightPromptSettled, setWeightPromptSettled] = useState(false);
 
-  const sleepPromptCheckedRef = useRef(false);
-
   // Birthday screen — opened once per app session on the user's birthday,
   // and only after the weight prompt has resolved so it can't stack on top
   // of it (same ordering concern as the sleep prompt below).
@@ -236,13 +250,79 @@ export default function DashboardScreen({ navigation }: any) {
   }, [loading, profile, weightPromptSettled, isBirthday]);
 
   // Marks the birthday step done once the user comes BACK from the
-  // birthday screen, which is what releases the sleep prompt below.
+  // birthday screen, which is what releases the bedtime prompt below.
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
       if (birthdayShownRef.current) setBirthdaySettled(true);
     });
     return unsubscribe;
   }, [navigation]);
+
+  // One-time, first-login bedtime-reminder prompt. Replaces the old daily
+  // forced-navigation sleep popup: instead of nagging every day, this asks
+  // ONCE — the first time this user reaches the Dashboard — whether to turn
+  // on the nightly bedtime reminder, then never shows again. The
+  // "shown" flag lives at users/{uid}/meta/onboarding.bedtimePromptShown,
+  // mirroring the skip-flag pattern used by the weight/sleep prompts above.
+  // Waits on weightPromptSettled + birthdaySettled so it can't stack on top
+  // of either of those (same ordering concern documented above).
+  const bedtimePromptCheckedRef = useRef(false);
+  const [bedtimePromptOpen, setBedtimePromptOpen] = useState(false);
+  useEffect(() => {
+    if (loading || !authUser || !weightPromptSettled || !birthdaySettled) return;
+    if (bedtimePromptCheckedRef.current) return;
+    bedtimePromptCheckedRef.current = true;
+
+    (async () => {
+      try {
+        const metaRef = doc(db, 'users', authUser.uid, 'meta', 'onboarding');
+        const snap = await getDoc(metaRef);
+        const shown = snap.exists() ? (snap.data() as any).bedtimePromptShown : false;
+        if (shown) return;
+        setBedtimePromptOpen(true);
+      } catch {
+        // If the check fails, don't show — better to skip a one-time nudge
+        // than risk showing it repeatedly because reads keep failing.
+      }
+    })();
+  }, [loading, authUser, weightPromptSettled, birthdaySettled]);
+
+  const markBedtimePromptShown = async () => {
+    if (!authUser) return;
+    try {
+      await setDoc(
+        doc(db, 'users', authUser.uid, 'meta', 'onboarding'),
+        { bedtimePromptShown: true },
+        { merge: true },
+      );
+    } catch {
+      // silent — worst case the prompt reappears on a future login, which
+      // is a harmless repeat rather than data loss.
+    }
+  };
+
+  const confirmBedtimePrompt = async (hour: number, minute: number) => {
+    setBedtimePromptOpen(false);
+    if (authUser && profile) {
+      setProfile({ ...profile, bedtimeHour: hour, bedtimeMinute: minute, bedtimeReminderEnabled: true });
+      try {
+        await setDoc(
+          doc(db, 'users', authUser.uid),
+          { bedtimeHour: hour, bedtimeMinute: minute, bedtimeReminderEnabled: true },
+          { merge: true },
+        );
+      } catch {
+        showError(t('errorSaveFailed'));
+      }
+      await scheduleBedtimeReminder(true, hour, minute);
+    }
+    await markBedtimePromptShown();
+  };
+
+  const skipBedtimePrompt = async () => {
+    setBedtimePromptOpen(false);
+    await markBedtimePromptShown();
+  };
 
   // Shown as a dismissible banner whenever a Firestore save/load fails,
   // instead of the old behavior of silently swallowing the error.
@@ -325,21 +405,23 @@ export default function DashboardScreen({ navigation }: any) {
       // getRankInfo is pure, and `rank` itself isn't derived until further
       // down the component — deriving it here keeps this effect independent
       // of declaration order.
-      celebrate(level, getRankInfo(level).rank, currentXP / TOTAL_XP_PER_LEVEL);
+      celebrate(level, getRankInfo(level).rank, currentXP / xpRequiredForLevel(level));
       // The vibration fires here rather than inside the takeover so the
       // physical feedback lands on the same frame the overlay mounts. Put it
       // in the component's effect instead and it arrives a render later —
       // small, but enough that the buzz and the burst stop feeling like one
       // event.
       haptics.levelUp();
-      sound.levelUp();
     }
     prevLevelRef.current = level;
   }, [level, loading, celebrate, currentXP]);
 
   const quests_ = quests.map(q => ({ ...q, completed: completedQuestIds.includes(q.id) }));
 
-  const totalXP = TOTAL_XP_PER_LEVEL;
+  // XP needed to clear the CURRENT level — not the cumulative total (that's
+  // computeTotalXP in firebase/leaderboard.ts, a different concept). Grows
+  // per level now — see xpRequiredForLevel's comment in firebase/progress.ts.
+  const totalXP = xpRequiredForLevel(level);
 
   // Builds a QuestContext from whatever this screen currently has in React
   // state. Used by the auto-verify effect (state is trustworthy there — it's
@@ -731,6 +813,28 @@ export default function DashboardScreen({ navigation }: any) {
         const snap = await getDoc(skipRef);
         const skipped = snap.exists() ? (snap.data() as any).skippedDate : null;
         if (skipped === todayKey) { setWeightPromptSettled(true); return; }
+
+        // If Health is connected, offer today's Health weight (if there is
+        // one) as a pre-fill rather than making the user type it in — see
+        // WeightPromptModal's healthSuggestion prop. Best-effort: any
+        // failure here just means the prompt opens with an empty field,
+        // exactly as it always has.
+        if (profile?.healthSyncEnabled) {
+          try {
+            const healthWeight = await fetchRecentWeight();
+            if (healthWeight && healthWeight.date === todayKey) {
+              setHealthWeightSuggestion({
+                value: healthWeight.value,
+                source: Platform.OS === 'ios' ? 'Apple Health' : 'Health Connect',
+              });
+            }
+          } catch {
+            // fetchRecentWeight already fails soft, but this belt-and-
+            // suspenders catch keeps a Health hiccup from ever blocking the
+            // prompt itself from opening.
+          }
+        }
+
         // Settled is NOT set here — the prompt is about to actually show,
         // so it isn't "done" until submitDailyWeight/skipDailyWeight below
         // closes it.
@@ -741,7 +845,7 @@ export default function DashboardScreen({ navigation }: any) {
         setDailyPromptOpen(true);
       }
     })();
-  }, [loading, authUser, dailyPromptChecked, weightEntries]);
+  }, [loading, authUser, dailyPromptChecked, weightEntries, profile?.healthSyncEnabled]);
 
   const submitDailyWeight = async (weightLbs: number) => {
     if (!authUser) return;
@@ -749,6 +853,7 @@ export default function DashboardScreen({ navigation }: any) {
     setWeightEntries(updated);
     setDailyPromptOpen(false);
     setWeightPromptSettled(true);
+    setHealthWeightSuggestion(null);
     try {
       await setDoc(weightLogDocRef(authUser.uid), { entries: updated });
     } catch {
@@ -759,6 +864,7 @@ export default function DashboardScreen({ navigation }: any) {
   const skipDailyWeight = async () => {
     setDailyPromptOpen(false);
     setWeightPromptSettled(true);
+    setHealthWeightSuggestion(null);
     if (!authUser) return;
     try {
       await setDoc(
@@ -772,30 +878,11 @@ export default function DashboardScreen({ navigation }: any) {
     }
   };
 
-  // Sleep prompt — waits for weightPromptSettled, which only becomes true
-  // once the weight prompt is fully done (never needed, or shown then
-  // closed). Only fires once per session, only when today's sleep hasn't
-  // been logged and hasn't been skipped. Navigates to SleepScreen rather
-  // than opening a modal — sleep has its own full screen now, including
-  // the bedtime-reminder setting, which doesn't fit a popup.
-  useEffect(() => {
-    if (loading || !authUser || !weightPromptSettled || !birthdaySettled) return;
-    if (sleepPromptCheckedRef.current) return;
-    sleepPromptCheckedRef.current = true;
-    if (sleepHours > 0) return;
-
-    (async () => {
-      try {
-        const skipRef = doc(db, 'users', authUser.uid, 'meta', 'sleepPromptSkips');
-        const snap = await getDoc(skipRef);
-        const skipped = snap.exists() ? (snap.data() as any).skippedDate : null;
-        if (skipped === getTodayKey()) return;
-        navigation.navigate('Sleep', { dailyPrompt: true });
-      } catch {
-        navigation.navigate('Sleep', { dailyPrompt: true });
-      }
-    })();
-  }, [loading, authUser, weightPromptSettled, birthdaySettled, sleepHours]);
+  // Sleep is no longer force-prompted. Logging sleep now only happens when
+  // the user deliberately opens the Sleep screen through normal navigation
+  // (the Sleep stat card) — no automatic popup/redirect fires on Dashboard
+  // load. See the one-time bedtime-reminder prompt below, which replaces
+  // the old daily nag with a single first-login ask.
 
   const saveDayProgress = (updates: Partial<{ waterTotal: number; sleepHours: number; sleepLoggedFromTimes: boolean }>) => {
     if (!authUser) return;
@@ -834,9 +921,6 @@ export default function DashboardScreen({ navigation }: any) {
     // quests at once, and three overlapping vibrations read as a malfunction
     // rather than three rewards.
     haptics.questTick();
-    // Fires on TAP, alongside the haptic — not after the write settles.
-    sound.questTick();
-    sound.xpEarned();
 
     const baseXP = fresh.reduce((sum, id) => {
       const quest = QUEST_POOL.find(q => q.id === id);
@@ -924,6 +1008,35 @@ export default function DashboardScreen({ navigation }: any) {
     if (profile.notificationsEnabled === false) return;
     requestNotificationPermission();
   }, [profile]);
+
+  // Health sync — only runs once the user has actually connected Apple
+  // Health / Health Connect in Settings. Re-fetches on every focus (same
+  // cadence as the main progress reload above) so returning to the
+  // Dashboard after a walk shows an updated count without a manual refresh.
+  // fetchTodaySteps() already fails soft to 0 on any error/denial, so this
+  // has no separate error path of its own — a failed sync just leaves
+  // healthSteps at whatever it last successfully was.
+  useEffect(() => {
+    if (loading || !authUser || !profile?.healthSyncEnabled) return;
+    let cancelled = false;
+    const sync = async () => {
+      const steps = await fetchTodaySteps();
+      if (cancelled) return;
+      setHealthSteps(steps);
+      // Absolute overwrite, not incrementTodayField — see setTodayField's
+      // own comment in firebase/progress.ts for why steps needs "set" rather
+      // than "add" semantics. Skipped when the read comes back 0, since a
+      // genuine "0 steps today" and a failed/denied read are indistinguishable
+      // here, and a transient failure shouldn't be able to stomp a real
+      // count already saved earlier today.
+      if (steps > 0) {
+        setTodayField(authUser.uid, 'steps', steps).catch(() => {});
+      }
+    };
+    sync();
+    const unsubscribe = navigation.addListener('focus', sync);
+    return () => { cancelled = true; unsubscribe(); };
+  }, [loading, authUser, profile?.healthSyncEnabled, navigation]);
 
   // Local streak-risk reminder. Re-evaluated on every render where quest
   // completion or the streak count could have changed — see
@@ -1075,9 +1188,6 @@ export default function DashboardScreen({ navigation }: any) {
           </Text>
         </Pressable>
       )}
-      {/* The old Motivation banner that lived here (pinned above the
-          masthead) was removed — Motivation is reachable from the nav row
-          below now, and having it in both places was redundant. */}
 
       {/* Masthead — the day's dateline over a hairline, with the section nav
           underneath it as plain tracked labels. Replaces the old emoji glyph
@@ -1105,16 +1215,17 @@ export default function DashboardScreen({ navigation }: any) {
             <Text style={styles.dateline}>{dateline}</Text>
           </View>
           <View style={styles.mastRule} />
-          {/* Down to the 3 things opened every day. Sleep moved to being
+          {/* Down to the 2 things opened every day. Sleep moved to being
               purely notification-driven (see services/notifications.ts —
-              the bedtime reminder is now the only way in), and Weight moved
-              to the side panel — it already has its own daily auto-prompt
-              (WeightPromptModal below) for the "shows once when you open
-              the app" case, so it doesn't need a permanent nav slot too.
-              Friends/Leaderboard/History/Settings live in the side panel
-              opened by the hamburger above. 3 short labels comfortably fit
-              a single row without needing the horizontal-scroll workaround
-              the previous 5-item version needed. */}
+              the bedtime reminder is now the only way in), Weight moved to
+              the side panel (it already has its own daily auto-prompt —
+              WeightPromptModal below — for the "shows once when you open
+              the app" case, so it doesn't need a permanent nav slot too),
+              and Motivation was removed outright. Friends/Leaderboard/
+              History/Settings live in the side panel opened by the
+              hamburger above. Centered rather than left-aligned now that
+              there are only two items — left-aligned read fine as the start
+              of a longer row, but reads as oddly stranded with just two. */}
           <View style={styles.navRow}>
             <Pressable accessibilityRole="button" accessibilityLabel={t('nutrition')} onPress={() => navigation.navigate('Nutrition')} style={styles.navItem}>
               <Text style={styles.navLabel}>{t('nutrition')}</Text>
@@ -1122,10 +1233,6 @@ export default function DashboardScreen({ navigation }: any) {
             <View style={styles.navDivider} />
             <Pressable accessibilityRole="button" accessibilityLabel="Workout" onPress={() => navigation.navigate('Workout')} style={styles.navItem}>
               <Text style={styles.navLabel}>Workout</Text>
-            </Pressable>
-            <View style={styles.navDivider} />
-            <Pressable accessibilityRole="button" accessibilityLabel="Motivation" onPress={() => navigation.navigate('Motivation')} style={styles.navItem}>
-              <Text style={styles.navLabel}>Motivation</Text>
             </Pressable>
           </View>
         </View>
@@ -1181,7 +1288,7 @@ export default function DashboardScreen({ navigation }: any) {
               {(() => {
                 const hour = new Date().getHours();
                 return hour < 12 ? t('goodMorning') : hour < 18 ? 'Good afternoon' : 'Good evening';
-              })()}, {profile.firstName}
+              })()}, {profile.nickname || profile.firstName}
             </Text>
           )}
         </View>
@@ -1192,13 +1299,13 @@ export default function DashboardScreen({ navigation }: any) {
         <View style={styles.rankBlock}>
           <CircularRankBadge
             level={level}
-            progress={currentXP / TOTAL_XP_PER_LEVEL}
+            progress={currentXP / totalXP}
             rankName={rank}
             size={160}
           />
           {currentStreakDays > 0 && (
             <View style={styles.streakLineRow}>
-              <Ionicons name="flame" size={14} color={styles.streakLine.color} />
+              <PulsingIcon name="flame" size={14} color={styles.streakLine.color} />
               <Text style={styles.streakLine}> {currentStreakDays}-day streak</Text>
             </View>
           )}
@@ -1277,6 +1384,18 @@ export default function DashboardScreen({ navigation }: any) {
             onPress={() => navigation.navigate('Workout')}
           />
         </View>
+        {/* Steps — only shown once Health sync is actually connected (see
+            Settings' Customize tab), and only once a sync has resolved at
+            least once this session. A small line rather than a third
+            StatCard: the existing two-per-row layout above pairs neatly
+            (Calories+Workouts, Sleep+Weight), and wedging in a third card
+            would either break that pairing or force an awkward 3-up row —
+            see the task's own note that a plain line is enough for now. */}
+        {profile?.healthSyncEnabled && healthSteps !== null && (
+          <Text style={styles.healthStepsLine}>
+            {healthSteps.toLocaleString()} steps today · {Platform.OS === 'ios' ? 'Apple Health' : 'Health Connect'}
+          </Text>
+        )}
       </Enter>
 
       <Enter index={4}>
@@ -1299,34 +1418,30 @@ export default function DashboardScreen({ navigation }: any) {
       </Enter>
 
       {/* Weight modal */}
-      <Modal visible={weightModalVisible} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>{t('logWeight')}</Text>
-            <Text style={styles.modalSubtitle}>{t('weightPrompt')}</Text>
-            <Field
-              placeholder="e.g. 150"
-              value={weightInput}
-              onChangeText={setWeightInput}
-              keyboardType="numeric"
-            />
-            {weightEntries.length > 0 && (
-              <Text style={styles.orText}>
-                {weightEntries.length} {weightEntries.length === 1 ? 'entry' : 'entries'} logged so far
-              </Text>
-            )}
-            <View style={styles.modalButtons}>
-              <Button
-                label={t('cancel')}
-                onPress={() => setWeightModalVisible(false)}
-                variant="secondary"
-                style={styles.flexOne}
-              />
-              <Button label={t('save')} onPress={logWeight} style={styles.flexTwo} />
-            </View>
-          </View>
+      <BottomSheet visible={weightModalVisible} onClose={() => setWeightModalVisible(false)} palette={palette}>
+        <Text style={styles.modalTitle}>{t('logWeight')}</Text>
+        <Text style={styles.modalSubtitle}>{t('weightPrompt')}</Text>
+        <Field
+          placeholder="e.g. 150"
+          value={weightInput}
+          onChangeText={setWeightInput}
+          keyboardType="numeric"
+        />
+        {weightEntries.length > 0 && (
+          <Text style={styles.orText}>
+            {weightEntries.length} {weightEntries.length === 1 ? 'entry' : 'entries'} logged so far
+          </Text>
+        )}
+        <View style={styles.modalButtons}>
+          <Button
+            label={t('cancel')}
+            onPress={() => setWeightModalVisible(false)}
+            variant="secondary"
+            style={styles.flexOne}
+          />
+          <Button label={t('save')} onPress={logWeight} style={styles.flexTwo} />
         </View>
-      </Modal>
+      </BottomSheet>
 
       {/* Level-up takeover.
           In a Modal rather than an absolutely-positioned View, because this
@@ -1354,6 +1469,19 @@ export default function DashboardScreen({ navigation }: any) {
         currentWeight={latestWeight(weightEntries)?.weightLbs ?? null}
         onSubmit={submitDailyWeight}
         onSkip={skipDailyWeight}
+        healthSuggestion={healthWeightSuggestion}
+      />
+
+      {/* One-time first-login bedtime-reminder prompt. See the
+          bedtimePromptOpen effect above — shows once ever, then persists
+          users/{uid}/meta/onboarding.bedtimePromptShown so it never shows
+          again. */}
+      <BedtimePromptModal
+        visible={bedtimePromptOpen}
+        defaultHour={profile?.bedtimeHour ?? 22}
+        defaultMinute={profile?.bedtimeMinute ?? 0}
+        onConfirm={confirmBedtimePrompt}
+        onSkip={skipBedtimePrompt}
       />
 
     </ScrollView>
@@ -1457,19 +1585,25 @@ function makeStyles(palette: ReturnType<typeof usePalette>) {
     navRow: {
       flexDirection: 'row',
       alignItems: 'center',
+      justifyContent: 'center',
     },
     navItem: {
       paddingVertical: spacing.xs,
-      paddingHorizontal: spacing.sm,
+      paddingHorizontal: spacing.md,
     },
+    // Bigger than type.label's 11px (a shared token used for section
+    // headers/badges elsewhere — bumped here only, not in theme/tokens.ts,
+    // since this row is the one place asking for larger nav text).
     navLabel: {
       ...type.label,
+      fontSize: 14,
+      lineHeight: 18,
       color: palette.textSecondary,
       textTransform: 'uppercase',
     },
     navDivider: {
       width: 1,
-      height: 10,
+      height: 14,
       backgroundColor: palette.border,
     },
 
@@ -1566,21 +1700,10 @@ function makeStyles(palette: ReturnType<typeof usePalette>) {
       flexDirection: 'row',
       gap: spacing.md,
     },
-    modalOverlay: {
-      flex: 1,
-      backgroundColor: palette.scrim,
-      justifyContent: 'flex-end',
-    },
-    modalContent: {
-      backgroundColor: palette.surface,
-      // Bottom sheet: only the top corners are rounded, so the sheet still meets
-      // the screen edge instead of floating.
-      borderTopLeftRadius: radius.lg,
-      borderTopRightRadius: radius.lg,
-      borderTopWidth: 1,
-      borderColor: palette.border,
-      padding: spacing.xl,
-      gap: spacing.md,
+    healthStepsLine: {
+      ...type.bodySm,
+      color: palette.textMuted,
+      textAlign: 'center',
     },
     modalTitle: {
       ...type.serifHeading,

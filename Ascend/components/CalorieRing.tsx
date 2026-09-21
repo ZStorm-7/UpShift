@@ -148,7 +148,12 @@ export function CalorieRing({
           // to its available width, but the cap gives it a sane ceiling to
           // shrink FROM under iOS's "Larger Text" accessibility scaling
           // rather than starting from an enormous requested size.
-          maxFontSizeMultiplier={1.5}>
+          maxFontSizeMultiplier={1.5}
+          // Floor on how far adjustsFontSizeToFit is allowed to shrink —
+          // without this, a genuinely tight fit (a 6-digit calorie total on
+          // the smallest supported ring size) can shrink toward 0, which
+          // reads as "the text disappeared" rather than "the text is small."
+          minimumFontScale={0.6}>
           {Math.round(value).toLocaleString()}
         </Text>
         <Text
@@ -183,9 +188,34 @@ const styles = StyleSheet.create({
     // ringWrap and CircularRankBadge's ring container.
   },
   center: {
-    ...StyleSheet.absoluteFillObject,
+    // NOT StyleSheet.absoluteFillObject — spreading it here silently
+    // produced no top/left/right/bottom on this RN/Expo version (the same
+    // issue noted elsewhere in this codebase, e.g. components/anim.tsx),
+    // which is exactly why this text rendered BELOW the ring on iOS instead
+    // of centered over it: without those four properties this View has no
+    // absolute positioning at all, so it just flows in normal layout order
+    // after the <Svg>. Written out explicitly instead, which is the current
+    // correct way to get the same "fill the parent" box.
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     alignItems: 'center',
     justifyContent: 'center',
+    // Both belt-and-braces against a SECOND, separate compositing bug from
+    // the one above: on Android specifically, a plain sibling View stacked
+    // after a react-native-svg element doesn't reliably paint on top of it
+    // just because it comes later in JSX — Android's view-flattening
+    // optimization can leave the SVG's native surface painted last
+    // regardless of tree order, which reads as this text being invisible
+    // rather than merely mispositioned. `elevation` forces Android to give
+    // this View its own paint layer above the SVG's; `zIndex` is the
+    // equivalent for iOS/web, where sibling order already works but an
+    // explicit zIndex costs nothing and guards against the same class of
+    // bug if a future ancestor style changes stacking context.
+    elevation: 2,
+    zIndex: 2,
   },
   value: {
     ...typeScale.display,

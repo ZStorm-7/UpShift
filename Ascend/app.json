@@ -11,9 +11,15 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.upshift.app",
+      "icon": {
+        "light": "./assets/icon-light.png",
+        "dark": "./assets/icon-dark.png",
+        "tinted": "./assets/icon-tinted.png"
+      },
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "UpShift needs access to your photos so you can set a profile picture."
-      }
+      },
+      "usesAppleSignIn": true
     },
     "android": {
       "package": "com.upshift.app",
@@ -25,7 +31,12 @@
       },
       "permissions": [
         "android.permission.READ_MEDIA_IMAGES",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.RECORD_AUDIO",
+        "android.permission.health.READ_STEPS",
+        "android.permission.health.READ_WEIGHT",
+        "android.permission.health.READ_SLEEP",
+        "android.permission.health.READ_EXERCISE",
+        "android.permission.health.READ_HEART_RATE"
       ],
       "predictiveBackGestureEnabled": false
     },
@@ -54,6 +65,26 @@
           "image": "./assets/splash-icon.png",
           "resizeMode": "contain",
           "backgroundColor": "#0F1720"
+        }
+      ],
+      "expo-apple-authentication",
+      [
+        "@kingstinct/react-native-healthkit",
+        {
+          "NSHealthShareUsageDescription": "UpShift reads your steps, weight, sleep, and workouts so it can show them alongside what you log yourself.",
+          "NSHealthUpdateUsageDescription": false,
+          "background": false
+        }
+      ],
+      "react-native-health-connect",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 36,
+            "targetSdkVersion": 36,
+            "minSdkVersion": 26
+          }
         }
       ]
     ],

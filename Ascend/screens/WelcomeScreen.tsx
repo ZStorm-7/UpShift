@@ -69,11 +69,25 @@ export default function WelcomeScreen({ navigation }: any) {
       </View>
 
       <Enter index={2} style={styles.footer}>
+        {/* Two equally-weighted buttons, not a primary CTA + a text link —
+            "Log In" and "Get Started" are both first-class entry points into
+            the same next screen (AuthMethodScreen), just with a different
+            `mode` param that flips its heading/copy. Distinguished visually
+            only by variant (secondary vs. primary) so neither reads as an
+            afterthought. */}
+        <Button
+          label={t('logIn')}
+          variant="secondary"
+          fullWidth
+          accessibilityLabel={t('logIn')}
+          onPress={() => navigation.navigate('AuthMethod', { mode: 'login' })}
+        />
         <Button
           label={t('getStarted')}
+          variant="primary"
           fullWidth
           accessibilityLabel={t('getStarted')}
-          onPress={() => navigation.navigate('Auth')}
+          onPress={() => navigation.navigate('AuthMethod', { mode: 'signup' })}
         />
       </Enter>
     </Screen>
@@ -83,16 +97,26 @@ export default function WelcomeScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     justifyContent: 'space-between',
-    paddingTop: spacing.xxxl * 2,
-    // Less than paddingTop on purpose — pulls the CTA up off the very
+    // Less than a straight center split — the lockup sits in the upper
+    // third rather than vertically centered in the space above the
+    // buttons, so it reads as a deliberate top-weighted layout rather than
+    // "centered, but the buttons pushed it up a bit". `content` below no
+    // longer centers itself for the same reason.
+    paddingTop: spacing.xxxl * 2.5,
+    // Less than paddingTop on purpose — pulls the CTAs up off the very
     // bottom edge (which read as stranded down by the home indicator)
-    // without touching the top-half layout of the logo lockup.
+    // without touching the top-weighted layout of the logo lockup.
     paddingBottom: spacing.xxl,
   },
   content: {
     flex: 1,
     alignItems: 'center',
-    justifyContent: 'center',
+    // Was `justify-content: center`, which put the lockup in the exact
+    // middle of the space between the top padding and the buttons. Starting
+    // it instead — combined with the bigger paddingTop above — is what
+    // actually moves it up into the upper third rather than just shrinking
+    // the space it's centered within.
+    justifyContent: 'flex-start',
     gap: spacing.xl,
   },
   // Same gap the splash uses between its three elements, for the same reason:
@@ -113,5 +137,6 @@ const styles = StyleSheet.create({
   },
   footer: {
     width: '100%',
+    gap: spacing.md,
   },
 });

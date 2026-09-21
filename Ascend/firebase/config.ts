@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { initializeAuth, getAuth, type Auth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
+import { getFunctions } from 'firebase/functions';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // getReactNativePersistence exists only in the SDK's React Native build.
@@ -15,7 +16,13 @@ const rnPersistence = (require('firebase/auth') as {
 
 // Not secrets — see the mentor chat for why it's safe for these values to be public.
 // Real protection lives in Firestore's security rules, not in hiding this file.
-const firebaseConfig = {
+// Exported (not just module-local) so anything that needs the raw config
+// object rather than an initialized SDK instance can reuse this one copy
+// instead of retyping it — e.g. FirebaseRecaptchaVerifierModal (see
+// AuthScreen's phone sign-in), which needs firebaseConfig itself, not `app`
+// or `auth`, to spin up its own short-lived Firebase Web SDK instance inside
+// its WebView.
+export const firebaseConfig = {
   apiKey: 'AIzaSyBy2EWpZEjcxB9UezpYMumAY1vvfxDo-os',
   authDomain: 'upshift-3ec69.firebaseapp.com',
   projectId: 'upshift-3ec69',
@@ -76,3 +83,10 @@ export const db = getFirestore(app);
 // for a few kilobytes, so profile photos go to Cloudinary instead. See
 // services/cloudinary.ts. Auth and Firestore both still work fine on the
 // no-cost Spark plan.
+
+// Callable Cloud Functions (functions/src/index.ts) — currently just the
+// forgot-password PIN flow (see firebase/passwordReset.ts). Cloud Functions
+// themselves DO require the Blaze plan (see that file's own comment), so
+// this only matters once that's on file; getFunctions() itself is free to
+// call regardless.
+export const functions = getFunctions(app);

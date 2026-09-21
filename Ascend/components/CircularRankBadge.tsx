@@ -22,7 +22,7 @@ import { usePalette } from '../theme/themedColors';
 
 type Props = {
   level: number;                // 1..∞
-  progress: number;             // 0..1 (currentXP / TOTAL_XP_PER_LEVEL)
+  progress: number;             // 0..1 (currentXP / xpRequiredForLevel(level))
   rankName: string;             // e.g. "ELITE"
   size?: number;                // total diameter — default 140
 };

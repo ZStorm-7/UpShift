@@ -23,7 +23,6 @@ import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useUser, calculateWaterGoal, calculateCalorieGoal } from '../context/UserContext';
 import { useLanguage } from '../i18n/LanguageContext';
-import { LANGUAGES, LanguageCode } from '../i18n/translations';
 import { uploadProfilePhoto, photoUploadAvailable, getDefaultAvatarColor } from '../services/avatar';
 import { avatarPalette } from '../theme/colors';
 import AvatarView from '../components/Avatar';
@@ -88,7 +87,6 @@ export default function EditProfileScreen({ navigation }: any) {
   // actually taps a swatch.
   const [avatarColor, setAvatarColor] = useState<string | undefined>(profile?.avatarColor);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
-  const [language, setLanguage] = useState<LanguageCode>((profile?.language as LanguageCode) ?? 'en');
   // Unset/undefined reads as "on" everywhere this flag is checked — see the
   // comment on UserProfile.notificationsEnabled — so the toggle itself has
   // to default to true for the same reason, not just false-by-omission.
@@ -173,6 +171,18 @@ export default function EditProfileScreen({ navigation }: any) {
       const updatedProfile = {
         firstName,
         lastInitial,
+        // This screen still only edits first name + last initial — full
+        // name (middle/last), nickname, date of birth and the goals array
+        // all live on Settings/Onboarding and aren't fields on this form,
+        // so (like physicalConditions, bio, etc. below) they have to be
+        // explicitly carried forward or this screen's whole-document
+        // setDoc silently erases them the next time someone saves here.
+        ...(profile?.middleName ? { middleName: profile.middleName } : {}),
+        ...(profile?.lastName ? { lastName: profile.lastName } : {}),
+        ...(profile?.nickname ? { nickname: profile.nickname } : {}),
+        ...(profile?.dateOfBirth ? { dateOfBirth: profile.dateOfBirth } : {}),
+        ...(profile?.ageGroup ? { ageGroup: profile.ageGroup } : {}),
+        ...(profile?.goals ? { goals: profile.goals } : {}),
         age: ageNum,
         heightFeet: parseInt(heightFeet),
         heightInches: parseInt(heightInches) || 0,
@@ -188,7 +198,7 @@ export default function EditProfileScreen({ navigation }: any) {
         // OMITTED from the written object, never set to undefined. The same
         // rule the leaderboard publish in DashboardScreen follows.
         ...(avatarColor ? { avatarColor } : {}),
-        language,
+        language: profile?.language ?? 'en',
         notificationsEnabled,
         // This screen writes the WHOLE profile document (setDoc without
         // merge), not a partial update — so any field this form doesn't
@@ -404,32 +414,6 @@ export default function EditProfileScreen({ navigation }: any) {
                   onChangeText={(val) => setLastInitial(val.slice(0, 1).toUpperCase())}
                   maxLength={1}
                 />
-              </View>
-            </Card>
-          </Enter>
-
-          <Enter index={1}>
-            <SectionTitle><Ionicons name="globe" size={13} color={palette.textMuted} /> {t('languageSection')}</SectionTitle>
-            <Card>
-              <View style={styles.chipWrap}>
-                {LANGUAGES.map(lang => {
-                  const selected = language === lang.code;
-                  return (
-                    <PressableScale
-                      key={lang.code}
-                      accessibilityRole="radio"
-                      accessibilityLabel={lang.nativeLabel}
-                      accessibilityState={{ selected }}
-                      onPress={() => choose(setLanguage, lang.code as LanguageCode)}>
-                      <View style={[dynamicStyles.chip, styles.chipRow, selected && dynamicStyles.chipSelected]}>
-                        <Text style={[dynamicStyles.chipLabel, selected && dynamicStyles.chipLabelSelected]}>
-                          {lang.nativeLabel}
-                        </Text>
-                        {selected && <Ionicons name="checkmark" size={16} color={palette.accent} />}
-                      </View>
-                    </PressableScale>
-                  );
-                })}
               </View>
             </Card>
           </Enter>
@@ -683,7 +667,7 @@ const styles = StyleSheet.create({
   },
   notificationCopy: {
     flex: 1,
-    gap: spacing.xs4,
+    gap: spacing.xs,
   },
   notificationHint: {
     ...type.bodySm,

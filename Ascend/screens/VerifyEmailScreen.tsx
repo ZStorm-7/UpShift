@@ -18,7 +18,7 @@ import { Screen, Button } from '../components/ui';
 import { spacing, radius, type } from '../theme/tokens';
 import { usePalette } from '../theme/themedColors';
 import { useUser } from '../context/UserContext';
-import { liabilityDocRef } from './LiabilityScreen';
+import { legalAcceptanceDocRef } from './LegalGateScreen';
 import { getAuthErrorMessage } from '../firebase/authErrors';
 import { confirmAsync } from '../utils/confirm';
 import haptics from '../services/haptics';
@@ -75,13 +75,13 @@ export default function VerifyEmailScreen({ navigation }: any) {
       haptics.goalMet();
       // Same fork RootNavigator uses on a fresh boot, done here explicitly
       // because this screen is reached both mid-flow (brand-new subscriber,
-      // fresh off Liability's "not accepted yet") and on a cold boot from a
+      // fresh off LegalGate's "not accepted yet") and on a cold boot from a
       // returning subscriber who already has both — those need different
       // next stops, and this is the one place that knows which.
-      const liabilitySnap = await getDoc(liabilityDocRef(authUser.uid));
-      const hasLiability = liabilitySnap.exists() && !!liabilitySnap.data()?.accepted;
-      if (!hasLiability) {
-        navigation.replace('Liability');
+      const legalSnap = await getDoc(legalAcceptanceDocRef(authUser.uid));
+      const hasLegalAcceptance = legalSnap.exists() && !!legalSnap.data()?.accepted;
+      if (!hasLegalAcceptance) {
+        navigation.replace('LegalGate');
         return;
       }
       const hasProfile = await loadProfile(authUser.uid);

@@ -24,6 +24,7 @@ import {
   removeFriend,
 } from '../firebase/friends';
 import { createChallenge, hasActiveChallengeWith } from '../firebase/challenges';
+import { getOrCreateConversation } from '../firebase/messages';
 import { safeGoBack } from '../utils/nav';
 
 const AVATAR_SIZE = 44;
@@ -158,6 +159,20 @@ export default function FriendsScreen({ navigation }: any) {
     }
   };
 
+  const handleMessage = async (friend: LeaderboardEntry) => {
+    if (!authUser) return;
+    setBusyUid(friend.uid);
+    try {
+      const conversationId = await getOrCreateConversation(authUser.uid, friend.uid);
+      haptics.selection();
+      navigation.navigate('Chat', { conversationId, peerUid: friend.uid, peer: friend });
+    } catch {
+      haptics.error();
+    } finally {
+      setBusyUid(null);
+    }
+  };
+
   const handleChallenge = async (friend: LeaderboardEntry) => {
     if (!authUser) return;
     setBusyUid(friend.uid);
@@ -202,13 +217,22 @@ export default function FriendsScreen({ navigation }: any) {
         title={t('friendsTitle')}
         onBack={() => safeGoBack(navigation)}
         right={
-          <Pressable
-            hitSlop={10}
-            accessibilityRole="button"
-            accessibilityLabel={t('challengesTitle')}
-            onPress={() => navigation.navigate('Challenges')}>
-            <Ionicons name="flag" size={20} color={palette.textPrimary} />
-          </Pressable>
+          <View style={styles.headerActions}>
+            <Pressable
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel="Messages"
+              onPress={() => navigation.navigate('Messages')}>
+              <Ionicons name="chatbubbles" size={20} color={palette.textPrimary} />
+            </Pressable>
+            <Pressable
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel={t('challengesTitle')}
+              onPress={() => navigation.navigate('Challenges')}>
+              <Ionicons name="flag" size={20} color={palette.textPrimary} />
+            </Pressable>
+          </View>
         }
       />
 
@@ -309,6 +333,7 @@ export default function FriendsScreen({ navigation }: any) {
                     <ActivityIndicator color={palette.accent} />
                   ) : (
                     <View style={styles.friendActions}>
+                      <Button label="Message" onPress={() => handleMessage(friend)} variant="secondary" size="sm" />
                       <Button label={t('challengeAction')} onPress={() => handleChallenge(friend)} variant="secondary" size="sm" />
                       <Button label={t('remove')} onPress={() => handleRemove(friend.uid)} variant="ghost" size="sm" />
                     </View>
@@ -325,6 +350,11 @@ export default function FriendsScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
   skeletonStack: {
     gap: spacing.lg,
     paddingTop: spacing.md,

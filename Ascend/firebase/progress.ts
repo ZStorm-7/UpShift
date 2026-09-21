@@ -1,17 +1,44 @@
 import { doc, collection, getDocs, runTransaction, increment, setDoc } from 'firebase/firestore';
 import { db } from './config';
 
-// XP needed to go up one level. Shared by every screen that awards XP
-// (Dashboard quests, Workout sets) so leveling logic stays consistent.
-export const TOTAL_XP_PER_LEVEL = 100;
+// XP needed to go from `level` to `level + 1`. Exponential rather than flat:
+// level 1 asks for 100 XP, level 50 for ~887, level 99 (the last stretch
+// before the level-100 rank cap — see data/ranks.ts) for ~7,187. A player
+// earning a steady 100-150 XP/day (a few quests plus a workout) reaches
+// level 100 in low-single-digit YEARS, not weeks — "take a LOT of time" was
+// the explicit ask, and a flat 100/level made every level after the first
+// few trivial.
+//
+// GROWTH is deliberately mild (4.5%/level, compounding) rather than
+// aggressive — a steeper curve either trivializes early levels even more or
+// makes mid-game leveling feel like it stalls. Levels beyond 100 (prestige —
+// see getRankInfo in data/ranks.ts, which freezes the RANK title at the top
+// tier but never stops the level number from climbing) use the exact same
+// formula uninterrupted: there's no special-case ceiling, the curve alone
+// makes each additional level past 100 take proportionally longer forever.
+const BASE_XP_PER_LEVEL = 100;
+const XP_GROWTH_RATE = 1.045;
+
+export function xpRequiredForLevel(level: number): number {
+  return Math.round(BASE_XP_PER_LEVEL * Math.pow(XP_GROWTH_RATE, Math.max(level, 1) - 1));
+}
+
+// Kept as a named export (rather than deleting it) because several UI spots
+// compute a 0..1 progress ratio and used to divide by this flat constant —
+// see xpRequiredForLevel above for why per-level XP is no longer flat. Call
+// sites should use `currentXP / xpRequiredForLevel(level)` instead; this is
+// only the level-1 special case of that, kept for anything that still
+// imports it directly during the transition.
+export const TOTAL_XP_PER_LEVEL = BASE_XP_PER_LEVEL;
 
 // Adds xpGained to (currentXP, level), rolling over into level-ups as
-// needed (handles gaining enough XP to jump more than one level at once).
+// needed (handles gaining enough XP to jump more than one level at once —
+// e.g. a big health-score-boosted food log or a birthday XP multiplier).
 export function applyXPGain(currentXP: number, level: number, xpGained: number) {
   let xp = currentXP + xpGained;
   let lvl = level;
-  while (xp >= TOTAL_XP_PER_LEVEL) {
-    xp -= TOTAL_XP_PER_LEVEL;
+  while (xp >= xpRequiredForLevel(lvl)) {
+    xp -= xpRequiredForLevel(lvl);
     lvl += 1;
   }
   return { currentXP: xp, level: lvl };
@@ -138,4 +165,19 @@ export async function awardXP(
 // correct by construction rather than by remembering to reload.
 export function incrementTodayField(uid: string, field: string, amount: number) {
   return setDoc(dayDocRef(uid), { [field]: increment(amount) }, { merge: true });
+}
+
+// Overwrites a numeric field on TODAY's day document with an ABSOLUTE value,
+// rather than adding to whatever's already there.
+//
+// This is deliberately NOT incrementTodayField. A synced-from-Health field
+// like `steps` is a running total the OS already tracks for the whole day —
+// every fetch of "today's steps" returns the full count so far, not a
+// delta since the last fetch. Feeding that through increment() would add
+// the same total again on every sync (open the app three times today, get
+// 3x the real step count); this sets the field to exactly what was read,
+// so re-syncing the same number is a no-op and syncing a bigger number
+// later in the day simply replaces the smaller one.
+export function setTodayField(uid: string, field: string, value: number) {
+  return setDoc(dayDocRef(uid), { [field]: value }, { merge: true });
 }

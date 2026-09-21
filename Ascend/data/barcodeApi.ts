@@ -40,6 +40,15 @@ export async function lookupBarcode(barcode: string): Promise<FoodDatabaseItem |
       protein: Math.round(nutriments[`proteins${suffix}`] || 0),
       carbs: Math.round(nutriments[`carbohydrates${suffix}`] || 0),
       fat: Math.round(nutriments[`fat${suffix}`] || 0),
+      // Packaging labels (what Open Food Facts is built from) report these
+      // far more consistently than a quick manual/custom entry ever will —
+      // this is the "richer" source utils/foodHealth.ts's comments refer
+      // to. Sugar/fiber come back in grams already; sodium comes back in
+      // grams too (OFF's convention), so it's converted to mg to match the
+      // unit the rest of this app uses for sodium.
+      ...(nutriments[`sugars${suffix}`] != null ? { sugar: Math.round(nutriments[`sugars${suffix}`]) } : {}),
+      ...(nutriments[`fiber${suffix}`] != null ? { fiber: Math.round(nutriments[`fiber${suffix}`]) } : {}),
+      ...(nutriments[`sodium${suffix}`] != null ? { sodium: Math.round(nutriments[`sodium${suffix}`] * 1000) } : {}),
     };
   } catch (err) {
     console.error('Barcode lookup failed:', err);
