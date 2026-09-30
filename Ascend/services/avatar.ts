@@ -1,4 +1,4 @@
-import { uploadImageToCloudinary, isCloudinaryConfigured } from './cloudinary';
+import { uploadImageToCloudinary } from './cloudinary';
 import { avatarPalette } from '../theme/colors';
 
 // Profile pictures, in order of what a user actually sees:
@@ -18,8 +18,15 @@ import { avatarPalette } from '../theme/colors';
 
 /** Whether photo upload is available at all. The UI uses this to hide the
  *  upload button rather than offer something that's guaranteed to fail —
- *  the initials avatar works fine without any of this configured. */
-export const photoUploadAvailable = isCloudinaryConfigured;
+ *  the initials avatar works fine without any of this configured.
+ *
+ *  Hard-disabled for now (independent of Cloudinary being configured) —
+ *  the upload flow has an open, unreproduced bug report and is being pulled
+ *  from the UI until that's tracked down. Someone who already has a photo
+ *  keeps seeing it fine; this only hides the button that would let anyone
+ *  set a NEW one. Flip back to `isCloudinaryConfigured` once the upload
+ *  path is fixed and re-verified. */
+export const photoUploadAvailable = () => false;
 
 // Uploads a locally-picked image and returns a public URL to store on the
 // profile. Storing the URL (not the image bytes) keeps profile documents in
