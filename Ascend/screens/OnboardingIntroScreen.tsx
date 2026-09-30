@@ -8,10 +8,15 @@
 // cold-boot routing, so an existing user who hasn't finished onboarding goes
 // straight back into the questions instead of seeing this every reopen.
 //
-// The three chapters map onto OnboardingScreen's 8 steps as:
-//   1. Basics     → steps 1-3 (name, date of birth, height & weight)
-//   2. About You  → steps 4-6 (gender, activity level, physical considerations)
-//   3. Your Goals → steps 7-8 (goals, summary)
+// The three chapters map onto OnboardingScreen's 15 steps exactly as that
+// screen's own CHAPTERS constant defines them:
+//   1. Basics     -> steps 1-4  (name, date of birth, height, weight)
+//   2. About You  -> steps 5-12 (body fat, gender, activity, lifting/cardio
+//                                experience, physical considerations, expenditure)
+//   3. Your Goals -> steps 13-15 (goals, referral source, summary)
+// Kept in sync by hand, not by import - this screen doesn't render
+// OnboardingScreen's progress bar, just previews the same three names before
+// it. If the step count or chapter boundaries change there, update both.
 
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { usePalette } from '../theme/themedColors';

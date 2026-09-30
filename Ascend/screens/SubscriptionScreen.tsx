@@ -92,6 +92,17 @@ export default function SubscriptionScreen({ navigation, route }: any) {
         // it, since a just-completed purchase IS a real subscription
         // regardless of whether context has caught up yet.
         navigation.replace(emailVerified ? 'LegalGate' : 'VerifyEmail');
+      } else if (result === 'unavailable') {
+        // Not a failure — this build genuinely has no native purchases
+        // module (Expo Go, the web preview, any JS-only environment). The
+        // old code showed the exact same "Purchase failed" alert here as for
+        // a real store error, which reads as the subscription flow being
+        // broken when it's actually just not testable outside a real
+        // device/store build. See services/purchases.ts's nativePurchasesAvailable.
+        Alert.alert(
+          'Not available in this build',
+          'In-app purchases only work in a real App Store/Play Store build, not in this preview. Start the free trial to keep testing, or try this on a TestFlight/Play build.',
+        );
       } else if (result === 'error') {
         Alert.alert(
           'Purchase failed',
@@ -298,6 +309,27 @@ export default function SubscriptionScreen({ navigation, route }: any) {
           Subscriptions renew automatically unless cancelled. Cancel any time in your
           {' '}App Store or Play Store settings.
         </Text>
+
+        {/* Apple 3.1.2 / Play Billing both require a functional link to the
+            Privacy Policy AND Terms of Use directly on the purchase screen
+            itself — not just reachable from Settings several taps away. */}
+        <Text style={[styles.legalLinks, { color: palette.textMuted }]}>
+          <Text
+            onPress={() => navigation.navigate('TermsOfService')}
+            accessibilityRole="link"
+            accessibilityLabel="Terms of Service"
+            style={[styles.legalLink, { color: palette.textSecondary }]}>
+            Terms of Service
+          </Text>
+          {'  ·  '}
+          <Text
+            onPress={() => navigation.navigate('PrivacyPolicy')}
+            accessibilityRole="link"
+            accessibilityLabel="Privacy Policy"
+            style={[styles.legalLink, { color: palette.textSecondary }]}>
+            Privacy Policy
+          </Text>
+        </Text>
       </ScrollView>
     </Screen>
   );
@@ -444,5 +476,13 @@ const styles = StyleSheet.create({
   fine: {
     fontFamily: fontFamily.sans, fontSize: 11, lineHeight: 16,
     textAlign: 'center',
+  },
+  legalLinks: {
+    fontFamily: fontFamily.sans, fontSize: 11,
+    textAlign: 'center',
+    marginTop: spacing.sm,
+  },
+  legalLink: {
+    textDecorationLine: 'underline',
   },
 });

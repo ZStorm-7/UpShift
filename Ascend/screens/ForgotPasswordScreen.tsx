@@ -5,12 +5,13 @@
 // enter that code alongside a new password.
 
 import { useState, useRef } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
 import { usePalette } from '../theme/themedColors';
 import { spacing, type } from '../theme/tokens';
 import { Screen, AppBar, Field, Button } from '../components/ui';
 import { Enter } from '../components/dashboard';
 import { requestPasswordResetPin } from '../firebase/passwordReset';
+import { isValidEmail } from '../utils/email';
 import haptics from '../services/haptics';
 
 export default function ForgotPasswordScreen({ navigation }: any) {
@@ -20,8 +21,10 @@ export default function ForgotPasswordScreen({ navigation }: any) {
   const [submitting, setSubmitting] = useState(false);
   const inFlight = useRef(false);
 
+  const emailError = email.length > 0 && !isValidEmail(email) ? 'Enter a valid email address' : undefined;
+
   async function handleSubmit() {
-    if (inFlight.current || !email) return;
+    if (inFlight.current || !email || !isValidEmail(email)) return;
     inFlight.current = true;
     setError('');
     setSubmitting(true);
@@ -41,7 +44,7 @@ export default function ForgotPasswordScreen({ navigation }: any) {
   return (
     <Screen>
       <AppBar title="Forgot password" onBack={() => navigation.goBack()} />
-      <View style={styles.content}>
+      <KeyboardAvoidingView style={styles.content} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <Enter index={0}>
           <Text style={[styles.body, { color: palette.textSecondary }]}>
             Enter the email address on your account and we'll send you a 6-digit code to reset your
@@ -60,7 +63,8 @@ export default function ForgotPasswordScreen({ navigation }: any) {
             autoCapitalize="none"
             autoCorrect={false}
             returnKeyType="go"
-            onSubmitEditing={email ? handleSubmit : undefined}
+            onSubmitEditing={email && isValidEmail(email) ? handleSubmit : undefined}
+            error={emailError}
           />
         </Enter>
         {!!error && (
@@ -74,11 +78,11 @@ export default function ForgotPasswordScreen({ navigation }: any) {
           <Button
             label={submitting ? 'Sending…' : 'Send code'}
             onPress={handleSubmit}
-            disabled={!email || submitting}
+            disabled={!email || !isValidEmail(email) || submitting}
             fullWidth
           />
         </Enter>
-      </View>
+      </KeyboardAvoidingView>
     </Screen>
   );
 }

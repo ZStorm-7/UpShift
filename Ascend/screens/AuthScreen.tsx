@@ -27,6 +27,9 @@ import {
 import Svg, { Path } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '../context/UserContext';
+import { useSubscription } from '../context/SubscriptionContext';
+import { auth } from '../firebase/config';
+import { resolvePostAuthRoute } from '../utils/postAuthRoute';
 import { usePalette } from '../theme/themedColors';
 import { spacing, radius, type, layout } from '../theme/tokens';
 import { fontFamily } from '../theme/fonts';
@@ -37,6 +40,7 @@ import AuthTransition from '../components/AuthTransition';
 import AuthBackground from '../components/AuthBackground';
 import { PasswordStrengthChecklist, isPasswordStrong } from '../components/PasswordStrength';
 import { getAuthErrorMessage } from '../firebase/authErrors';
+import { isValidEmail } from '../utils/email';
 import { useLanguage } from '../i18n/LanguageContext';
 import { withMinDuration, withTimeout, AUTH_TRANSITION_MS, AUTH_TIMEOUT_MS } from '../utils/timing';
 
@@ -46,8 +50,17 @@ import { withMinDuration, withTimeout, AUTH_TRANSITION_MS, AUTH_TIMEOUT_MS } fro
 const MARK_WIDTH = 44;
 const MARK_HEIGHT = 38;
 
+// Temporarily disabled — password-reset emails aren't reaching inboxes yet
+// (Resend delivery issue, still being debugged). The whole flow
+// (ForgotPasswordScreen, ResetPasswordScreen, the requestPasswordResetPin/
+// verifyPinAndResetPassword Cloud Functions) is untouched and still wired
+// up; this flag is the only thing standing between here and it working
+// again. Flip back to true once delivery is confirmed working.
+const FORGOT_PASSWORD_ENABLED = false;
+
 export default function AuthScreen({ navigation, route }: any) {
   const { signUp, logIn, loadProfile, registerDeviceSession } = useUser();
+  const { refreshEntitlement } = useSubscription();
   const { t } = useLanguage();
   const palette = usePalette();
   const initialMode: 'login' | 'signup' = route?.params?.mode === 'login' ? 'login' : 'signup';
@@ -89,12 +102,23 @@ export default function AuthScreen({ navigation, route }: any) {
         // trial/purchase handlers continue on to 'LegalGate' from there.
         navigation.replace('Subscription');
       } else {
+        // A log-in has to make the SAME landing decision RootNavigator makes
+        // on cold boot — entitlement, email verification, legal acceptance,
+        // THEN profile — not just "does a profile exist". Skipping straight
+        // to Dashboard on `hasProfile` alone (the old behavior) is how a
+        // returning user whose trial had expired, or who'd cancelled a paid
+        // subscription, could log back in and land on Dashboard with full
+        // access, never re-hitting the paywall. See utils/postAuthRoute.ts.
         const target = await withMinDuration(
           withTimeout(
             (async () => {
               const uid = await logIn(email, password);
-              const hasProfile = await loadProfile(uid);
-              return hasProfile ? 'Dashboard' : 'Onboarding';
+              return resolvePostAuthRoute({
+                uid,
+                emailVerified: auth.currentUser?.emailVerified ?? false,
+                loadProfile,
+                refreshEntitlement,
+              });
             })(),
             AUTH_TIMEOUT_MS
           ),
@@ -113,8 +137,14 @@ export default function AuthScreen({ navigation, route }: any) {
   // Only gated on sign-up — an existing account's password was created
   // under whatever rules applied when they signed up, and log-in has no
   // business re-litigating that.
-  const disabled = submitting || !email || !password || (isSignUp && !isPasswordStrong(password));
+  const disabled =
+    submitting || !email || !isValidEmail(email) || !password || (isSignUp && !isPasswordStrong(password));
   const submitLabel = isSignUp ? t('signUp') : t('logIn');
+  // Empty just means "hasn't typed anything yet" — not an error. Once
+  // there's SOMETHING there, a shape that isn't even email-like ("asdf")
+  // gets flagged immediately rather than waiting for a Firebase round trip
+  // to reject it (sign-up) or silently never matching an account (log-in).
+  const emailError = email.length > 0 && !isValidEmail(email) ? 'Enter a valid email address' : undefined;
 
   return (
     <Screen style={[styles.screen, { backgroundColor: palette.bg }]}>
@@ -169,6 +199,7 @@ export default function AuthScreen({ navigation, route }: any) {
               autoCapitalize="none"
               autoCorrect={false}
               returnKeyType="next"
+              error={emailError}
             />
             <Field
               label={t('password')}
@@ -192,8 +223,8 @@ export default function AuthScreen({ navigation, route }: any) {
                 before they hit it, not after. */}
             {isSignUp && <PasswordStrengthChecklist password={password} palette={palette} />}
             {/* Log-in only — a sign-up form has no existing password to
-                forget yet. */}
-            {!isSignUp && (
+                forget yet. Also gated on FORGOT_PASSWORD_ENABLED above. */}
+            {!isSignUp && FORGOT_PASSWORD_ENABLED && (
               <Pressable
                 onPress={() => navigation.navigate('ForgotPassword')}
                 disabled={submitting}

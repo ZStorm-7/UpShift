@@ -138,5 +138,8 @@ const styles = StyleSheet.create({
   footer: {
     width: '100%',
     gap: spacing.md,
+    // A small extra lift off the bottom edge, on top of the container's own
+    // paddingBottom — requested as a "tiny bit up" nudge for the two CTAs.
+    marginBottom: spacing.lg,
   },
 });

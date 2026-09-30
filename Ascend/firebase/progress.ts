@@ -181,3 +181,16 @@ export function incrementTodayField(uid: string, field: string, amount: number) 
 export function setTodayField(uid: string, field: string, value: number) {
   return setDoc(dayDocRef(uid), { [field]: value }, { merge: true });
 }
+
+// Same idea as incrementTodayField, but on the LIFETIME stats doc
+// (statsDocRef) instead of today's — for counters achievements care about
+// (total workouts, total foods logged) that need to survive past midnight
+// rather than reset with the day. Kept separate from awardXP's own
+// transaction on this same doc: awardXP runs on every XP-earning action
+// (quests, food logs, workouts alike), so folding a "totalWorkoutsCompleted"
+// bump into it would count non-workout XP awards too. A plain increment()
+// write is also cheaper than a transaction when there's no read-modify-write
+// dependency on the previous value, which a pure counter bump never has.
+export function incrementStatsField(uid: string, field: string, amount = 1) {
+  return setDoc(statsDocRef(uid), { [field]: increment(amount) }, { merge: true });
+}

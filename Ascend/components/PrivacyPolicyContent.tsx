@@ -4,15 +4,17 @@
 // surfaces can never drift out of sync with each other.
 //
 // NOT legal advice. This is a genuine best-effort policy covering what the
-// app actually does (sign-in providers, AI photo processing, crash
-// reporting, optional Health data, push tokens, subscriptions) in the shape
-// a real privacy policy takes — GDPR-style rights, a CCPA "we don't sell
-// data" statement, named subprocessors, HealthKit's required non-advertising
-// commitment — but it still needs a lawyer's review against your specific
-// jurisdiction(s) and App Store/Play Store submission before shipping. Keep
-// this in sync with reality: if a data source or third-party processor is
-// added or removed from the app, this file has to change with it, or the
-// policy stops being true.
+// app actually does (AI photo/description processing, crash reporting,
+// optional Health Connect data, push tokens, subscriptions) in the shape a
+// real privacy policy takes — GDPR-style rights, a CCPA "we don't sell data"
+// statement, named subprocessors, Health Connect's required
+// non-advertising commitment — but it still needs a lawyer's review against
+// your specific jurisdiction(s) and App Store/Play Store submission before
+// shipping. Keep this in sync with reality: if a data source or third-party
+// processor is added or removed from the app, this file has to change with
+// it, or the policy stops being true. (Sign-in used to include Google,
+// Apple, and phone-number options — all removed in favor of email/password
+// only, which is why this file no longer mentions them.)
 
 import { Text, View, StyleSheet } from 'react-native';
 import { spacing } from '../theme/tokens';
@@ -29,18 +31,18 @@ export default function PrivacyPolicyContent({ palette }: { palette: Palette }) 
       </Section>
 
       <Section title="2. Information We Collect" palette={palette}>
-        <Bold>Account information:</Bold> your email address and password, or — if you choose one of our other sign-in options — the name, email address, and unique account identifier shared with us by Google, Apple, or your phone carrier (for phone-number sign-in) when you authenticate through them. We never see or store your Google/Apple password.{'\n\n'}
+        <Bold>Account information:</Bold> your email address and password.{'\n\n'}
         <Bold>Profile information:</Bold> name, nickname, date of birth, height, weight, gender, activity level, fitness goals, and any physical conditions you choose to share during onboarding.{'\n\n'}
         <Bold>Health and fitness data you log:</Bold> meals, workouts, water intake, sleep, and weight entries you enter yourself.{'\n\n'}
-        <Bold>Health and fitness data from connected sources:</Bold> if you choose to connect Apple Health or Android Health Connect, we import the specific data types you approve (for example steps, workouts, weight, or sleep) directly from that source. This is entirely optional, off by default, and only active for data types you explicitly grant permission for. See Section 11 for how this data is used.{'\n\n'}
-        <Bold>Food photos:</Bold> if you use the camera or "describe your meal" features to log food, the photo or text description you provide is sent to Google's Gemini AI service to identify the food and estimate its nutrition. We don't retain a permanent copy of these images ourselves beyond what's needed to complete that request.{'\n\n'}
+        <Bold>Health and fitness data from connected sources:</Bold> if you choose to connect Android Health Connect, we import the specific data types you approve (for example steps, workouts, weight, or sleep) directly from that source. This is entirely optional, off by default, Android-only, and only active for data types you explicitly grant permission for. See Section 11 for how this data is used.{'\n\n'}
+        <Bold>Food descriptions and photos:</Bold> if you use the camera, "describe your meal," or barcode features to log food, the photo or text description you provide is sent to Google's Gemini AI service to identify the food and estimate its nutrition. Only the information needed to process that specific request is sent — we do not intentionally include your email address, name, profile information, workout history, fitness goals, account credentials, or any other unrelated personal information in what's sent to Gemini, and AI processing only ever happens when you actively choose to use it. We don't retain a permanent copy of these images ourselves beyond what's needed to complete that request.{'\n\n'}
         <Bold>Usage data:</Bold> how you use the App — quests completed, streaks, screens visited — used to keep the App working and to improve it.{'\n\n'}
         <Bold>Device and diagnostic information:</Bold> device type, operating system version, and — only when the App encounters an error — a crash report (the error message and a technical stack trace) so we can find and fix the problem. Crash reports do not include your profile data.{'\n\n'}
         <Bold>Push notification token:</Bold> if you enable notifications, a device-specific token used solely to deliver notifications you've opted into (reminders, new-message alerts). One token per device, cleared when you sign out.
       </Section>
 
-      <Section title="3. Third-Party Sign-In" palette={palette}>
-        If you sign in with Google, Apple, or your phone number instead of creating a password, that provider authenticates you and shares only the minimum information needed to create your account (typically your name and email, or your phone number). We never receive your password or account credentials from these providers. Apple's Sign in with Apple additionally lets you share a private relay email address instead of your real one — if you choose that option, we only ever see the relay address.
+      <Section title="3. Account Security" palette={palette}>
+        UpShift accounts are created and signed into with an email address and password only. Your password is never stored or seen by us in plain text — Firebase Authentication (see Section 5) handles it using industry-standard hashing.
       </Section>
 
       <Section title="4. How We Use Your Information" palette={palette}>
@@ -54,7 +56,7 @@ export default function PrivacyPolicyContent({ palette }: { palette: Palette }) 
         • Process subscriptions and payments through the App Store or Play Store{'\n'}
         • Diagnose and fix crashes and technical problems{'\n'}
         • Respond to your requests and provide customer support{'\n\n'}
-        We do not use your health or fitness data — logged or imported from Apple Health/Health Connect — for advertising, and we do not sell it to data brokers or advertisers.
+        We do not use your health or fitness data — logged or imported from Health Connect — for advertising, and we do not sell it to data brokers or advertisers.
       </Section>
 
       <Section title="5. Third-Party Service Providers" palette={palette}>
@@ -63,7 +65,7 @@ export default function PrivacyPolicyContent({ palette }: { palette: Palette }) 
         • <Bold>Google Gemini AI</Bold> (food photo and description recognition — receives only the image/text you submit for that purpose){'\n'}
         • <Bold>Cloudinary</Bold> (profile photo storage, if you upload one){'\n'}
         • <Bold>RevenueCat</Bold> (subscription and purchase management){'\n'}
-        • <Bold>Apple / Google</Bold> (Sign in with Apple, Google Sign-In, Apple Health, Android Health Connect — only for the features you actively choose to use){'\n\n'}
+        • <Bold>Android Health Connect</Bold> (only if you actively choose to connect it — see Section 11){'\n\n'}
         We do not permit any of these providers to use your data for their own advertising purposes.
       </Section>
 
@@ -101,8 +103,8 @@ export default function PrivacyPolicyContent({ palette }: { palette: Palette }) 
         Our service providers may process and store data in countries other than your own, including the United States. Where required, we rely on appropriate safeguards (such as standard contractual clauses) to protect information transferred internationally.
       </Section>
 
-      <Section title="11. Health Data (Apple Health / Android Health Connect)" palette={palette}>
-        Connecting Apple Health or Android Health Connect is entirely optional and off by default. If you connect it, we only read the specific data types you approve, and only to display that information back to you inside the App and use it in your own calorie/activity calculations. We do not use Health data for advertising or marketing, we do not share it with advertisers or data brokers, and you can disconnect it at any time from Settings — doing so stops any further access immediately.
+      <Section title="11. Health Data (Android Health Connect)" palette={palette}>
+        Connecting Android Health Connect is entirely optional and off by default (and, being Android-only, isn't offered on iOS at all). If you connect it, we only read the specific data types you approve, and only to display that information back to you inside the App and use it in your own calorie/activity calculations. We do not use Health data for advertising or marketing, we do not share it with advertisers or data brokers, and you can disconnect it at any time from Settings — doing so stops any further access immediately.
       </Section>
 
       <Section title="12. Notifications" palette={palette}>

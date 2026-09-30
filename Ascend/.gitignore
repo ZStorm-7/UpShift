@@ -22,4 +22,5 @@ web-build/
 # — a Cloudinary API secret, a Google service-account key — goes here.
 .env
 .env.local
+.env.production
 google-services.json

@@ -449,6 +449,7 @@ export function LevelUpTakeover({
   rank,
   progressToNext,
   onDone,
+  rankTheme,
 }: {
   level: number;
   rank: string;
@@ -456,8 +457,17 @@ export function LevelUpTakeover({
    *  the takeover has no way to recover if this arrives out of range. */
   progressToNext: number;
   onDone: () => void;
+  /** Present ONLY when this level-up also crossed into a new RANK (see
+   * LevelUpContext) — recolors the ring/rays/text to that rank's color,
+   * swaps the "LEVEL" label for "RANK UP", and adds the rank's icon and
+   * one-line tagline. One shared timeline/template for every rank-up
+   * (same as every plain level-up), not a bespoke animation per rank — the
+   * theme data (data/ranks.ts's RankTheme) is what makes each of the 8
+   * feel distinct, not a different animation system per rank. */
+  rankTheme?: { icon: keyof typeof Ionicons.glyphMap; color: string; tagline: string };
 }) {
   const palette = usePalette();
+  const themeColor = rankTheme?.color ?? colors.accent;
   const targetProgress = Math.max(0, Math.min(1, progressToNext));
   const t = useSharedValue(0);
   const reduced = useReducedMotion();
@@ -608,24 +618,34 @@ export function LevelUpTakeover({
     <Animated.View
       pointerEvents="none"
       accessibilityLiveRegion="polite"
-      accessibilityLabel={`Level up. Level ${level}. ${rank}.`}
+      accessibilityLabel={
+        rankTheme
+          ? `New rank. ${rank}. Level ${level}. ${rankTheme.tagline}`
+          : `Level up. Level ${level}. ${rank}.`
+      }
       style={[StyleSheet.absoluteFill, styles.takeover, { backgroundColor: palette.scrim }, scrimStyle]}>
       {/* Four rays, drawn as rotated hairlines. Cheaper than an SVG burst and
           it reads the same at this size and speed. */}
       <Animated.View style={[styles.rays, raysStyle]}>
         {[0, 45, 90, 135].map(deg => (
-          <View key={deg} style={[styles.ray, { transform: [{ rotate: `${deg}deg` }] }]} />
+          <View key={deg} style={[styles.ray, { transform: [{ rotate: `${deg}deg` }], backgroundColor: themeColor }]} />
         ))}
       </Animated.View>
 
-      <Animated.View style={[styles.ring, ringStyle]} />
+      <Animated.View style={[styles.ring, ringStyle, { borderColor: themeColor }]} />
 
       <Animated.View style={numeralStyle}>
-        <Text style={styles.takeoverLabel}>LEVEL</Text>
+        {rankTheme && (
+          <Ionicons name={rankTheme.icon} size={32} color={themeColor} style={styles.takeoverRankIcon} />
+        )}
+        <Text style={[styles.takeoverLabel, { color: themeColor }]}>{rankTheme ? 'RANK UP' : 'LEVEL'}</Text>
         <Text style={styles.takeoverNumeral}>{numeral}</Text>
       </Animated.View>
 
-      <Animated.Text style={[styles.takeoverRank, nameStyle]}>{rank}</Animated.Text>
+      <Animated.Text style={[styles.takeoverRank, nameStyle, { color: themeColor }]}>{rank}</Animated.Text>
+      {rankTheme && (
+        <Animated.Text style={[styles.takeoverTagline, nameStyle]}>{rankTheme.tagline}</Animated.Text>
+      )}
 
       <Animated.View style={[styles.progressRingWrap, progressRingWrapStyle]}>
         <Svg width={PROGRESS_RING_SIZE} height={PROGRESS_RING_SIZE}>
@@ -896,6 +916,17 @@ const styles = StyleSheet.create({
     ...type.heading,
     color: colors.accent,
     textAlign: 'center',
+  },
+  takeoverRankIcon: {
+    alignSelf: 'center',
+    marginBottom: spacing.xs,
+  },
+  takeoverTagline: {
+    ...type.bodySm,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    maxWidth: 260,
+    marginTop: -spacing.xs,
   },
   progressRingWrap: {
     alignItems: 'center',

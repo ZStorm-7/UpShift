@@ -144,7 +144,14 @@ const RAW_QUESTS: { category: string; quests: RawQuest[] }[] = [
   {
     category: 'Nutrition',
     quests: [
-      [21, 'Hit your calorie goal', 'Easy'],
+      // Was 'Easy' (10 XP) — the single most requested rebalance: hitting
+      // your calorie goal for the WHOLE day is the core discipline this app
+      // tracks, and it was paying out less than "Hit your protein goal"
+      // (Medium, below) despite being the harder target to actually land.
+      // Bumped to an existing tier rather than a bespoke number so it stays
+      // inside the tier system everything else uses — no separate economy
+      // to keep in sync.
+      [21, 'Hit your calorie goal', 'Hard'],
       [22, 'Hit your protein goal', 'Medium'],
       [23, 'Log every meal today', 'Medium'],
       [24, 'Log breakfast', 'Easy'],

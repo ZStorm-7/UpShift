@@ -66,6 +66,14 @@ export function Screen({ children, scroll = false, style, contentStyle }: Screen
   // notched phones, since the inset is reported per-device rather than
   // guessed at with a hardcoded number.
   const insets = useSafeAreaInsets();
+  // NOTE: deliberately NOT wrapping every screen in a KeyboardAvoidingView
+  // here — several screens (Auth, Onboarding, EditProfile, Chat) already
+  // wrap their own content in one, tuned to that screen's own layout. Doing
+  // it again at this level double-wraps those screens (two KeyboardAvoidingViews
+  // stacked shift the content by the keyboard height TWICE), which is worse
+  // than the original gap. The right place for this is on each screen that
+  // actually needs it and doesn't already have it — see ForgotPasswordScreen,
+  // FriendsScreen, ResetPasswordScreen, SleepScreen, WeightScreen.
   if (scroll) {
     return (
       <View style={[styles.screen, { backgroundColor: palette.bg, paddingTop: insets.top }, style]}>
@@ -78,7 +86,8 @@ export function Screen({ children, scroll = false, style, contentStyle }: Screen
             { paddingBottom: layout.bottomInset + insets.bottom },
             contentStyle,
           ]}
-          showsVerticalScrollIndicator={false}>
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled">
           {children}
         </ScrollView>
       </View>

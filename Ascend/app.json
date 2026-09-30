@@ -68,14 +68,6 @@
         }
       ],
       "expo-apple-authentication",
-      [
-        "@kingstinct/react-native-healthkit",
-        {
-          "NSHealthShareUsageDescription": "UpShift reads your steps, weight, sleep, and workouts so it can show them alongside what you log yourself.",
-          "NSHealthUpdateUsageDescription": false,
-          "background": false
-        }
-      ],
       "react-native-health-connect",
       [
         "expo-build-properties",

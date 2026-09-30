@@ -21,7 +21,7 @@ import { Enter } from '../components/dashboard';
 import haptics from '../services/haptics';
 import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
-import { useUser, calculateWaterGoal, calculateCalorieGoal } from '../context/UserContext';
+import { useUser, calculateWaterGoal, calculateCalorieGoal, ageGroupFor } from '../context/UserContext';
 import { useLanguage } from '../i18n/LanguageContext';
 import { uploadProfilePhoto, photoUploadAvailable, getDefaultAvatarColor } from '../services/avatar';
 import { avatarPalette } from '../theme/colors';
@@ -181,7 +181,13 @@ export default function EditProfileScreen({ navigation }: any) {
         ...(profile?.lastName ? { lastName: profile.lastName } : {}),
         ...(profile?.nickname ? { nickname: profile.nickname } : {}),
         ...(profile?.dateOfBirth ? { dateOfBirth: profile.dateOfBirth } : {}),
-        ...(profile?.ageGroup ? { ageGroup: profile.ageGroup } : {}),
+        // Recomputed from the age this save is actually writing, not carried
+        // forward from the old profile like the other fields above — unlike
+        // those, ageGroup is DERIVED from a field this same form edits, so
+        // carrying the old value forward the same way left it stale: correct
+        // an age from 17 to 19 (or the reverse) here and the stored
+        // ageGroup silently kept saying "teen" (or "adult") regardless.
+        ageGroup: ageGroupFor(ageNum),
         ...(profile?.goals ? { goals: profile.goals } : {}),
         age: ageNum,
         heightFeet: parseInt(heightFeet),

@@ -1,18 +1,27 @@
-// WorkoutScreen — the app recommends today's workout instead of asking the
-// user to pick one.
+// WorkoutScreen — the Workout tab's landing view.
 //
 // The recommendation comes from the workout template engine
 // (data/workoutPlans.ts): the user's stored `tier` (beginner / intermediate
 // / advanced / pro) picks one of six templates for that tier, indexed by
 // day-of-year plus a rotation offset. Rep counts grow over time via
-// progression points.
+// progression points. Tier itself starts from the onboarding lifting-
+// experience answer (see tierFromOnboardingAnswer) and climbs from there
+// through in-app progression.
 //
-// On this screen the user sees the plan, marks each exercise's sets
-// complete, and hits "Finish workout" — that advances progression and
-// awards XP, then routes to WorkoutSummary.
-
-import { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, Alert } from 'react-native';
+// Two very different things can happen here, based on whether today's
+// workout is already done (ProgressionState.lastWorkoutDate === today):
+//   * NOT done yet: shows the real sets/reps immediately (WorkoutSessionBody
+//     rendered inline) — no extra tap between opening the tab and starting.
+//   * Already done: shows a compact "logged for today" hub instead, with
+//     Muscle Recovery and a "Log another workout" button. That button pushes
+//     to WorkoutSessionScreen, a SEPARATE screen — re-showing the exact same
+//     exercise list in place, with all its local set-counters silently reset
+//     to zero, read as "did my sets get undone?" rather than "start a new
+//     session," which is why a second session is a deliberate navigation
+//     rather than something the tab just reappears into.
+import { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { getDoc } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import { spacing, radius, layout } from '../theme/tokens';
 import { fontFamily } from '../theme/fonts';
@@ -20,58 +29,31 @@ import { usePalette } from '../theme/themedColors';
 import { Screen, AppBar, Button } from '../components/ui';
 import { Shimmer } from '../components/anim';
 import { Enter } from '../components/dashboard';
+import MuscleRecovery from '../components/MuscleRecovery';
+import { WorkoutSessionBody } from '../components/WorkoutSession';
 import { useUser } from '../context/UserContext';
-import { useLanguage } from '../i18n/LanguageContext';
-import { awardXP, incrementTodayField } from '../firebase/progress';
+import { getTodayKey } from '../firebase/progress';
 import {
   loadWorkoutState,
-  saveWorkoutState,
   isFirstWorkoutVisitToday,
   recordWorkoutVisit,
 } from '../firebase/workoutState';
 import {
   pickTodaysWorkout,
-  recordCompletedWorkout,
   decayForInactivity,
   ProgressionState,
   EMPTY_PROGRESSION,
   WorkoutTemplate,
   WORKOUT_TIER_LABELS,
 } from '../data/workoutPlans';
-import { getTodayKey } from '../firebase/progress';
+import { muscleLogDocRef, MuscleLogEntry } from '../firebase/muscleLog';
 import haptics from '../services/haptics';
-import WorkoutCalendar from '../components/WorkoutCalendar';
-import { xpMultiplier } from '../utils/birthday';
 import { safeGoBack } from '../utils/nav';
 
 // A run/walk exercise is detected by name — none of the current templates
 // include one, but this is what routes a future "Run" or "Walk" exercise to
 // the sensor mode instead of the camera mode.
 const RUN_WALK_PATTERN = /\brun|\bjog|\bwalk/i;
-
-// XP per completed workout — same value as before the redesign so
-// existing users don't feel their reward changed.
-const WORKOUT_XP = 60;
-
-// ── Overtime ──
-//
-// "Overtime" begins once every prescribed set is done and the user keeps
-// going. Extra sets past the plan earn bonus XP, but the bonus is BOUNDED:
-// +3 XP per extra set, capped at +30 total (10 extra sets' worth). Without
-// a cap this would be the single easiest XP source in the app — tapping one
-// exercise card repeatedly is far cheaper than completing quests — so the
-// cap is what keeps the reward proportional to a genuinely longer session
-// rather than to how long someone is willing to tap.
-const OVERTIME_XP_PER_SET = 3;
-const OVERTIME_XP_CAP = 30;
-// Per-exercise ceiling on overtime taps, after which the counter wraps back
-// to zero (preserving the "tap again to reset" affordance).
-const OVERTIME_MAX_SETS_PER_EXERCISE = 5;
-
-export function overtimeBonusXP(overtimeSets: number): number {
-  if (overtimeSets <= 0) return 0;
-  return Math.min(overtimeSets * OVERTIME_XP_PER_SET, OVERTIME_XP_CAP);
-}
 
 // Day-of-year, used as the deterministic input to the workout picker.
 function dayOfYear(): number {
@@ -83,23 +65,15 @@ function dayOfYear(): number {
 export default function WorkoutScreen({ navigation }: any) {
   const palette = usePalette();
   const { authUser, profile } = useUser();
-  const { t } = useLanguage();
   const [state, setState] = useState<ProgressionState>(EMPTY_PROGRESSION);
-  const [loading, setLoading] = useState(true);
   const [workout, setWorkout] = useState<WorkoutTemplate | null>(null);
-  const [setsCompleted, setSetsCompleted] = useState<Record<number, number>>({});
-  const [finishing, setFinishing] = useState(false);
-  const inFlight = useRef(false);
+  const [loading, setLoading] = useState(true);
+  const [muscleEntries, setMuscleEntries] = useState<MuscleLogEntry[]>([]);
 
   // Whether THIS is the first time the Workout screen has been opened today
   // (null while unknown). First visit: greet + offer camera/sensor/manual.
-  // Every visit after that, same day: skip straight to the exercise list and
-  // also show the rest-of-month calendar (see the render below).
+  // Every visit after that, same day: skip straight past the greeting.
   const [firstVisitToday, setFirstVisitToday] = useState<boolean | null>(null);
-  // Flips true once the user has picked a mode (camera, sensor, or manual)
-  // on a first-visit-today greeting — reveals the normal exercise list.
-  // Also set on return-from-camera/sensor, so coming back doesn't re-show
-  // the greeting a second time.
   const [pastGreeting, setPastGreeting] = useState(false);
 
   useEffect(() => {
@@ -111,14 +85,6 @@ export default function WorkoutScreen({ navigation }: any) {
       })
       .catch(() => setFirstVisitToday(false)); // fail open — show the workout, not a stuck greeting
   }, [authUser?.uid]);
-
-  // Placeholder — no actual audio wired up yet. Exists so the button has
-  // somewhere to live in the layout ahead of a real music-during-workout
-  // feature; tapping it just says so rather than silently doing nothing.
-  const handleAddMusic = () => {
-    haptics.selection();
-    Alert.alert('Background music', "Coming soon — you'll be able to play music during your workout from here.");
-  };
 
   useEffect(() => {
     if (!authUser) return;
@@ -138,93 +104,25 @@ export default function WorkoutScreen({ navigation }: any) {
     })();
   }, [authUser?.uid]);
 
-  function toggleSet(exIndex: number) {
-    if (!workout) return;
-    const total = workout.exercises[exIndex].sets;
-    // Taps now continue PAST the prescribed set count into overtime, up to
-    // OVERTIME_MAX_SETS_PER_EXERCISE extra, and only then wrap back to 0.
-    // The wrap is what preserves the old "tap again to reset" affordance —
-    // it just sits further along now that overtime exists.
-    const ceiling = total + OVERTIME_MAX_SETS_PER_EXERCISE;
-    setSetsCompleted(prev => {
-      const cur = prev[exIndex] || 0;
-      const next = cur >= ceiling ? 0 : cur + 1;
-      return { ...prev, [exIndex]: next };
-    });
-    haptics.selection();
-  }
+  // Re-checked every time this screen regains focus (returning from
+  // WorkoutSessionScreen after finishing a second session, say) via the
+  // focus listener below, not just on mount.
+  useEffect(() => {
+    if (!authUser) return;
+    const reload = () => {
+      getDoc(muscleLogDocRef(authUser.uid))
+        .then(snap => setMuscleEntries((snap.data()?.entries as MuscleLogEntry[]) || []))
+        .catch(() => setMuscleEntries([]));
+      loadWorkoutState(authUser.uid)
+        .then(raw => setState(decayForInactivity(raw, getTodayKey())))
+        .catch(() => {});
+    };
+    reload();
+    const unsubscribe = navigation.addListener('focus', reload);
+    return unsubscribe;
+  }, [authUser?.uid, navigation]);
 
-  const totalSets = workout ? workout.exercises.reduce((s, e) => s + e.sets, 0) : 0;
-
-  // Prescribed vs overtime are counted PER EXERCISE and then summed, not
-  // from the raw grand total. Summing raw taps and subtracting totalSets
-  // would mean four extra sets on one exercise show "+1 over" on that card
-  // while the workout as a whole still reads as incomplete — the card and
-  // the header would be telling the user two different things, and the
-  // overtime XP would silently not accrue for overage the UI had already
-  // credited.
-  const { prescribedDone, overtimeSets } = workout
-    ? workout.exercises.reduce(
-        (acc, ex, i) => {
-          const done = setsCompleted[i] || 0;
-          acc.prescribedDone += Math.min(done, ex.sets);
-          acc.overtimeSets += Math.max(0, done - ex.sets);
-          return acc;
-        },
-        { prescribedDone: 0, overtimeSets: 0 },
-      )
-    : { prescribedDone: 0, overtimeSets: 0 };
-
-  const doneSets = prescribedDone + overtimeSets;
-  const allComplete = totalSets > 0 && prescribedDone >= totalSets;
-  // Progress bar tracks PRESCRIBED work only, so it fills to exactly 100%
-  // at the end of the plan; overtime is called out separately below rather
-  // than overflowing the bar.
-  const progressPct = totalSets > 0 ? prescribedDone / totalSets : 0;
-  const inOvertime = overtimeSets > 0;
-  const overtimeXP = overtimeBonusXP(overtimeSets);
-  const overtimeCapped = overtimeXP >= OVERTIME_XP_CAP;
-
-  async function finishWorkout() {
-    if (!authUser || !workout || inFlight.current) return;
-    inFlight.current = true;
-    setFinishing(true);
-    // Base + bounded overtime bonus, then the birthday multiplier applied
-    // to the whole thing (see utils/birthday.ts) so every XP source in the
-    // app gets the boost from one shared rule.
-    const baseXP = WORKOUT_XP + overtimeXP;
-    const gainedXP = baseXP * xpMultiplier(profile?.birthdayMonth, profile?.birthdayDay);
-
-    try {
-      // Award XP + bump the daily "workoutsCompleted" counter
-      await awardXP(authUser.uid, gainedXP);
-      await incrementTodayField(authUser.uid, 'workoutsCompleted', 1);
-
-      // Advance workout progression
-      const nextState = recordCompletedWorkout(state, getTodayKey());
-      await saveWorkoutState(authUser.uid, nextState);
-
-      haptics.goalMet();
-      // Navigate to the celebration screen. `replace` so backing out
-      // doesn't return to a "completed" workout that could be finished
-      // again.
-      navigation.replace('WorkoutSummary', {
-        // Field names match WorkoutSummaryScreen's SummaryParams exactly —
-        // it defaults every field to 0/'' for a route reached without
-        // params, so a mismatched name here silently renders a "0 of
-        // everything" summary instead of erroring.
-        xpEarned: gainedXP,
-        completedSets: doneSets,
-        totalSets,
-        exerciseCount: workout.exercises.length,
-        muscleGroup: workout.title,
-        durationMinutes: workout.durationMin,
-      });
-    } catch {
-      inFlight.current = false;
-      setFinishing(false);
-    }
-  }
+  const doneToday = state.lastWorkoutDate === getTodayKey();
 
   if (loading || !workout || firstVisitToday === null) {
     return (
@@ -239,13 +137,10 @@ export default function WorkoutScreen({ navigation }: any) {
   }
 
   // First visit today, mode not yet chosen: greet, then offer sensor /
-  // manual. Camera-based rep counting was removed entirely (it was a
-  // placeholder — see git history — that only simulated counting reps, with
-  // no real pose tracking behind it); manual is now the only path for the
-  // overwhelming majority of exercises in this app, and reads as the primary
-  // action rather than a fallback link. A run/walk exercise still offers the
-  // sensor card, since that's a genuinely different, orthogonal feature.
-  if (firstVisitToday && !pastGreeting) {
+  // manual. A run/walk exercise offers the sensor card, since that's a
+  // genuinely different, orthogonal feature; everything else goes straight
+  // to manual.
+  if (firstVisitToday && !pastGreeting && !doneToday) {
     const isRunWalk = workout.exercises.some(ex => RUN_WALK_PATTERN.test(ex.name));
     const hour = new Date().getHours();
     const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
@@ -296,10 +191,6 @@ export default function WorkoutScreen({ navigation }: any) {
             </>
           )}
 
-          {/* Manual is the ONLY path for a non-run/walk workout — which is
-              every workout today, since no current template includes one —
-              so it's a primary button here, not a quiet link underneath
-              cards that no longer exist. */}
           {!isRunWalk && (
             <Button label="Start workout" onPress={goManual} fullWidth glow style={styles.startButton} />
           )}
@@ -308,215 +199,44 @@ export default function WorkoutScreen({ navigation }: any) {
     );
   }
 
-  return (
-    <View style={[styles.wrapper, { backgroundColor: palette.bg }]}>
-      <Screen scroll contentStyle={styles.container}>
-        <AppBar title="Today's Workout" onBack={() => safeGoBack(navigation)} />
-
-        {/* Header — plan card */}
+  // Already done today — a compact hub instead of the exercise list, so
+  // reopening the tab doesn't look like the workout un-finished itself.
+  // "Log another workout" is a deliberate push to its own screen instance.
+  if (doneToday) {
+    return (
+      <Screen scroll contentStyle={{ backgroundColor: palette.bg, padding: spacing.lg, gap: spacing.lg }}>
+        <AppBar title="Workout" onBack={() => safeGoBack(navigation)} />
         <Enter index={0}>
-          <View style={[styles.planCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-            <View style={styles.planHeaderRow}>
-              <Text style={[styles.tierBadge, { color: palette.accentText, borderColor: palette.accentBorder, backgroundColor: palette.accentSoft }]}>
-                {WORKOUT_TIER_LABELS[workout.tier].toUpperCase()}
-              </Text>
-              <Text style={[styles.duration, { color: palette.textMuted }]}>
-                ~{workout.durationMin} min
-              </Text>
+          <View style={[styles.doneCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+            <View style={[styles.doneIconCircle, { backgroundColor: palette.accentSoft }]}>
+              <Ionicons name="checkmark" size={28} color={palette.accent} />
             </View>
-            <Text style={[styles.planTitle, { color: palette.textPrimary }]}>{workout.title}</Text>
-            <Text style={[styles.planFocus, { color: palette.textSecondary }]}>{workout.focus}</Text>
-
-            <Pressable
-              onPress={handleAddMusic}
-              style={[styles.musicButton, { borderColor: palette.border, backgroundColor: palette.surfaceSunken }]}
-              accessibilityRole="button"
-              accessibilityLabel="Add background music">
-              <Ionicons name="musical-notes" size={14} color={palette.textSecondary} />
-              <Text style={[styles.musicButtonText, { color: palette.textSecondary }]}> Add background music</Text>
-            </Pressable>
-
-            {/* Progress bar */}
-            <View style={[styles.progressTrack, { backgroundColor: palette.surfaceSunken }]}>
-              <View style={[styles.progressFill, { width: `${progressPct * 100}%`, backgroundColor: palette.accent }]} />
-            </View>
-            <Text style={[styles.progressText, { color: palette.textMuted }]}>
-              {prescribedDone} / {totalSets} sets
+            <Text style={[styles.doneTitle, { color: palette.textPrimary }]}>Today's workout is logged</Text>
+            <Text style={[styles.doneSubtitle, { color: palette.textSecondary }]}>
+              {workout.title} · {WORKOUT_TIER_LABELS[workout.tier]}
             </Text>
-
-            {inOvertime && (
-              <View style={[styles.overtimeStrip, { backgroundColor: palette.xpSoft, borderColor: palette.xp, flexDirection: 'row', alignItems: 'center' }]}>
-                <Ionicons name="flash" size={13} color={palette.xp} />
-                <Text style={[styles.overtimeText, { color: palette.xp }]}>
-                  {' '}OVERTIME · +{overtimeSets} {overtimeSets === 1 ? 'set' : 'sets'} · +{overtimeXP} XP
-                  {overtimeCapped ? ' (max)' : ''}
-                </Text>
-              </View>
-            )}
           </View>
         </Enter>
-
-        {/* Exercise list */}
-        <View style={{ gap: spacing.sm, marginTop: spacing.lg }}>
-          {workout.exercises.map((ex, index) => {
-            const complete = setsCompleted[index] || 0;
-            const done = complete >= ex.sets;
-            const exOvertime = Math.max(0, complete - ex.sets);
-            return (
-              <Enter key={ex.name} index={index + 1}>
-                <Pressable
-                  onPress={() => toggleSet(index)}
-                  style={[
-                    styles.exerciseCard,
-                    { backgroundColor: palette.surface, borderColor: done ? palette.accentBorder : palette.border },
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${ex.name}, ${complete} of ${ex.sets} sets complete. Tap to mark next set.`}>
-                  <View style={styles.exerciseHeader}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.exerciseName, { color: palette.textPrimary }]}>{ex.name}</Text>
-                      {ex.cue && (
-                        <Text style={[styles.exerciseCue, { color: palette.textMuted }]}>{ex.cue}</Text>
-                      )}
-                    </View>
-                    <View style={styles.setCounter}>
-                      <Text style={[styles.setCount, { color: exOvertime > 0 ? palette.xp : done ? palette.accent : palette.textPrimary }]}>
-                        {complete}/{ex.sets}
-                      </Text>
-                      <Text style={[styles.setLabel, { color: exOvertime > 0 ? palette.xp : palette.textMuted }]}>
-                        {exOvertime > 0 ? `+${exOvertime} over` : 'sets'}
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={styles.exerciseSpec}>
-                    <SpecItem label="Reps"  value={ex.reps}                       palette={palette} />
-                    <SpecItem label="Rest"  value={`${ex.restSec}s`}              palette={palette} />
-                    <SpecItem label="Focus" value={workout.focus.split(',')[0].trim()} palette={palette} />
-                  </View>
-                </Pressable>
-              </Enter>
-            );
-          })}
-        </View>
-
-        {/* Explainer strip */}
-        <View style={[styles.explainer, { borderColor: palette.border }]}>
-          <Text style={[styles.explainerText, { color: palette.textMuted }]}>
-            Tap an exercise to mark a set complete. This workout is customized for your
-            current tier ({WORKOUT_TIER_LABELS[state.tier]}).
-          </Text>
-        </View>
-
-        {/* Rest-of-month calendar — only from the SECOND visit of the day
-            onward. The greeting/mode-picker above already covers the first
-            visit, so this doesn't need to repeat that context. */}
-        {firstVisitToday === false && authUser?.metadata.creationTime && (
-          <View style={styles.calendarWrap}>
-            <WorkoutCalendar
-              accountCreatedAt={new Date(authUser.metadata.creationTime)}
-              progression={state}
-            />
-          </View>
-        )}
+        <Enter index={1}>
+          <MuscleRecovery entries={muscleEntries} palette={palette} />
+        </Enter>
+        <Enter index={2}>
+          <Button
+            label="Log another workout"
+            onPress={() => navigation.navigate('WorkoutSession')}
+            variant="secondary"
+            fullWidth
+          />
+        </Enter>
       </Screen>
+    );
+  }
 
-      {/* Floating finish button */}
-      <View style={styles.fabWrap}>
-        <Button
-          label={
-            finishing ? 'Saving…'
-            : inOvertime ? `Finish workout (+${overtimeXP} XP overtime)`
-            : allComplete ? 'Finish workout'
-            : `Finish (${prescribedDone}/${totalSets} sets)`
-          }
-          onPress={finishWorkout}
-          variant={allComplete ? 'primary' : 'secondary'}
-          fullWidth
-          disabled={finishing || doneSets === 0}
-        />
-      </View>
-
-    </View>
-  );
-}
-
-function SpecItem({ label, value, palette }: any) {
-  return (
-    <View style={styles.spec}>
-      <Text style={[styles.specLabel, { color: palette.textMuted }]}>{label.toUpperCase()}</Text>
-      <Text style={[styles.specValue, { color: palette.textPrimary }]}>{value}</Text>
-    </View>
-  );
+  // Not done yet — the real thing, right here, no extra tap.
+  return <WorkoutSessionBody navigation={navigation} onBack={() => safeGoBack(navigation)} />;
 }
 
 const styles = StyleSheet.create({
-  wrapper: { flex: 1 },
-  container: { padding: spacing.lg, paddingBottom: 120 },
-
-  planCard: {
-    borderRadius: radius.lg,
-    borderWidth: layout.hairline,
-    padding: spacing.lg,
-    gap: spacing.sm,
-  },
-  planHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  tierBadge: {
-    fontFamily: fontFamily.sansBold,
-    fontSize: 10, letterSpacing: 0.8,
-    paddingHorizontal: 8, paddingVertical: 3,
-    borderRadius: radius.pill, borderWidth: layout.hairline,
-    overflow: 'hidden',
-  },
-  duration: { fontFamily: fontFamily.sans, fontSize: 13 },
-  planTitle: { fontFamily: fontFamily.serif, fontSize: 24, marginTop: 2 },
-  planFocus: { fontFamily: fontFamily.sans, fontSize: 14 },
-  musicButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    borderRadius: radius.pill, borderWidth: layout.hairline,
-    paddingHorizontal: spacing.md, paddingVertical: 6,
-    marginTop: spacing.xs,
-  },
-  musicButtonText: { fontFamily: fontFamily.sansBold, fontSize: 12 },
-  progressTrack: { height: 6, borderRadius: 3, marginTop: spacing.md, overflow: 'hidden' },
-  progressFill:  { height: '100%', borderRadius: 3 },
-  progressText:  { fontFamily: fontFamily.sansBold, fontSize: 12, marginTop: 4 },
-  overtimeStrip: {
-    borderWidth: layout.hairline, borderRadius: radius.md,
-    paddingHorizontal: spacing.md, paddingVertical: 6,
-    marginTop: spacing.xs, alignSelf: 'flex-start',
-  },
-  overtimeText: { fontFamily: fontFamily.sansBold, fontSize: 12, letterSpacing: 0.4 },
-
-  exerciseCard: {
-    borderRadius: radius.lg, borderWidth: layout.hairline,
-    padding: spacing.md, gap: spacing.sm,
-  },
-  exerciseHeader: { flexDirection: 'row', gap: spacing.md, alignItems: 'flex-start' },
-  exerciseName: { fontFamily: fontFamily.sansBold, fontSize: 16 },
-  exerciseCue:  { fontFamily: fontFamily.sans, fontSize: 12, marginTop: 2 },
-  setCounter:   { alignItems: 'center', minWidth: 56 },
-  setCount:     { fontFamily: fontFamily.sansBlack, fontSize: 22 },
-  setLabel:     { fontFamily: fontFamily.sans, fontSize: 11, letterSpacing: 0.6 },
-  exerciseSpec: { flexDirection: 'row', gap: spacing.lg, marginTop: 4 },
-  spec:         { gap: 2 },
-  specLabel:    { fontFamily: fontFamily.sansBold, fontSize: 10, letterSpacing: 0.6 },
-  specValue:    { fontFamily: fontFamily.sansBold, fontSize: 14 },
-
-  explainer: {
-    marginTop: spacing.xl,
-    padding: spacing.md,
-    borderRadius: radius.md, borderWidth: layout.hairline,
-    borderStyle: 'dashed',
-  },
-  explainerText: { fontFamily: fontFamily.sans, fontSize: 12, textAlign: 'center', lineHeight: 18 },
-
-  fabWrap: {
-    position: 'absolute', left: 0, right: 0, bottom: 0,
-    padding: spacing.lg,
-  },
-
   // Greeting + mode picker (first visit of the day)
   greetingBody: { flex: 1, padding: spacing.lg, gap: spacing.md },
   greetingText: { fontFamily: fontFamily.serif, fontSize: 26, marginTop: spacing.xl },
@@ -542,5 +262,19 @@ const styles = StyleSheet.create({
   },
   manualLinkText: { fontFamily: fontFamily.sansBold, fontSize: 14 },
 
-  calendarWrap: { marginTop: spacing.xl },
+  // Done-for-today hub
+  doneCard: {
+    borderRadius: radius.lg,
+    borderWidth: layout.hairline,
+    padding: spacing.xl,
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  doneIconCircle: {
+    width: 52, height: 52, borderRadius: 26,
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: spacing.sm,
+  },
+  doneTitle: { fontFamily: fontFamily.serif, fontSize: 20 },
+  doneSubtitle: { fontFamily: fontFamily.sans, fontSize: 14 },
 });

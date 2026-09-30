@@ -11,7 +11,7 @@
 // — there's exactly one log, however you get to it.
 
 import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
 import { getDoc, setDoc } from 'firebase/firestore';
 import { spacing, radius, layout } from '../theme/tokens';
 import { fontFamily } from '../theme/fonts';
@@ -19,6 +19,8 @@ import { usePalette } from '../theme/themedColors';
 import { Screen, AppBar, Button, Field } from '../components/ui';
 import { useUser } from '../context/UserContext';
 import { weightLogDocRef, upsertTodayWeight, latestWeight, weightChange, WeightEntry } from '../firebase/weight';
+import { checkAchievementsForUser } from '../firebase/achievements';
+import { celebrateAchievements } from '../utils/achievementAlert';
 import { safeGoBack } from '../utils/nav';
 import haptics from '../services/haptics';
 
@@ -58,6 +60,7 @@ export default function WeightScreen({ navigation }: any) {
       setEntries(updated);
       setWeightInput('');
       haptics.setComplete();
+      checkAchievementsForUser(authUser.uid).then(celebrateAchievements).catch(() => {});
     } catch {
       setError('Could not save. Please try again.');
     } finally {
@@ -72,6 +75,7 @@ export default function WeightScreen({ navigation }: any) {
   const recentFirst = [...entries].reverse();
 
   return (
+    <KeyboardAvoidingView style={styles.flexOne} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
     <Screen scroll>
       <AppBar title="Weight" onBack={() => safeGoBack(navigation)} />
 
@@ -122,10 +126,14 @@ export default function WeightScreen({ navigation }: any) {
         </View>
       )}
     </Screen>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
+  flexOne: {
+    flex: 1,
+  },
   summaryCard: {
     borderRadius: radius.lg,
     borderWidth: layout.hairline,

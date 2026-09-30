@@ -42,17 +42,25 @@ export default function MessagesScreen({ navigation }: any) {
 
   useEffect(() => {
     if (!authUser) return;
-    const unsubscribe = subscribeToConversations(authUser.uid, async conversations => {
-      const withPeers = await Promise.all(
-        conversations.map(async conversation => {
-          const otherUid = otherParticipant(conversation, authUser.uid);
-          const peer = await resolvePeer(otherUid);
-          return { conversation, otherUid, peer };
-        })
-      );
-      setRows(withPeers);
-      setLoading(false);
-    });
+    const unsubscribe = subscribeToConversations(
+      authUser.uid,
+      async conversations => {
+        const withPeers = await Promise.all(
+          conversations.map(async conversation => {
+            const otherUid = otherParticipant(conversation, authUser.uid);
+            const peer = await resolvePeer(otherUid);
+            return { conversation, otherUid, peer };
+          })
+        );
+        setRows(withPeers);
+        setLoading(false);
+      },
+      // Falls back to the same empty state a genuinely-empty list shows —
+      // wrong wording for "something broke," but infinitely better than the
+      // loading skeleton spinning forever with no way for the user to tell
+      // the two apart. See subscribeToConversations for why this can fire.
+      () => setLoading(false)
+    );
     return unsubscribe;
   }, [authUser?.uid, resolvePeer]);
 

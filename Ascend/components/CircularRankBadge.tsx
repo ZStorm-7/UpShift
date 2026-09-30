@@ -14,11 +14,34 @@
 // no breathing room between them. Explicit margins can't silently vanish
 // the same way.
 
+import { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedProps,
+  withTiming,
+  cancelAnimation,
+  useReducedMotion,
+  Easing,
+} from 'react-native-reanimated';
 import Svg, { Circle } from 'react-native-svg';
 import { spacing } from '../theme/tokens';
 import { fontFamily } from '../theme/fonts';
 import { usePalette } from '../theme/themedColors';
+import { CountUp } from './anim';
+
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+
+// Deliberately NOT animation/motion.ts's shared CURVE (ease-out — leaves
+// fast, decelerates hard). This ring was explicitly asked to read as
+// "gathering momentum then settling" rather than "already moving at full
+// speed" — slow away from the old value, fastest through the middle, slow
+// into the new one. Symmetric ease-in-out, unlike the rest of the app's one
+// curve on purpose: an XP gain is a small, frequent event (every quest,
+// every food log), and the snap-into-place the old static ring had read as
+// the number just being wrong for a frame, not as something earned.
+const XP_RING_CURVE = Easing.inOut(Easing.cubic);
+const XP_RING_DURATION = 900;
 
 type Props = {
   level: number;                // 1..∞
@@ -33,7 +56,31 @@ export default function CircularRankBadge({ level, progress, rankName, size = 14
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
   const clamped = Math.max(0, Math.min(1, progress));
-  const dashOffset = circumference * (1 - clamped);
+  const reduced = useReducedMotion();
+
+  const animatedProgress = useSharedValue(reduced ? clamped : 0);
+  const hasDrawn = useRef(false);
+
+  useEffect(() => {
+    if (reduced) {
+      animatedProgress.value = clamped;
+      hasDrawn.current = true;
+      return;
+    }
+    // First mount sweeps from empty (matches CalorieRing's own "reveal, not
+    // retarget" first paint); every XP gain after that animates from
+    // wherever the ring currently sits, same duration and curve either way —
+    // this ring is small and the fills are frequent enough that a longer
+    // first-paint ceremony would feel like it's stalling, not celebrating.
+    animatedProgress.value = withTiming(clamped, { duration: XP_RING_DURATION, easing: XP_RING_CURVE });
+    hasDrawn.current = true;
+    return () => cancelAnimation(animatedProgress);
+  }, [clamped, reduced]);
+
+  const arcProps = useAnimatedProps(() => ({
+    strokeDashoffset: circumference * (1 - animatedProgress.value),
+  }));
+
   // NutritionScreen's identical ring+label overlap took three disproven
   // theories (missing lineHeight, stroke-cap clearance, accessibility text
   // scaling) before landing on "stop guessing the exact number, make the gap
@@ -45,15 +92,16 @@ export default function CircularRankBadge({ level, progress, rankName, size = 14
 
   return (
     <View style={styles.container}>
-      <Text
+      {/* Counts up to the new percentage rather than jumping to it — the
+          same CountUp WorkoutSummaryScreen uses for its calorie/set totals,
+          reused here so "the ring is filling" and "the number is climbing"
+          read as one event instead of a moving arc next to a static label. */}
+      <CountUp
+        value={Math.round(clamped * 100)}
+        suffix="%"
+        durationMs={reduced ? 0 : XP_RING_DURATION}
         style={[styles.progressLabel, { color: palette.accentText }]}
-        // See NutritionScreen's ringHeader for why this is capped: iOS's
-        // "Larger Text" accessibility setting can scale system text far
-        // beyond normal Dynamic Type, which is what was actually breaking
-        // this exact ring-adjacent-label layout — not a spacing problem.
-        maxFontSizeMultiplier={1.3}>
-        {Math.round(clamped * 100)}%
-      </Text>
+      />
 
       {/* Extra marginTop, not overflow:'hidden'. This ring's progress arc has
           strokeLinecap="round" and starts at the very top (rotate(-90°)), so
@@ -75,7 +123,7 @@ export default function CircularRankBadge({ level, progress, rankName, size = 14
             fill="none"
           />
           {/* Progress — starts at 12 o'clock (rotated -90°), grows clockwise */}
-          <Circle
+          <AnimatedCircle
             cx={size / 2}
             cy={size / 2}
             r={radius}
@@ -84,7 +132,7 @@ export default function CircularRankBadge({ level, progress, rankName, size = 14
             strokeLinecap="round"
             fill="none"
             strokeDasharray={circumference}
-            strokeDashoffset={dashOffset}
+            animatedProps={arcProps}
             transform={`rotate(-90 ${size / 2} ${size / 2})`}
           />
         </Svg>

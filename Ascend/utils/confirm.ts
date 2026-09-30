@@ -1,15 +1,19 @@
-// Cross-platform "are you sure?" confirm. React Native's Alert.alert takes a
-// button array on iOS/Android, but Expo's web target renders Alert.alert as
-// a no-op for anything beyond a single OK button in some RN-web versions —
-// so a two-button "Cancel / Log out" alert silently does nothing on web:
-// no dialog appears, no callback fires, the tap looks completely dead.
+// Cross-platform "are you sure?" confirm.
 //
-// This routes to window.confirm on web (a real native browser dialog) and
-// to Alert.alert everywhere else, so the same call site works on all three
-// targets instead of only working on device.
+// Native (iOS/Android) uses Alert.alert, same as always. Web used to fall
+// back to window.confirm — a real, working dialog, but the browser's own
+// unstyled one, not the app's: the one moment the UI hands control to the
+// OS chrome instead of drawing itself. ConfirmDialogHost (rendered once
+// near the app root — see App.tsx) now renders that same request as a
+// properly styled in-app dialog instead. confirmAsync's own signature and
+// every call site are unchanged — this file just stopped reaching for
+// window.confirm itself and started handing the request to that host
+// through a tiny module-level store, since confirmAsync is called from
+// plain functions all over the app, not from inside a component that could
+// hold the pending request as state.
 import { Alert, Platform } from 'react-native';
 
-type ConfirmOptions = {
+export type ConfirmOptions = {
   title: string;
   message: string;
   confirmLabel: string;
@@ -17,18 +21,50 @@ type ConfirmOptions = {
   destructive?: boolean;
 };
 
+export type ConfirmRequest = ConfirmOptions & {
+  resolve: (ok: boolean) => void;
+};
+
+let currentRequest: ConfirmRequest | null = null;
+let listeners: Array<(request: ConfirmRequest | null) => void> = [];
+
+function publish(request: ConfirmRequest | null) {
+  currentRequest = request;
+  listeners.forEach(listener => listener(request));
+}
+
+/** ConfirmDialogHost-only: subscribe to the current pending request (null
+ * when none is open). Returns an unsubscribe function. */
+export function subscribeToConfirmRequest(listener: (request: ConfirmRequest | null) => void) {
+  listeners.push(listener);
+  listener(currentRequest);
+  return () => {
+    listeners = listeners.filter(l => l !== listener);
+  };
+}
+
+/** ConfirmDialogHost-only: resolve the current request and close it. */
+export function respondToConfirmRequest(ok: boolean) {
+  currentRequest?.resolve(ok);
+  publish(null);
+}
+
 /** Resolves true if the user confirmed, false if they cancelled/dismissed. */
 export function confirmAsync(options: ConfirmOptions): Promise<boolean> {
-  const { title, message, confirmLabel, cancelLabel = 'Cancel', destructive } = options;
-
   if (Platform.OS === 'web') {
-    // window.confirm blocks synchronously and returns a boolean directly —
-    // wrapped in a resolved promise so call sites don't need a platform
-    // branch of their own.
-    const ok = typeof window !== 'undefined' && window.confirm(`${title}\n\n${message}`);
-    return Promise.resolve(ok);
+    // No host mounted (shouldn't happen — App.tsx renders one at the root —
+    // but a call from a context that somehow predates it should still ask
+    // rather than silently returning false) falls back to window.confirm.
+    if (listeners.length === 0) {
+      const ok = typeof window !== 'undefined' && window.confirm(`${options.title}\n\n${options.message}`);
+      return Promise.resolve(ok);
+    }
+    return new Promise(resolve => {
+      publish({ ...options, resolve });
+    });
   }
 
+  const { title, message, confirmLabel, cancelLabel = 'Cancel', destructive } = options;
   return new Promise(resolve => {
     Alert.alert(title, message, [
       { text: cancelLabel, style: 'cancel', onPress: () => resolve(false) },

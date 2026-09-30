@@ -28,8 +28,11 @@ import { logOnboardingEvent } from '../firebase/analytics';
 import { clearPushToken } from '../services/notifications';
 import { withTimeout } from '../utils/timing';
 import { WheelDatePicker, HeightWheelPicker, WeightWheelPicker, type HeightUnit, type WeightUnit } from '../components/WheelPicker';
+import BodyFatIcon from '../components/BodyFatIcon';
 import ScrollFadeOverlay, { useScrollOverflow } from '../components/ScrollFadeOverlay';
 import type { HealthPrefill } from './HealthSyncScreen';
+import { tierFromOnboardingAnswer, EMPTY_PROGRESSION } from '../data/workoutPlans';
+import { saveWorkoutState } from '../firebase/workoutState';
 
 // Named for the same reason EditProfileScreen's preview one is — the
 // skeleton/preview have to agree on a size or the row jumps.
@@ -46,6 +49,22 @@ const AVATAR_SIZE = 56;
 // Height and weight (3, 4) are skipped automatically when Apple Health /
 // Health Connect already supplied that value — see `isStepSkippable` below.
 const TOTAL_STEPS = 15;
+
+// The same 3-chapter framing OnboardingIntroScreen previews before this
+// flow even starts ("Basics" / "About You" / "Your Goals") — kept here
+// instead of duplicated as a comment, so the intro screen's promise and
+// this screen's own progress bar are reading off the same three ranges
+// rather than two hand-maintained lists that can drift out of sync with
+// each other, or with TOTAL_STEPS above, the way OnboardingIntroScreen's
+// old comment had (it described an 8-step flow after this one had already
+// grown to 15). A flat single-color bar over 15 steps reads as a long,
+// undifferentiated slog; three segments filling in turn give the same
+// step count a sense of arriving somewhere partway through.
+const CHAPTERS: { label: string; startStep: number; endStep: number }[] = [
+  { label: 'Basics', startStep: 1, endStep: 4 },
+  { label: 'About You', startStep: 5, endStep: 12 },
+  { label: 'Your Goals', startStep: 13, endStep: 15 },
+];
 
 const activityOptions = [
   { label: 'Sedentary', description: 'Little to no exercise, desk job' },
@@ -443,6 +462,17 @@ export default function OnboardingScreen({ navigation, route }: any) {
 
     try {
       await setDoc(doc(db, 'users', authUser.uid), newProfile);
+      // Seeds the workout tier from the lifting-experience question rather
+      // than leaving every new account to start at 'beginner' regardless of
+      // what they answered — see tierFromOnboardingAnswer's own comment for
+      // why this was previously wired to answer values onboarding never
+      // actually produced. Best-effort: a failure here just means the
+      // account starts at the default and progresses normally from there,
+      // not a broken signup.
+      saveWorkoutState(authUser.uid, {
+        ...EMPTY_PROGRESSION,
+        tier: tierFromOnboardingAnswer(liftingExperience),
+      }).catch(() => {});
       finishedRef.current = true;
       logOnboardingEvent(authUser.uid, step, 'onboarding_complete');
       setProfile(newProfile);
@@ -588,6 +618,18 @@ export default function OnboardingScreen({ navigation, route }: any) {
   const expenditure = calculateCalorieGoal(computedAge, weightLbs, heightFeet, heightInches, gender, activityLevel, '');
   const safeExpenditure = Number.isFinite(expenditure) ? expenditure : DEFAULT_CALORIE_GOAL;
 
+  // The step-15 summary's "Calorie Goal" row has to show the number
+  // handleFinish is ACTUALLY about to save, not the plain-maintenance
+  // `safeExpenditure` above — that one is step 12's teaching aid, computed
+  // before goals are even chosen (goal=''), and reusing it here meant the
+  // number a user agreed to on the summary card and the number that landed
+  // in their saved profile (goal-adjusted by handleFinish, a few hundred
+  // calories off for "Lose weight"/"Build muscle") could silently disagree.
+  const finalCalorieGoal = calculateCalorieGoal(
+    computedAge, weightLbs, heightFeet, heightInches, gender, activityLevel, goals[0] || ''
+  );
+  const safeFinalCalorieGoal = Number.isFinite(finalCalorieGoal) ? finalCalorieGoal : DEFAULT_CALORIE_GOAL;
+
   const renderStep = () => {
     switch (step) {
       case 1:
@@ -667,10 +709,43 @@ export default function OnboardingScreen({ navigation, route }: any) {
       case 5:
         return (
           <Enter index={1}>
-            <View style={styles.chipWrap} accessibilityRole="radiogroup">
-              {bodyFatOptions.map(label =>
-                renderOptionCard(label, label, undefined, bodyFatLevel === label, () => setBodyFatLevel(label))
-              )}
+            <View style={styles.bodyFatGrid} accessibilityRole="radiogroup">
+              {bodyFatOptions.map((label, index) => {
+                const selected = bodyFatLevel === label;
+                return (
+                  <PressableScale
+                    key={label}
+                    accessibilityRole="radio"
+                    accessibilityLabel={label}
+                    accessibilityState={{ selected, checked: selected }}
+                    onPress={() => selectOption(() => setBodyFatLevel(label))}
+                    style={styles.bodyFatCardWrap}>
+                    <View
+                      style={[
+                        styles.bodyFatCard,
+                        { backgroundColor: palette.surface, borderColor: palette.border },
+                        selected && { backgroundColor: palette.accentSoft, borderColor: palette.accent },
+                      ]}>
+                      <BodyFatIcon level={index} size={64} />
+                    </View>
+                    <View
+                      style={[
+                        styles.bodyFatLabelPill,
+                        { backgroundColor: palette.surface, borderColor: palette.border },
+                        selected && { borderColor: palette.accent },
+                      ]}>
+                      <Text
+                        style={[
+                          styles.bodyFatLabelText,
+                          { color: palette.textSecondary },
+                          selected && { color: palette.accent },
+                        ]}>
+                        {label}
+                      </Text>
+                    </View>
+                  </PressableScale>
+                );
+              })}
             </View>
           </Enter>
         );
@@ -886,7 +961,7 @@ export default function OnboardingScreen({ navigation, route }: any) {
                   { icon: 'flash' as const, label: 'Daily XP Goal', value: '100 XP' },
                   { icon: 'list' as const, label: 'Daily Quests', value: '3' },
                   { icon: 'water' as const, label: 'Water Goal', value: `${calculateWaterGoal(computedAge)}ml` },
-                  { icon: 'flame' as const, label: 'Calorie Goal', value: `${safeExpenditure} kcal` },
+                  { icon: 'flame' as const, label: 'Calorie Goal', value: `${safeFinalCalorieGoal} kcal` },
                   { icon: 'moon' as const, label: 'Sleep Goal', value: '8 hours' },
                 ].map((row, index) => (
                   <View key={row.label}>
@@ -1003,6 +1078,58 @@ export default function OnboardingScreen({ navigation, route }: any) {
     );
   };
 
+  // Steps 2-4 (date of birth, height, weight) render a WheelPicker column,
+  // which is itself a FlatList — a VirtualizedList. React Native's "should
+  // never be nested" warning fires purely from the STRUCTURAL nesting (a
+  // VirtualizedList descending from a ScrollView's context), not from
+  // whether the outer ScrollView can actually scroll — an earlier version of
+  // this screen tried `scrollEnabled={!stepHasWheelPicker}` on the same
+  // ScrollView, which looked right but left the FlatList nested inside it
+  // either way, so the warning kept firing on real devices. The actual fix
+  // has to remove the ScrollView from the tree entirely for these steps, not
+  // just disable its scrolling — hence the two full render paths below
+  // rather than one ScrollView with a prop toggle. None of these three steps
+  // has enough content to need outer scrolling anyway (no text inputs, no
+  // keyboard, a title, a picker, and a Next button).
+  const stepHasWheelPicker = step === 2 || step === 3 || step === 4;
+
+  const stepContent = (
+    <>
+      <View
+        style={styles.progressBlock}
+        accessible
+        accessibilityRole="progressbar"
+        accessibilityLabel={`${t('stepOf')} ${step} / ${TOTAL_STEPS}`}
+        accessibilityValue={{ min: 1, max: TOTAL_STEPS, now: step }}>
+        <View style={styles.chapterBarRow}>
+          {CHAPTERS.map(chapter => {
+            const span = chapter.endStep - chapter.startStep + 1;
+            const doneInChapter = Math.min(Math.max(step - chapter.startStep + 1, 0), span);
+            return (
+              <AnimatedMeter
+                key={chapter.label}
+                progress={doneInChapter / span}
+                height={spacing.xs + 2}
+                celebrateAtFull={false}
+                style={styles.chapterBarSegment}
+              />
+            );
+          })}
+        </View>
+        <Text style={dynamicStyles.stepText}>
+          {CHAPTERS.find(c => step >= c.startStep && step <= c.endStep)?.label ?? ''} · {t('stepOf')} {step} / {TOTAL_STEPS}
+        </Text>
+      </View>
+
+      <View key={step}>
+        <Enter index={0}>
+          <Text style={dynamicStyles.subtitle}>{stepSubtitle()}</Text>
+        </Enter>
+        {renderStep()}
+      </View>
+    </>
+  );
+
   return (
     <Screen>
       <AppBar title={stepTitle()} onBack={step > 1 ? goToPrevStep : undefined} />
@@ -1011,39 +1138,24 @@ export default function OnboardingScreen({ navigation, route }: any) {
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={styles.scrollWrap}>
-          <ScrollView
-            style={styles.scroll}
-            contentContainerStyle={styles.scrollContent}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-            onContentSizeChange={overflow.onContentSizeChange}
-            onLayout={overflow.onLayout}
-            onScroll={overflow.onScroll}
-            scrollEventThrottle={16}>
-            <View
-              style={styles.progressBlock}
-              accessible
-              accessibilityRole="progressbar"
-              accessibilityLabel={`${t('stepOf')} ${step} / ${TOTAL_STEPS}`}
-              accessibilityValue={{ min: 1, max: TOTAL_STEPS, now: step }}>
-              <AnimatedMeter
-                progress={step / TOTAL_STEPS}
-                height={spacing.xs + 2}
-                celebrateAtFull={false}
-              />
-              <Text style={dynamicStyles.stepText}>
-                {t('stepOf')} {step} / {TOTAL_STEPS}
-              </Text>
-            </View>
-
-            <View key={step}>
-              <Enter index={0}>
-                <Text style={dynamicStyles.subtitle}>{stepSubtitle()}</Text>
-              </Enter>
-              {renderStep()}
-            </View>
-          </ScrollView>
-          <ScrollFadeOverlay visible={overflow.showFade} />
+          {stepHasWheelPicker ? (
+            <View style={[styles.scroll, styles.scrollContent]}>{stepContent}</View>
+          ) : (
+            <>
+              <ScrollView
+                style={styles.scroll}
+                contentContainerStyle={styles.scrollContent}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+                onContentSizeChange={overflow.onContentSizeChange}
+                onLayout={overflow.onLayout}
+                onScroll={overflow.onScroll}
+                scrollEventThrottle={16}>
+                {stepContent}
+              </ScrollView>
+              <ScrollFadeOverlay visible={overflow.showFade} />
+            </>
+          )}
         </View>
 
         <View style={styles.footer}>{renderPrimaryAction()}</View>
@@ -1081,6 +1193,13 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     gap: spacing.sm,
   },
+  chapterBarRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
+  chapterBarSegment: {
+    flex: 1,
+  },
   stepText: {
     ...type.label,
     textTransform: 'uppercase',
@@ -1098,6 +1217,44 @@ const styles = StyleSheet.create({
   },
   conversionText: {
     ...type.bodySm,
+  },
+
+  // Body-fat step's 3-per-row grid — separate from chipWrap's cards, which
+  // are full-width label rows and don't have room for an image on top.
+  bodyFatGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.md,
+  },
+  bodyFatCardWrap: {
+    // 3 columns with two `md` gaps between them, so each card's width comes
+    // out to (100% - 2*gap) / 3 without hardcoding a screen width.
+    flexBasis: '30%',
+    flexGrow: 1,
+    alignItems: 'center',
+  },
+  bodyFatCard: {
+    width: '100%',
+    aspectRatio: 1,
+    borderWidth: layout.hairline,
+    borderRadius: radius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // Overlaps the card's bottom edge (negative margin) rather than sitting
+  // in the flow beneath it — same floating-badge placement as the reference
+  // layout this step was redone to match, so the percentage reads as part
+  // of the card rather than a caption trailing after it.
+  bodyFatLabelPill: {
+    marginTop: -spacing.md,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.pill,
+    borderWidth: layout.hairline,
+  },
+  bodyFatLabelText: {
+    ...type.bodySm,
+    fontFamily: fontFamily.sansBold,
   },
 
   chipWrap: {

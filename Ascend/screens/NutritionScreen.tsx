@@ -28,6 +28,8 @@ import {
   Alert,
   Linking,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { getDoc, setDoc } from 'firebase/firestore';
 import * as ImagePicker from 'expo-image-picker';
@@ -47,7 +49,9 @@ import { Enter } from '../components/dashboard';
 import { CalorieRing } from '../components/CalorieRing';
 import haptics from '../services/haptics';
 import { useUser } from '../context/UserContext';
-import { dayDocRef, getTodayKey, awardXP } from '../firebase/progress';
+import { dayDocRef, getTodayKey, awardXP, incrementStatsField } from '../firebase/progress';
+import { checkAchievementsForUser } from '../firebase/achievements';
+import { celebrateAchievements } from '../utils/achievementAlert';
 import { FOOD_DATABASE, FoodDatabaseItem } from '../data/foods';
 import { searchUSDAFoods } from '../data/usdaFoodApi';
 import BarcodeScanner from '../components/BarcodeScanner';
@@ -106,6 +110,16 @@ const SEARCH_ROW_HEIGHT = 64;
 // genuinely nutritious worth meaningfully more than the floor.
 const FOOD_LOG_BASE_XP = 6;
 
+// Sane per-entry caps for the Custom tab's free-typed macros — generous
+// enough to cover a legitimate huge meal (a full day's worth logged as one
+// combo, a bulking-phase feast) while catching the actual failure mode:
+// a stray extra digit ("5000" meant as "500") or pasting the wrong number
+// into the wrong field, either of which would otherwise silently wreck that
+// day's totals, the calorie-goal quest, and the adaptive-calorie math that
+// reads logged intake as ground truth.
+const MAX_CUSTOM_CALORIES = 5000;
+const MAX_CUSTOM_MACRO_GRAMS = 500;
+
 const DEFAULT_CUSTOM_ICON = 'restaurant-outline';
 const CUSTOM_ICON_OPTIONS: string[] = [
   'restaurant-outline',
@@ -119,6 +133,14 @@ const CUSTOM_ICON_OPTIONS: string[] = [
   'leaf-outline',
   'egg-outline',
 ];
+
+// After this many consecutive no-match/failed photo attempts in one visit
+// to the Picture tab, the recovery screen adds a stronger nudge toward
+// manual entry instead of just quietly offering "Try again" forever — a
+// couple of misses in a row usually means this food/photo isn't one the
+// recognizer is going to get, and the honest move is to say so rather than
+// let someone retry the same bad lighting five more times.
+const PICTURE_SAFETY_THRESHOLD = 2;
 
 const FOOD_TIPS = [
   'Center the food in frame',
@@ -290,6 +312,7 @@ export default function NutritionScreen({ navigation }: any) {
   const [customC, setCustomC] = useState('');
   const [customF, setCustomF] = useState('');
   const [customIcon, setCustomIcon] = useState(DEFAULT_CUSTOM_ICON);
+  const [customErrors, setCustomErrors] = useState<{ name?: string; cal?: string; p?: string; c?: string; f?: string }>({});
 
   const [customFoods, setCustomFoods] = useState<CustomFood[]>([]);
 
@@ -299,6 +322,13 @@ export default function NutritionScreen({ navigation }: any) {
   const [pictureCandidates, setPictureCandidates] = useState<FoodRecognitionCandidate[]>([]);
   const [pictureCandidateIndex, setPictureCandidateIndex] = useState(0);
   const [pictureError, setPictureError] = useState<'not-configured' | 'failed' | 'no-match' | null>(null);
+  // Consecutive no-match/failed attempts within this modal visit — resets
+  // the moment a photo actually recognizes something or the tab/modal
+  // closes. Past PICTURE_SAFETY_THRESHOLD, the no-match/failed screens add a
+  // stronger nudge toward manual entry rather than just quietly offering
+  // "Try again" forever, since a few misses in a row usually means this
+  // particular food/lighting isn't one the recognizer is going to get.
+  const [pictureAttempts, setPictureAttempts] = useState(0);
 
   // ---- Load today's food log + saved custom foods ----
   useEffect(() => {
@@ -400,6 +430,14 @@ export default function NutritionScreen({ navigation }: any) {
       // roll that back or interrupt the flow, same reasoning
       // DashboardScreen's completeQuests follows for its own awardXP call.
     }
+    try {
+      await incrementStatsField(authUser.uid, 'totalFoodLogged', 1);
+      celebrateAchievements(await checkAchievementsForUser(authUser.uid));
+    } catch {
+      // Same reasoning as the XP award above — the food log itself already
+      // saved, so a failure here is just a missed achievement check, not
+      // lost data.
+    }
   }
 
   async function deleteFood(id: number) {
@@ -423,7 +461,29 @@ export default function NutritionScreen({ navigation }: any) {
     const timeout = setTimeout(async () => {
       const results = await searchUSDAFoods(query);
       if (!active) return;
-      setApiResults(results);
+      // usdaFoodApi already folds each result's brand into its name (so
+      // "ICE CREAM" ×23 becomes "Ice Cream (Blue Bunny)", "Ice Cream (Edy's)",
+      // etc. — those are real, distinct products, not spam). But USDA quite
+      // often ALSO lists the exact same brand+description more than once —
+      // "Ketchup (First Street)" 5 times, "Ice Cream (Great Value)" twice —
+      // as separate size/lot entries with no name USDA gives us to tell them
+      // apart. Deduping on name+macros (an earlier version of this fix) let
+      // those through, since their nutrition differs slightly: two rows that
+      // read identically to the user but silently carry different numbers is
+      // the same "which one do I pick" confusion as the original bug, just
+      // one brand deep instead of the whole search. Since there is nothing
+      // left to distinguish them BY, name alone is the right dedupe key here
+      // — collapse to one representative (USDA's own relevance ranking
+      // already put the best match first) rather than show two rows a user
+      // cannot tell apart by reading them.
+      const seen = new Set<string>();
+      const deduped = results.filter(item => {
+        const key = item.name.trim().toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      setApiResults(deduped);
       setApiLoading(false);
     }, 400);
     return () => { active = false; clearTimeout(timeout); };
@@ -454,18 +514,82 @@ export default function NutritionScreen({ navigation }: any) {
 
   function submitCustom() {
     const cal = parseFloat(customCal);
-    if (!customName.trim() || !Number.isFinite(cal)) return;
+    const p = customP.trim() === '' ? 0 : parseFloat(customP);
+    const c = customC.trim() === '' ? 0 : parseFloat(customC);
+    const f = customF.trim() === '' ? 0 : parseFloat(customF);
+
+    const errors: typeof customErrors = {};
+    if (!customName.trim()) errors.name = 'Give it a name.';
+    if (!Number.isFinite(cal) || cal < 0) errors.cal = 'Enter a valid number.';
+    else if (cal > MAX_CUSTOM_CALORIES) errors.cal = `Keep it under ${MAX_CUSTOM_CALORIES.toLocaleString()}.`;
+    if (!Number.isFinite(p) || p < 0) errors.p = 'Invalid';
+    else if (p > MAX_CUSTOM_MACRO_GRAMS) errors.p = `Max ${MAX_CUSTOM_MACRO_GRAMS}g`;
+    if (!Number.isFinite(c) || c < 0) errors.c = 'Invalid';
+    else if (c > MAX_CUSTOM_MACRO_GRAMS) errors.c = `Max ${MAX_CUSTOM_MACRO_GRAMS}g`;
+    if (!Number.isFinite(f) || f < 0) errors.f = 'Invalid';
+    else if (f > MAX_CUSTOM_MACRO_GRAMS) errors.f = `Max ${MAX_CUSTOM_MACRO_GRAMS}g`;
+
+    setCustomErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      haptics.selection();
+      return;
+    }
+
     addFood({
       name: customName.trim(),
       calories: Math.round(cal),
-      protein: Math.round(parseFloat(customP) || 0),
-      carbs:   Math.round(parseFloat(customC) || 0),
-      fat:     Math.round(parseFloat(customF) || 0),
+      protein: Math.round(p),
+      carbs:   Math.round(c),
+      fat:     Math.round(f),
       loggedVia: 'custom',
       customIcon,
     });
+    saveRecentCustomFood({
+      id: `${Date.now()}`,
+      name: customName.trim(),
+      servingLabel: '',
+      calories: Math.round(cal),
+      protein: Math.round(p),
+      carbs: Math.round(c),
+      fat: Math.round(f),
+      ingredients: [],
+    });
     setCustomName(''); setCustomCal(''); setCustomP(''); setCustomC(''); setCustomF('');
     setCustomIcon(DEFAULT_CUSTOM_ICON);
+    setCustomErrors({});
+    closeModal();
+  }
+
+  // Keeps the Custom tab's "Recent" shortcuts capped at the 3 most recently
+  // logged custom foods, most-recent-first. Re-logging something already in
+  // the list moves it back to the front instead of appending a duplicate —
+  // logging "Protein shake" three days running should still show ONE row for
+  // it, not fill the whole cap with the same name.
+  function saveRecentCustomFood(entry: CustomFood) {
+    if (!authUser) return;
+    const deduped = customFoods.filter(f => f.name.toLowerCase() !== entry.name.toLowerCase());
+    const updated = [entry, ...deduped].slice(0, 3);
+    setCustomFoods(updated);
+    setDoc(customFoodsDocRef(authUser.uid), { foods: updated }).catch(() => {
+      // Best-effort — the shortcut list is a convenience, not data the rest
+      // of the app depends on; a failed write just means next load shows the
+      // pre-update list instead of retrying.
+    });
+  }
+
+  function logRecentCustomFood(food: CustomFood) {
+    addFood({
+      name: food.name,
+      calories: food.calories,
+      protein: food.protein,
+      carbs: food.carbs,
+      fat: food.fat,
+      loggedVia: 'custom',
+    });
+    // Re-logging it is itself a "use" — bump it back to the front of Recent
+    // rather than leaving it wherever it was (or letting it fall off the
+    // 3-item cap while it's actually the thing being used right now).
+    saveRecentCustomFood(food);
     closeModal();
   }
 
@@ -476,6 +600,7 @@ export default function NutritionScreen({ navigation }: any) {
     setPictureCandidates([]);
     setPictureCandidateIndex(0);
     setPictureError(null);
+    setPictureAttempts(0);
   }
 
   async function openCameraForPicture() {
@@ -511,16 +636,19 @@ export default function NutritionScreen({ navigation }: any) {
       const candidates = await recognizeFoodFromImage(compressedUri);
       if (candidates.length === 0) {
         setPictureError('no-match');
+        setPictureAttempts(n => n + 1);
       } else {
         setPictureCandidates(candidates);
         setPictureCandidateIndex(0);
         setPictureStage('result');
+        setPictureAttempts(0);
       }
     } catch (err) {
       if (err instanceof FoodRecognitionNotConfiguredError) {
         setPictureError('not-configured');
       } else {
         setPictureError('failed');
+        setPictureAttempts(n => n + 1);
       }
     } finally {
       setPictureLoading(false);
@@ -534,6 +662,7 @@ export default function NutritionScreen({ navigation }: any) {
     } else {
       // Out of guesses — fall back to Manual, same as a genuine no-match.
       setPictureError('no-match');
+      setPictureAttempts(n => n + 1);
     }
   }
 
@@ -627,6 +756,7 @@ export default function NutritionScreen({ navigation }: any) {
     setModalVisible(false);
     resetPictureTab();
     resetDescriptionTab();
+    setCustomErrors({});
   }
 
   // ---- Render ----
@@ -804,7 +934,15 @@ export default function NutritionScreen({ navigation }: any) {
 
       {/* Add food modal — four tabs, all funneling into addFood(). */}
       <Modal visible={modalVisible} transparent animationType="slide" onRequestClose={closeModal}>
-        <View style={[styles.modalOverlay, { backgroundColor: palette.scrim }]}>
+        {/* This modal is full-screen, and three of its four tabs (Manual
+            search, Custom, Describe) have a text field a user can focus —
+            without this, the keyboard just overlays the bottom of the
+            screen on top of whatever's there (often the field itself, or
+            the Add/Log button right below it) instead of the content
+            resizing to make room. */}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={[styles.modalOverlay, { backgroundColor: palette.scrim }]}>
           <View style={[styles.modalContent, { backgroundColor: palette.surface, borderColor: palette.border }]}>
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, { color: palette.textPrimary }]}>Log Food</Text>
@@ -877,7 +1015,18 @@ export default function NutritionScreen({ navigation }: any) {
                       palette={palette}
                     />
                   ) : (
-                    <View style={{ gap: spacing.md, paddingTop: spacing.md, flex: 1 }}>
+                    // Scrollable, not a plain View — the multiline field
+                    // below can grow to several lines, and on a shorter
+                    // phone the keyboard shrinking this modal's available
+                    // height could otherwise push "Estimate nutrition"
+                    // (or, typing enough, the field itself) past the bottom
+                    // of the screen with no way to reach it. Scrolling is
+                    // what makes "everything below the fold" still reachable
+                    // instead of the layout just hoping it fits.
+                    <ScrollView
+                      contentContainerStyle={{ gap: spacing.md, paddingTop: spacing.md }}
+                      keyboardShouldPersistTaps="handled"
+                      showsVerticalScrollIndicator={false}>
                       <Pressable
                         onPress={resetDescriptionTab}
                         hitSlop={8}
@@ -901,9 +1050,23 @@ export default function NutritionScreen({ navigation }: any) {
                         multiline
                         numberOfLines={4}
                         textAlignVertical="top"
+                        // Without these two, the mobile keyboard's return key
+                        // on a multiline field defaults to `blurOnSubmit`
+                        // (true on some RN/keyboard combinations even though
+                        // this field never sets onSubmitEditing) — the field
+                        // loses focus and blur bubbling inside this modal's
+                        // gesture handling is what closed the whole "Log
+                        // Food" sheet instead of just dismissing the
+                        // keyboard. returnKeyType="default" keeps the key
+                        // itself labeled as a plain newline (not "Done"/"Go"),
+                        // and blurOnSubmit={false} stops it from blurring at
+                        // all — Enter now only ever inserts a line break,
+                        // never submits or closes anything.
+                        returnKeyType="default"
+                        blurOnSubmit={false}
                       />
                       <Button label="Estimate nutrition" onPress={submitDescription} variant="primary" fullWidth />
-                    </View>
+                    </ScrollView>
                   )}
                 </View>
               ) : (
@@ -979,12 +1142,78 @@ export default function NutritionScreen({ navigation }: any) {
 
             {activeTab === 'custom' && (
               <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: spacing.md }}>
-                <Field label="Name" value={customName} onChangeText={setCustomName} placeholder="Homemade smoothie" />
-                <Field label="Calories" value={customCal} onChangeText={setCustomCal} placeholder="350" keyboardType="numeric" />
+                {/* Capped at 3 and only rendered when there's something to
+                    show — no empty "Recent" header on a first-ever custom
+                    log, and no growing list past the 3 most recent (see
+                    saveRecentCustomFood). Tapping one logs it immediately
+                    with its saved macros, skipping the form entirely. */}
+                {customFoods.length > 0 && (
+                  <View style={{ gap: spacing.sm }}>
+                    <Text style={[styles.iconGridLabel, { color: palette.textMuted }]}>RECENT</Text>
+                    {customFoods.map(food => (
+                      <Pressable
+                        key={food.id}
+                        onPress={() => { haptics.selection(); logRecentCustomFood(food); }}
+                        style={({ pressed }) => [
+                          styles.recentCustomRow,
+                          { backgroundColor: palette.surfaceSunken, borderColor: palette.border },
+                          pressed && { opacity: 0.7 },
+                        ]}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Log ${food.name} again, ${food.calories} calories`}>
+                        <Text style={[styles.recentCustomName, { color: palette.textPrimary }]} numberOfLines={1}>
+                          {food.name}
+                        </Text>
+                        <Text style={[styles.recentCustomMacros, { color: palette.textMuted }]}>
+                          {food.calories} kcal
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                )}
+                <Field
+                  label="Name"
+                  value={customName}
+                  onChangeText={t => { setCustomName(t); if (customErrors.name) setCustomErrors(e => ({ ...e, name: undefined })); }}
+                  placeholder="Homemade smoothie"
+                  error={customErrors.name}
+                />
+                <Field
+                  label="Calories"
+                  value={customCal}
+                  onChangeText={t => { setCustomCal(t); if (customErrors.cal) setCustomErrors(e => ({ ...e, cal: undefined })); }}
+                  placeholder="350"
+                  keyboardType="numeric"
+                  error={customErrors.cal}
+                />
                 <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-                  <View style={{ flex: 1 }}><Field label="P (g)" value={customP} onChangeText={setCustomP} keyboardType="numeric" /></View>
-                  <View style={{ flex: 1 }}><Field label="C (g)" value={customC} onChangeText={setCustomC} keyboardType="numeric" /></View>
-                  <View style={{ flex: 1 }}><Field label="F (g)" value={customF} onChangeText={setCustomF} keyboardType="numeric" /></View>
+                  <View style={{ flex: 1 }}>
+                    <Field
+                      label="P (g)"
+                      value={customP}
+                      onChangeText={t => { setCustomP(t); if (customErrors.p) setCustomErrors(e => ({ ...e, p: undefined })); }}
+                      keyboardType="numeric"
+                      error={customErrors.p}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Field
+                      label="C (g)"
+                      value={customC}
+                      onChangeText={t => { setCustomC(t); if (customErrors.c) setCustomErrors(e => ({ ...e, c: undefined })); }}
+                      keyboardType="numeric"
+                      error={customErrors.c}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Field
+                      label="F (g)"
+                      value={customF}
+                      onChangeText={t => { setCustomF(t); if (customErrors.f) setCustomErrors(e => ({ ...e, f: undefined })); }}
+                      keyboardType="numeric"
+                      error={customErrors.f}
+                    />
+                  </View>
                 </View>
 
                 <View>
@@ -1035,20 +1264,41 @@ export default function NutritionScreen({ navigation }: any) {
                     <Ionicons name="help-circle-outline" size={36} color={palette.textMuted} />
                     <Text style={[styles.tabMessageTitle, { color: palette.textPrimary }]}>Couldn't find a match</Text>
                     <Text style={[styles.tabMessageBody, { color: palette.textMuted }]}>
-                      Search or enter it manually instead.
+                      {pictureAttempts >= PICTURE_SAFETY_THRESHOLD
+                        ? "A few tries in a row haven't found it — this one's probably faster to enter by hand."
+                        : 'Rescan the photo, or search/enter it manually instead.'}
                     </Text>
-                    <Button label="Go to Manual" onPress={goToManualFromPicture} variant="secondary" />
+                    <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                      {pictureAttempts < PICTURE_SAFETY_THRESHOLD && (
+                        <Button label="Rescan" onPress={() => { setPictureError(null); setPictureStage('tips'); }} variant="secondary" size="sm" />
+                      )}
+                      <Button
+                        label="Enter manually"
+                        onPress={goToManualFromPicture}
+                        variant={pictureAttempts >= PICTURE_SAFETY_THRESHOLD ? 'primary' : 'ghost'}
+                        size="sm"
+                      />
+                    </View>
                   </View>
                 ) : pictureError === 'failed' ? (
                   <View style={styles.tabMessageBox}>
                     <Ionicons name="alert-circle-outline" size={36} color={palette.danger} />
                     <Text style={[styles.tabMessageTitle, { color: palette.textPrimary }]}>Couldn't analyze that photo</Text>
                     <Text style={[styles.tabMessageBody, { color: palette.textMuted }]}>
-                      Try again, or log it manually.
+                      {pictureAttempts >= PICTURE_SAFETY_THRESHOLD
+                        ? "Still not working after a few tries — let's log it manually instead."
+                        : 'Rescan the photo, or log it manually.'}
                     </Text>
                     <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-                      <Button label="Try again" onPress={() => { setPictureError(null); setPictureStage('tips'); }} variant="secondary" size="sm" />
-                      <Button label="Manual" onPress={goToManualFromPicture} variant="ghost" size="sm" />
+                      {pictureAttempts < PICTURE_SAFETY_THRESHOLD && (
+                        <Button label="Rescan" onPress={() => { setPictureError(null); setPictureStage('tips'); }} variant="secondary" size="sm" />
+                      )}
+                      <Button
+                        label="Enter manually"
+                        onPress={goToManualFromPicture}
+                        variant={pictureAttempts >= PICTURE_SAFETY_THRESHOLD ? 'primary' : 'ghost'}
+                        size="sm"
+                      />
                     </View>
                   </View>
                 ) : pictureLoading ? (
@@ -1079,15 +1329,25 @@ export default function NutritionScreen({ navigation }: any) {
               </View>
             )}
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
-      <BarcodeScanner
-        visible={scannerVisible}
-        onClose={() => setScannerVisible(false)}
-        onFound={(item) => { setScannerVisible(false); pickResult(item, 'barcode'); }}
-        palette={palette}
-      />
+      {/* Conditionally MOUNTED, not just visible-toggled — BarcodeScanner
+          renders its own <Modal>, and react-native-web disables pointer
+          events on a background Modal when a second one is mounted on top
+          of it (even at visible={false}). Since the scanner can only ever
+          open from inside the already-open add-food Modal above, both would
+          otherwise be mounted at once and the scanner's camera/buttons
+          would silently stop responding to taps — see DashboardScreen's
+          WeightPromptModal/BedtimePromptModal for the same fix. */}
+      {scannerVisible && (
+        <BarcodeScanner
+          visible
+          onClose={() => setScannerVisible(false)}
+          onFound={(item) => { setScannerVisible(false); pickResult(item, 'barcode'); }}
+          palette={palette}
+        />
+      )}
     </View>
   );
 }
@@ -1123,6 +1383,13 @@ function FoodCandidateCard({
       <Text style={[styles.resultName, { color: palette.textPrimary }]}>{candidate.name}</Text>
       <Text style={[styles.resultConfidence, { color: palette.textMuted }]}>
         {Math.round(candidate.confidence * 100)}% match
+      </Text>
+      {/* AI-generated estimates can be wrong — this app has no way to verify
+          against a real nutrition label for a described/photographed meal
+          the way a barcode scan can, so every guess this card ever shows
+          carries this note rather than presenting Gemini's number as fact. */}
+      <Text style={[styles.aiDisclaimer, { color: palette.textMuted }]}>
+        AI-generated estimate — may not be exact
       </Text>
       <View style={[styles.healthChip, { backgroundColor: tokens.soft, borderColor: tokens.color, alignSelf: 'flex-start' }]}>
         <Text style={[styles.healthChipText, { color: tokens.color }]}>{healthScore}/100</Text>
@@ -1352,6 +1619,7 @@ const styles = StyleSheet.create({
   resultCard: { gap: spacing.xs, paddingTop: spacing.md },
   resultName: { fontFamily: fontFamily.serif, fontSize: 20 },
   resultConfidence: { fontFamily: fontFamily.sans, fontSize: 12 },
+  aiDisclaimer: { fontFamily: fontFamily.sans, fontSize: 11, fontStyle: 'italic', marginTop: 2 },
   resultMacros: { fontFamily: fontFamily.sans, fontSize: 14, marginTop: spacing.xs },
 
   iconGridLabel: {
@@ -1361,6 +1629,17 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     marginBottom: spacing.sm,
   },
+  recentCustomRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: layout.hairline,
+    borderRadius: radius.md,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
+  recentCustomName: { fontFamily: fontFamily.sansBold, fontSize: 14, flex: 1, marginRight: spacing.sm },
+  recentCustomMacros: { fontFamily: fontFamily.sans, fontSize: 13 },
   iconGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   iconSwatch: {
     width: 44,

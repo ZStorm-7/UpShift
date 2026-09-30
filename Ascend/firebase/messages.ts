@@ -119,16 +119,31 @@ export async function getOrCreateConversation(myUid: string, otherUid: string): 
 // use elsewhere in this app: caller owns the returned unsubscribe.
 export function subscribeToConversations(
   uid: string,
-  callback: (conversations: Conversation[]) => void
+  callback: (conversations: Conversation[]) => void,
+  // Without this, a rules/index problem on this query fails SILENTLY —
+  // onSnapshot's success callback simply never fires, and the caller (see
+  // MessagesScreen) has no way to tell "still loading" apart from "loading
+  // forever because something is broken." Logged by default so the failure
+  // at least surfaces somewhere even if a caller doesn't pass its own
+  // handler; callers should still set their own loading state to false here
+  // rather than spin forever.
+  onError?: (error: unknown) => void
 ): Unsubscribe {
   const q = query(
     collection(db, 'conversations'),
     where('participants', 'array-contains', uid),
     orderBy('lastMessageAt', 'desc')
   );
-  return onSnapshot(q, snap => {
-    callback(snap.docs.map(d => ({ id: d.id, ...(d.data() as ConversationDoc) })));
-  });
+  return onSnapshot(
+    q,
+    snap => {
+      callback(snap.docs.map(d => ({ id: d.id, ...(d.data() as ConversationDoc) })));
+    },
+    error => {
+      console.error('subscribeToConversations failed:', error);
+      onError?.(error);
+    }
+  );
 }
 
 // Single-conversation subscription — ChatScreen uses this (rather than
@@ -228,6 +243,14 @@ export async function unblockUser(uid: string, blockedUid: string): Promise<void
 export async function isBlocked(uid: string, otherUid: string): Promise<boolean> {
   const snap = await getDoc(socialDocRef(uid));
   return ((snap.data() as SocialDoc | undefined)?.blockedUids ?? []).includes(otherUid);
+}
+
+/** The caller's full blocked list in one read — for a screen checking many
+ * uids at once (e.g. LeaderboardScreen filtering blocked rows out of the
+ * list), this is one doc read instead of one isBlocked() call per row. */
+export async function getBlockedUids(uid: string): Promise<string[]> {
+  const snap = await getDoc(socialDocRef(uid));
+  return (snap.data() as SocialDoc | undefined)?.blockedUids ?? [];
 }
 
 // A lightweight flag, not a moderation queue — there's no admin UI reading

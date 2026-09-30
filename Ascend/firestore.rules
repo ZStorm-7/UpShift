@@ -98,7 +98,7 @@ service cloud.firestore {
         && request.auth.uid == userId
         && request.resource.data.uid == userId
         && request.resource.data.keys().hasOnly(
-             ['uid', 'displayName', 'avatar', 'avatarColor', 'level', 'totalXP', 'rank', 'streak'])
+             ['uid', 'displayName', 'avatar', 'avatarColor', 'bio', 'level', 'totalXP', 'rank', 'streak'])
         && request.resource.data.displayName is string
         && request.resource.data.displayName.size() <= 40
         && request.resource.data.avatar is string
@@ -112,6 +112,17 @@ service cloud.firestore {
         && (!('avatarColor' in request.resource.data)
             || (request.resource.data.avatarColor is string
                 && request.resource.data.avatarColor.size() <= 9))
+        // bio is optional too, same reasoning — LeaderboardEntry.bio was
+        // added on the client (DashboardScreen's publishToLeaderboard) but
+        // this hasOnly() list was never updated to match, so every publish
+        // for anyone who'd ever written a bio was rejected outright
+        // (permission-denied) and silently swallowed by that call's own
+        // .catch(() => {}), freezing their entire leaderboard row — level,
+        // streak, XP, name, avatar — at whatever it was before. 200 matches
+        // EditProfileScreen/SettingsScreen's own maxLength on the bio field.
+        && (!('bio' in request.resource.data)
+            || (request.resource.data.bio is string
+                && request.resource.data.bio.size() <= 200))
         && request.resource.data.rank is string
         && request.resource.data.level is int
         && request.resource.data.level >= 1
@@ -242,16 +253,27 @@ service cloud.firestore {
     }
 
     // ---- Direct messages: conversations ----
-    // One doc per friend pair, id-derived (see dmUids above) rather than
-    // queried for. Both participants trust each other with the WHOLE doc,
-    // same reasoning `challenges` already documents for a 2-person
-    // collaborative doc: lastMessage/lastMessageAt/lastMessageSenderId get
-    // written by whichever side just sent, and lastReadAt is a map so each
-    // side's own key can be bumped independently without either being able
-    // to forge the OTHER's read receipt as anything but "now" (there's
-    // nothing to gain by lying about your own read time).
+    // One doc per friend pair, id-derived (see dmUids above). The create/
+    // update rules below still enforce that invariant — `participants`
+    // always equals dmUids(conversationId) — but the READ rule can't rely on
+    // the id-derived check alone: MessagesScreen lists every conversation a
+    // user is in with a single collection query
+    // (`where('participants', 'array-contains', uid)`, see
+    // subscribeToConversations), and Firestore can only grant a `list` query
+    // by evaluating the rule against each matched document's DATA — it has
+    // no conversationId to parse yet since the whole point of the query is
+    // to discover which ids exist. A rule that only ever inspects the path
+    // segment denies every list query outright (confirmed: it did, with
+    // "Missing or insufficient permissions", leaving Messages stuck on its
+    // loading skeleton forever — subscribeToConversations's onSnapshot has
+    // no error handler, so the failure was otherwise silent). Checking
+    // resource.data.participants directly is what makes the list query
+    // legible to the rules engine; isDmParticipant is kept as a second,
+    // redundant condition for the direct-by-id get() case, which is not
+    // required to type as an array-contains match at rule-evaluation time.
     match /conversations/{conversationId} {
-      allow read: if request.auth != null && isDmParticipant(conversationId);
+      allow read: if request.auth != null
+        && (isDmParticipant(conversationId) || request.auth.uid in resource.data.participants);
       allow create: if request.auth != null
         && isDmParticipant(conversationId)
         && dmUids(conversationId).size() == 2

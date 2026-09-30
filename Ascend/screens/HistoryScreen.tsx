@@ -788,7 +788,19 @@ function WeightScatterplot({
                     stroke={palette.divider} strokeWidth={0.5} />
                   <SvgText x={padL - 6} y={yFor(v) + 4} textAnchor="end"
                     fill={palette.textMuted} fontSize={10} fontFamily={fontFamily.sans}>
-                    {Math.round(v)}
+                    {/* Math.round() alone collapsed a fractional step (e.g.
+                        174, 174.5, 175, 175.5, 176 — the actual ticks for a
+                        single-entry chart, whose 2lb auto-range needs a 0.5
+                        step to hit 5 ticks) into repeated whole numbers:
+                        174, 175, 175, 176, 176. Only round when the step
+                        itself is already a whole number — rounded to 2dp
+                        first since `v` accumulates via repeated float
+                        addition in the loop above and 175.5 can arrive as
+                        175.49999999999997. */}
+                    {(() => {
+                      const rounded = Math.round(v * 100) / 100;
+                      return Number.isInteger(rounded) ? rounded : rounded.toFixed(1);
+                    })()}
                   </SvgText>
                 </G>
               ))}

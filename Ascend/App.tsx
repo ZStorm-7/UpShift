@@ -31,9 +31,11 @@ import EditProfileScreen from './screens/EditProfileScreen';
 import DashboardScreen from './screens/DashboardScreen';
 import NutritionScreen from './screens/NutritionScreen';
 import WorkoutScreen from './screens/WorkoutScreen';
+import WorkoutSessionScreen from './screens/WorkoutSessionScreen';
 import WorkoutSummaryScreen from './screens/WorkoutSummaryScreen';
 import HistoryScreen from './screens/HistoryScreen';
 import LeaderboardScreen from './screens/LeaderboardScreen';
+import AchievementsScreen from './screens/AchievementsScreen';
 import FriendsScreen from './screens/FriendsScreen';
 import MessagesScreen from './screens/MessagesScreen';
 import ChatScreen from './screens/ChatScreen';
@@ -49,6 +51,7 @@ import WeightScreen from './screens/WeightScreen';
 import BirthdayScreen from './screens/BirthdayScreen';
 import OfflineBanner from './components/OfflineBanner';
 import PushTokenRegistrar from './components/PushTokenRegistrar';
+import ConfirmDialogHost from './components/ConfirmDialogHost';
 
 const Stack = createNativeStackNavigator();
 
@@ -225,10 +228,12 @@ function RootNavigator() {
       <Stack.Screen name="Dashboard" component={DashboardScreen} />
       <Stack.Screen name="Nutrition" component={NutritionScreen} />
       <Stack.Screen name="Workout" component={WorkoutScreen} />
+      <Stack.Screen name="WorkoutSession" component={WorkoutSessionScreen} />
       <Stack.Screen name="WorkoutSensor" component={WorkoutSensorScreen} />
       <Stack.Screen name="WorkoutSummary" component={WorkoutSummaryScreen} />
       <Stack.Screen name="History" component={HistoryScreen} />
       <Stack.Screen name="Leaderboard" component={LeaderboardScreen} />
+      <Stack.Screen name="Achievements" component={AchievementsScreen} />
       <Stack.Screen name="Friends" component={FriendsScreen} />
       <Stack.Screen name="Messages" component={MessagesScreen} />
       <Stack.Screen name="Chat" component={ChatScreen} />
@@ -254,6 +259,11 @@ function ThemedNavigator() {
       <NavigationContainer>
         <RootNavigator />
       </NavigationContainer>
+      {/* One instance for the whole app — see its own comment on why a
+          single host answers every confirmAsync call rather than each
+          screen owning its own. Renders nothing on native; confirmAsync
+          only ever publishes a request here on web. */}
+      <ConfirmDialogHost />
     </View>
   );
 }

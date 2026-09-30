@@ -18,7 +18,7 @@
 // app can lock anything.
 
 import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView, Alert, Linking, KeyboardAvoidingView, Platform } from 'react-native';
 import AnimatedToggle from '../components/AnimatedToggle';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
@@ -28,27 +28,33 @@ import { usePalette } from '../theme/themedColors';
 import { Screen, AppBar, Button, Field } from '../components/ui';
 import { useUser } from '../context/UserContext';
 import { dayDocRef, getTodayKey } from '../firebase/progress';
-import { scheduleBedtimeReminder, cancelBedtimeReminder } from '../services/notifications';
+import { scheduleBedtimeReminder, cancelBedtimeReminder, requestNotificationPermission } from '../services/notifications';
 import haptics from '../services/haptics';
 import { safeGoBack } from '../utils/nav';
 
 const DEFAULT_BEDTIME_HOUR = 22;
 const DEFAULT_BEDTIME_MINUTE = 0;
 
-// Parses "11:00 PM", "11:00pm", or 24-hour "23:00" into minutes since
-// midnight (0–1439). Returns null for anything that doesn't match, so the
-// caller can show an error rather than silently computing something wrong.
-// (Moved here from DashboardScreen along with the rest of the sleep UI.)
+// Parses "11:00 PM" / "11:00pm" into minutes since midnight (0–1439).
+// AM/PM is REQUIRED, not optional — this used to accept a bare "10:30" and
+// silently treat it as 10:30 AM, which for a BEDTIME is almost always the
+// wrong half of the day (nobody means "10:30 in the morning" when setting a
+// bedtime reminder). That meant the reminder got scheduled 12 hours off from
+// what the person actually wanted and just never fired at the real bedtime —
+// not a notifications bug, a parsing one. Returns null for anything that
+// doesn't match (including a missing AM/PM), so the caller shows an error
+// instead of guessing.
 function parseTimeToMinutes(input: string): number | null {
   const trimmed = input.trim().toUpperCase();
-  const match = trimmed.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/);
+  const match = trimmed.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/);
   if (!match) return null;
   let hours = parseInt(match[1], 10);
   const minutes = parseInt(match[2], 10);
   const period = match[3];
+  if (hours < 1 || hours > 12) return null;
   if (period === 'PM' && hours !== 12) hours += 12;
   if (period === 'AM' && hours === 12) hours = 0;
-  if (hours > 23 || minutes > 59) return null;
+  if (minutes > 59) return null;
   return hours * 60 + minutes;
 }
 
@@ -79,6 +85,27 @@ export default function SleepScreen({ navigation, route }: any) {
 
   const toggleReminder = async (value: boolean) => {
     if (!authUser || !profile) return;
+    if (value) {
+      // scheduleBedtimeReminder only CHECKS whether permission is already
+      // granted — it never prompts — so flipping this on for someone who has
+      // never granted notification permission used to silently schedule
+      // nothing at all: the toggle would show on, the screen would say
+      // "Currently set for 10:30 PM," and no notification would ever fire.
+      // Requesting here is what actually gets the OS permission dialog in
+      // front of the user at the one moment it makes sense to ask.
+      const granted = await requestNotificationPermission();
+      if (!granted) {
+        Alert.alert(
+          'Notifications are off',
+          'UpShift needs notification permission to send your bedtime reminder. Enable it in Settings to turn this on.',
+          [
+            { text: 'Not now', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => Linking.openSettings() },
+          ],
+        );
+        return; // toggle stays off — nothing was scheduled, so nothing should claim to be
+      }
+    }
     // AnimatedToggle fires its own selection haptic on press now.
     // Optimistic — this is a plain on/off flag, not worth blocking the
     // switch's own animation on a round trip.
@@ -96,6 +123,27 @@ export default function SleepScreen({ navigation, route }: any) {
       // old value from Firestore. Not worth an error banner for a switch.
     }
   };
+
+  // The reminder defaults to ON for every account (see `reminderEnabled`
+  // above) so a brand-new user sees it active without ever touching the
+  // toggle — but nothing schedules the actual OS notification until this
+  // screen's toggle/save handlers run at least once. Without this, "on" was
+  // purely a Firestore flag: the screen would claim a reminder was set and
+  // none would ever fire for anyone who never opened Sleep and touched
+  // something. Reconciling on mount (only if enabled, and cheap/idempotent —
+  // scheduleBedtimeReminder always cancels-then-reschedules) makes "on" mean
+  // what it says the first time this screen is ever visited, same as it
+  // already does after every subsequent toggle/save.
+  useEffect(() => {
+    if (!authUser || !profile || !reminderEnabled) return;
+    requestNotificationPermission().then(granted => {
+      if (granted) scheduleBedtimeReminder(true, bedtimeHour, bedtimeMinute);
+    });
+    // Only ever needs to run once per visit to this screen — re-running on
+    // every bedtimeHour/bedtimeMinute change would fight with saveBedtime's
+    // own explicit reschedule and double up the permission check.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authUser?.uid]);
 
   useEffect(() => {
     if (!authUser) return;
@@ -187,6 +235,7 @@ export default function SleepScreen({ navigation, route }: any) {
 
   return (
     <Screen style={{ backgroundColor: palette.bg }}>
+      <KeyboardAvoidingView style={styles.flexOne} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <AppBar title="Sleep" onBack={() => safeGoBack(navigation)} />
 
@@ -222,10 +271,10 @@ export default function SleepScreen({ navigation, route }: any) {
         <Text style={[styles.orText, { color: palette.textMuted }]}>or calculate from bedtime & wake time</Text>
         <View style={styles.row}>
           <View style={styles.flexOne}>
-            <Field placeholder="Bedtime" value={bedTimeInput} onChangeText={setBedTimeInput} />
+            <Field placeholder="e.g. 11:00 PM" value={bedTimeInput} onChangeText={setBedTimeInput} />
           </View>
           <View style={styles.flexOne}>
-            <Field placeholder="Wake time" value={wakeTimeInput} onChangeText={setWakeTimeInput} />
+            <Field placeholder="e.g. 7:30 AM" value={wakeTimeInput} onChangeText={setWakeTimeInput} />
           </View>
         </View>
         {timeError !== '' && <Text style={[styles.errorText, { color: palette.danger }]}>{timeError}</Text>}
@@ -261,7 +310,7 @@ export default function SleepScreen({ navigation, route }: any) {
             this is a nudge, not a blocker.
           </Text>
           <Field
-            placeholder="New bedtime"
+            placeholder="e.g. 10:30 PM"
             value={bedtimeInput}
             onChangeText={setBedtimeInput}
           />
@@ -275,11 +324,13 @@ export default function SleepScreen({ navigation, route }: any) {
           />
         </View>
       </ScrollView>
+      </KeyboardAvoidingView>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  flexOne: { flex: 1 },
   content: { padding: spacing.lg, paddingBottom: spacing.xxxl, gap: spacing.md },
   heading: { fontFamily: fontFamily.serif, fontSize: 24, marginTop: spacing.sm },
   loggedNote: { fontFamily: fontFamily.sansBold, fontSize: 14 },
@@ -292,7 +343,6 @@ const styles = StyleSheet.create({
   quickBtnText: { fontFamily: fontFamily.sansBold, fontSize: 16 },
   orText: { fontFamily: fontFamily.sans, fontSize: 13, marginTop: spacing.sm },
   row: { flexDirection: 'row', gap: spacing.sm },
-  flexOne: { flex: 1 },
   errorText: { fontFamily: fontFamily.sans, fontSize: 13 },
   skip: { alignSelf: 'center', paddingVertical: spacing.md },
   skipText: { fontFamily: fontFamily.sans, fontSize: 13, textDecorationLine: 'underline' },

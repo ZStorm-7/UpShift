@@ -1,13 +1,19 @@
 // HealthSyncScreen — offered once, right after the "Let's get started"
 // preview and before Onboarding's questions begin. Requesting the OS
 // permission here (rather than only ever from Settings, where it lived
-// before) means whatever height/weight Apple Health / Health Connect
-// already has on file can pre-fill those onboarding questions instead of
-// asking for numbers the phone already knows.
+// before) means whatever height/weight Health Connect already has on file
+// can pre-fill those onboarding questions instead of asking for numbers the
+// phone already knows.
+//
+// iOS never shows this screen at all — Apple Health/HealthKit support was
+// removed on request (never worked reliably for real users), and Health
+// Connect is Android-only, so there is nothing for an iOS user to connect
+// here. See the early-return effect below and services/health.ts, which
+// re-exports Health Connect directly now that it's the only source.
 //
 // Always skippable and never blocks progress — see services/health.ts for
 // why every call here fails soft (false/null) rather than throwing, and
-// note the file's own caveat that the underlying native modules have not
+// note the file's own caveat that the underlying native module has not
 // been exercised on a real device/build yet.
 //
 // Whatever this successfully reads is handed forward as `Onboarding`'s
@@ -15,7 +21,7 @@
 // screen runs before a profile document exists, so there's nothing to
 // merge partial data into yet.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { usePalette } from '../theme/themedColors';
@@ -32,7 +38,7 @@ export type HealthPrefill = {
   heightInches?: number;
 };
 
-const PLATFORM_NAME = Platform.OS === 'ios' ? 'Apple Health' : 'Health Connect';
+const PLATFORM_NAME = 'Health Connect';
 
 export default function HealthSyncScreen({ navigation }: any) {
   const palette = usePalette();
@@ -41,6 +47,13 @@ export default function HealthSyncScreen({ navigation }: any) {
   const goToOnboarding = (healthPrefill?: HealthPrefill, healthSyncEnabled?: boolean) => {
     navigation.replace('Onboarding', { healthPrefill, healthSyncEnabled });
   };
+
+  // No Apple Health to offer on iOS — skip straight past rather than show a
+  // screen whose only button would always fail with "not available".
+  useEffect(() => {
+    if (Platform.OS === 'ios') goToOnboarding(undefined, false);
+  }, []);
+  if (Platform.OS === 'ios') return null;
 
   const connect = async () => {
     if (connecting) return;

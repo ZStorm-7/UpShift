@@ -31,9 +31,11 @@ import SidePanel from '../components/SidePanel';
 import PulsingIcon from '../components/PulsingIcon';
 import BottomSheet from '../components/BottomSheet';
 import { Ionicons } from '@expo/vector-icons';
-import { useLevelUp } from '../context/LevelUpContext';
 import haptics from '../services/haptics';
-import { useUser } from '../context/UserContext';
+import { useUser, ageGroupFor, calculateAge } from '../context/UserContext';
+import { maybeRecalculateCalorieGoal } from '../firebase/adaptiveCalories';
+import { checkAchievementsForUser } from '../firebase/achievements';
+import { celebrateAchievements } from '../utils/achievementAlert';
 import { useLanguage } from '../i18n/LanguageContext';
 import {
   dayDocRef,
@@ -59,6 +61,7 @@ import {
   streakDocRef,
   advanceStreak,
   liveStreak,
+  reconcileStreakWithFreeze,
 } from '../firebase/streaks';
 import {
   WeightEntry,
@@ -188,7 +191,7 @@ export default function DashboardScreen({ navigation }: any) {
   const [totalCalories, setTotalCalories] = useState(0);
   const [workoutsCompleted, setWorkoutsCompleted] = useState(0);
 
-  // Today's step count, synced from Apple Health / Health Connect once the
+  // Today's step count, synced from Health Connect (Android only) once the
   // user has connected it in Settings (Customize tab). null until a sync has
   // actually run, so the UI can tell "not connected" apart from "connected,
   // 0 steps so far" — see the effect below and the small stats-row line it
@@ -209,8 +212,6 @@ export default function DashboardScreen({ navigation }: any) {
 
   const [streak, setStreak] = useState<StreakState>(EMPTY_STREAK);
   const [weightEntries, setWeightEntries] = useState<WeightEntry[]>([]);
-  const [weightModalVisible, setWeightModalVisible] = useState(false);
-  const [weightInput, setWeightInput] = useState('');
 
   // Daily weight prompt. Pops on the first Dashboard visit each day IF the
   // user hasn't already logged today's weight and hasn't tapped "Skip
@@ -341,11 +342,49 @@ export default function DashboardScreen({ navigation }: any) {
   // user who isn't running a screen reader).
   const [toastMsg, setToastMsg] = useState('');
   const toastTimeoutRef = useRef<any>(null);
-  const showToast = (message: string) => {
+  const showToast = (message: string, durationMs = 3000) => {
     setToastMsg(message);
     if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
-    toastTimeoutRef.current = setTimeout(() => setToastMsg(''), 3000);
+    toastTimeoutRef.current = setTimeout(() => setToastMsg(''), durationMs);
   };
+
+  // Weekly adaptive calorie recalculation (MacroFactor's whole pitch: don't
+  // just set a target once at onboarding and never touch it again — watch
+  // what logged intake vs. logged weight actually did, and adjust). Checked
+  // once per app session rather than on every focus like loadProgress above
+  // — maybeRecalculateCalorieGoal reads up to 14 days of day-docs, which is
+  // too expensive to repeat every time this screen regains focus, and its
+  // own lastRecalcDate guard already makes repeat checks within the same
+  // week a no-op anyway. The ref just avoids paying for that no-op query
+  // more than once per session.
+  const adaptiveCheckedRef = useRef(false);
+  useEffect(() => {
+    if (!authUser || !profile || adaptiveCheckedRef.current) return;
+    adaptiveCheckedRef.current = true;
+    (async () => {
+      try {
+        // Read fresh rather than closing over this component's own
+        // `weightEntries` state — that state is filled in by loadProgress's
+        // OWN async Firestore read above, on no particular schedule relative
+        // to this effect, so closing over it here would almost always see
+        // the pre-load empty array instead of what's actually saved.
+        const weightSnap = await getDoc(weightLogDocRef(authUser.uid));
+        const entries: WeightEntry[] = weightSnap.exists() ? weightSnap.data().entries || [] : [];
+        const isMinor = ageGroupFor(calculateAge(profile.dateOfBirth || '')) === 'teen';
+        const result = await maybeRecalculateCalorieGoal(authUser.uid, profile, entries, isMinor);
+        if (result) {
+          setProfile({ ...profile, calorieGoal: result.newGoal });
+          showToast(
+            `Calorie goal updated: ${result.oldGoal} → ${result.newGoal} kcal, based on your recent progress`,
+            6000
+          );
+        }
+      } catch {
+        // Best-effort — a failed recalculation just means the goal stays
+        // what it was, same as not having enough data yet.
+      }
+    })();
+  }, [authUser, profile]);
 
   // Noon countdown, driven off the device's own local time/timezone — no
   // per-user timezone selection needed, "now" is always whatever time it
@@ -376,45 +415,15 @@ export default function DashboardScreen({ navigation }: any) {
   // then instantly auto-completed for XP they earned weeks ago.
   const questContextRef = useRef<() => QuestContext>(() => buildQuestContext());
 
-  // Level-up: a full-screen 2.5s takeover plus a vibration. Driven by
-  // comparing the newly-loaded level to whatever it was a moment ago — see
-  // the effect below.
-  //
-  // The takeover itself lives at the app root (see context/LevelUpContext),
-  // not in this screen's tree, so it plays centered on the window over
-  // whatever screen the user is on rather than only here.
-  const { celebrate } = useLevelUp();
-  // Starts as null so the very first load (going from "nothing loaded yet"
-  // to whatever level was saved) never counts as a level-up — only actual
-  // increases *after* that first load should trigger the animation.
-  //
-  // The subtlety that made this wrong for a long time: `level` state starts
-  // at the placeholder 1, and this effect runs on the FIRST render, before
-  // Firestore has answered. That first pass would see null, skip the
-  // animation (correct) — and then seed the ref with 1 (wrong). When the real
-  // level arrived a moment later, 12 > 1, so every launch by a level-12 user
-  // fired a "Level Up!" celebration for a level they earned weeks ago. The
-  // fix is the `loading` guard below: while the first load is still in
-  // flight the ref is left untouched, so the first value it ever sees is a
-  // real one from Firestore rather than the placeholder.
-  const prevLevelRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    if (loading) return;
-    if (prevLevelRef.current !== null && level > prevLevelRef.current) {
-      // getRankInfo is pure, and `rank` itself isn't derived until further
-      // down the component — deriving it here keeps this effect independent
-      // of declaration order.
-      celebrate(level, getRankInfo(level).rank, currentXP / xpRequiredForLevel(level));
-      // The vibration fires here rather than inside the takeover so the
-      // physical feedback lands on the same frame the overlay mounts. Put it
-      // in the component's effect instead and it arrives a render later —
-      // small, but enough that the buzz and the burst stop feeling like one
-      // event.
-      haptics.levelUp();
-    }
-    prevLevelRef.current = level;
-  }, [level, loading, celebrate, currentXP]);
+  // Level-up celebration is no longer detected here — LevelUpContext itself
+  // watches the stats document live (onSnapshot, not a one-time load) and
+  // fires the takeover the instant Firestore reflects a level increase,
+  // regardless of which screen actually earned the XP. Detecting it locally
+  // in this effect only ever caught level-ups that happened while Dashboard
+  // itself was mounted and loaded; one earned by finishing a workout on
+  // WorkoutScreen, say, awarded XP through a completely different code path
+  // and never touched this screen's `level` state at all — so nothing here
+  // ever ran to notice it. See context/LevelUpContext.tsx for the fix.
 
   const quests_ = quests.map(q => ({ ...q, completed: completedQuestIds.includes(q.id) }));
 
@@ -607,7 +616,20 @@ export default function DashboardScreen({ navigation }: any) {
         setMealCount(dayContext.mealCount);
         setSmallestMealCalories(dayContext.smallestMealCalories);
 
-        setStreak(streakSnap.exists() ? (streakSnap.data() as StreakState) : EMPTY_STREAK);
+        // Reconcile BEFORE this ever reaches setStreak/display — a freeze
+        // that saved yesterday should mean the streak just looks alive, not
+        // "alive, but only after you notice a toast." See
+        // reconcileStreakWithFreeze for why this only ever bridges a gap of
+        // exactly one skipped day.
+        const loadedStreak = streakSnap.exists() ? (streakSnap.data() as StreakState) : EMPTY_STREAK;
+        const reconciledStreak = reconcileStreakWithFreeze(loadedStreak, getQuestCycleKey());
+        if (reconciledStreak !== loadedStreak) {
+          setDoc(streakDocRef(authUser.uid), reconciledStreak).catch(() => {});
+          showToast(
+            `Streak freeze used — your ${reconciledStreak.currentStreak}-day streak is safe. ${reconciledStreak.freezesAvailable} left.`
+          );
+        }
+        setStreak(reconciledStreak);
         setWeightEntries(weightSnap.exists() ? (weightSnap.data().entries || []) : []);
         // currentXP/level always come straight from Firestore here, not from
         // any local-only state — so logging out and back in (or closing and
@@ -751,6 +773,7 @@ export default function DashboardScreen({ navigation }: any) {
     setDoc(streakDocRef(authUser.uid), next).catch(() => {
       showError(t('errorSaveFailed'));
     });
+    checkAchievementsForUser(authUser.uid).then(celebrateAchievements).catch(() => {});
   }, [loading, authUser, quests, completedQuestIds, streak]);
 
   // Mirrors this user's public stats into the leaderboard collection whenever
@@ -779,19 +802,6 @@ export default function DashboardScreen({ navigation }: any) {
       streak: liveStreak(streak, getQuestCycleKey()),
     }).catch(() => {});
   }, [loading, authUser, profile, level, currentXP, streak]);
-
-  const logWeight = () => {
-    if (!authUser) return;
-    const weight = parseFloat(weightInput);
-    if (!weight || weight <= 0 || weight > 1000) return;
-    const updated = upsertTodayWeight(weightEntries, weight);
-    setWeightEntries(updated);
-    setDoc(weightLogDocRef(authUser.uid), { entries: updated }).catch(() => {
-      showError(t('errorSaveFailed'));
-    });
-    setWeightInput('');
-    setWeightModalVisible(false);
-  };
 
   // Daily weight prompt trigger. Runs once after data has loaded. Opens
   // the modal if:
@@ -823,10 +833,7 @@ export default function DashboardScreen({ navigation }: any) {
           try {
             const healthWeight = await fetchRecentWeight();
             if (healthWeight && healthWeight.date === todayKey) {
-              setHealthWeightSuggestion({
-                value: healthWeight.value,
-                source: Platform.OS === 'ios' ? 'Apple Health' : 'Health Connect',
-              });
+              setHealthWeightSuggestion({ value: healthWeight.value, source: 'Health Connect' });
             }
           } catch {
             // fetchRecentWeight already fails soft, but this belt-and-
@@ -856,6 +863,7 @@ export default function DashboardScreen({ navigation }: any) {
     setHealthWeightSuggestion(null);
     try {
       await setDoc(weightLogDocRef(authUser.uid), { entries: updated });
+      checkAchievementsForUser(authUser.uid).then(celebrateAchievements).catch(() => {});
     } catch {
       showError(t('errorSaveFailed'));
     }
@@ -1097,9 +1105,6 @@ export default function DashboardScreen({ navigation }: any) {
     scheduleWorkoutReminder(workoutsCompleted > 0);
   }, [loading, profile?.notificationsEnabled, workoutsCompleted]);
 
-  const currentWeight = latestWeight(weightEntries);
-  const weightDelta = weightChange(weightEntries);
-
   // Skeletons in the shape of the real layout, not a spinner. A spinner in
   // the middle of an empty screen says "wait"; skeletons say "here's what's
   // coming", the layout doesn't jump when data lands, and the wait measurably
@@ -1251,6 +1256,14 @@ export default function DashboardScreen({ navigation }: any) {
           // nav row) — it still gets its own daily auto-prompt
           // (WeightPromptModal, below), and this is the manual way back in.
           { key: 'weight', label: t('weight'), icon: 'scale', onPress: () => navigation.navigate('Weight') },
+          // SleepScreen existed and was fully wired into the navigator, the
+          // Activity history chart, and BedtimePromptModal's own copy ("you
+          // can change this anytime from the Sleep screen") — but nothing
+          // anywhere actually called navigate('Sleep'). Confirmed by
+          // grepping the whole codebase: zero call sites. The entire screen
+          // was unreachable. This is that missing entry point.
+          { key: 'sleep', label: t('sleep'), icon: 'moon', onPress: () => navigation.navigate('Sleep') },
+          { key: 'achievements', label: 'Achievements', icon: 'ribbon', onPress: () => navigation.navigate('Achievements') },
           { key: 'settings', label: 'Settings', icon: 'settings', onPress: handleSettings },
         ]}
       />
@@ -1307,6 +1320,16 @@ export default function DashboardScreen({ navigation }: any) {
             <View style={styles.streakLineRow}>
               <PulsingIcon name="flame" size={14} color={styles.streakLine.color} />
               <Text style={styles.streakLine}> {currentStreakDays}-day streak</Text>
+              {/* Freezes are earned (every 7-day milestone), never bought —
+                  shown right next to the streak they protect rather than
+                  buried in a settings screen, since this is the number that
+                  answers "what happens if I miss tomorrow". */}
+              {streak.freezesAvailable > 0 && (
+                <View style={styles.freezeChip} accessibilityLabel={`${streak.freezesAvailable} streak freeze${streak.freezesAvailable === 1 ? '' : 's'} available`}>
+                  <Ionicons name="snow" size={11} color={palette.accentText} />
+                  <Text style={styles.freezeChipText}>{streak.freezesAvailable}</Text>
+                </View>
+              )}
             </View>
           )}
           {nextRankLabel && (
@@ -1368,80 +1391,19 @@ export default function DashboardScreen({ navigation }: any) {
         </View>
       </Enter>
 
-      {/* Today's two headline numbers. The other two (sleep, weight) are one
-          row further down — they change once a day, where calories and sets
-          change all day. */}
-      <Enter index={3}>
-        <View style={styles.statsRow}>
-          <StatCard
-            value={totalCalories.toLocaleString()}
-            label={t('calories')}
-            onPress={() => navigation.navigate('Nutrition')}
-          />
-          <StatCard
-            value={`${workoutsCompleted}`}
-            label={t('workouts')}
-            onPress={() => navigation.navigate('Workout')}
-          />
-        </View>
-        {/* Steps — only shown once Health sync is actually connected (see
-            Settings' Customize tab), and only once a sync has resolved at
-            least once this session. A small line rather than a third
-            StatCard: the existing two-per-row layout above pairs neatly
-            (Calories+Workouts, Sleep+Weight), and wedging in a third card
-            would either break that pairing or force an awkward 3-up row —
-            see the task's own note that a plain line is enough for now. */}
-        {profile?.healthSyncEnabled && healthSteps !== null && (
+      {/* Steps — only shown once Health sync is actually connected (see
+          Settings' Customize tab), and only once a sync has resolved at
+          least once this session. The Calories/Workouts/Sleep/lbs stat-tile
+          rows that used to sit here were removed per explicit request — that
+          data is still reachable from Nutrition, Workout, Sleep, and the
+          Weight screen (side panel), just not duplicated on the Dashboard. */}
+      {profile?.healthSyncEnabled && healthSteps !== null && (
+        <Enter index={3}>
           <Text style={styles.healthStepsLine}>
-            {healthSteps.toLocaleString()} steps today · {Platform.OS === 'ios' ? 'Apple Health' : 'Health Connect'}
+            {healthSteps.toLocaleString()} steps today · Health Connect
           </Text>
-        )}
-      </Enter>
-
-      <Enter index={4}>
-        <View style={styles.statsRow}>
-          <StatCard
-            value={sleepHours > 0 ? `${sleepHours}h` : 'Log sleep'}
-            label={t('sleep')}
-            onPress={() => navigation.navigate('Sleep')}
-          />
-          <StatCard
-            value={currentWeight ? `${currentWeight.weightLbs}` : '—'}
-            label={
-              currentWeight && weightDelta !== null && weightDelta !== 0
-                ? `lbs · ${weightDelta > 0 ? '+' : ''}${weightDelta}`
-                : 'lbs'
-            }
-            onPress={() => setWeightModalVisible(true)}
-          />
-        </View>
-      </Enter>
-
-      {/* Weight modal */}
-      <BottomSheet visible={weightModalVisible} onClose={() => setWeightModalVisible(false)} palette={palette}>
-        <Text style={styles.modalTitle}>{t('logWeight')}</Text>
-        <Text style={styles.modalSubtitle}>{t('weightPrompt')}</Text>
-        <Field
-          placeholder="e.g. 150"
-          value={weightInput}
-          onChangeText={setWeightInput}
-          keyboardType="numeric"
-        />
-        {weightEntries.length > 0 && (
-          <Text style={styles.orText}>
-            {weightEntries.length} {weightEntries.length === 1 ? 'entry' : 'entries'} logged so far
-          </Text>
-        )}
-        <View style={styles.modalButtons}>
-          <Button
-            label={t('cancel')}
-            onPress={() => setWeightModalVisible(false)}
-            variant="secondary"
-            style={styles.flexOne}
-          />
-          <Button label={t('save')} onPress={logWeight} style={styles.flexTwo} />
-        </View>
-      </BottomSheet>
+        </Enter>
+      )}
 
       {/* Level-up takeover.
           In a Modal rather than an absolutely-positioned View, because this
@@ -1452,9 +1414,9 @@ export default function DashboardScreen({ navigation }: any) {
           animationType="none" because the component runs its own timeline and
           the OS sliding it in first would push the whole thing past 2.5s. */}
       {/* The level-up takeover is no longer rendered here — it lives at the
-          app root (context/LevelUpContext) so it plays over any screen,
-          centered on the window rather than on this screen's scroll
-          content. This screen just calls celebrate(). */}
+          app root (context/LevelUpContext), which watches the stats
+          document itself and fires the takeover directly. This screen
+          doesn't call celebrate() at all anymore. */}
 
       {/* The other end of AuthScreen's sign-in transition — same overlay,
           same 500ms floor, going the other direction. */}
@@ -1463,26 +1425,42 @@ export default function DashboardScreen({ navigation }: any) {
       {/* Daily weight prompt. See dailyPromptOpen state comment above for
           when it opens; it dismisses via onSubmit (logs weight) or onSkip
           (writes today's date to weightPromptSkips, silencing itself
-          until tomorrow). */}
-      <WeightPromptModal
-        visible={dailyPromptOpen}
-        currentWeight={latestWeight(weightEntries)?.weightLbs ?? null}
-        onSubmit={submitDailyWeight}
-        onSkip={skipDailyWeight}
-        healthSuggestion={healthWeightSuggestion}
-      />
+          until tomorrow).
+          Conditionally MOUNTED (not just visible={false}) alongside the
+          bedtime prompt below on purpose — react-native-web's Modal tracks
+          all currently-mounted <Modal> instances to decide which one is
+          "on top" for pointer-event purposes, regardless of their own
+          `visible` prop. Toggling `visible` while leaving both mounted
+          confirmed-broke this: on a brand-new account, "first weight log
+          ever" and "first-ever bedtime ask" both fire on the same load, and
+          whichever modal mounted FIRST kept eating every tap — both its own
+          buttons AND, worse, the second modal's — even after its own
+          `visible` had already gone false. Rendering only one of these two
+          <Modal> elements at a time removes the ambiguity entirely. */}
+      {dailyPromptOpen && !bedtimePromptOpen && (
+        <WeightPromptModal
+          visible
+          currentWeight={latestWeight(weightEntries)?.weightLbs ?? null}
+          onSubmit={submitDailyWeight}
+          onSkip={skipDailyWeight}
+          healthSuggestion={healthWeightSuggestion}
+        />
+      )}
 
       {/* One-time first-login bedtime-reminder prompt. See the
           bedtimePromptOpen effect above — shows once ever, then persists
           users/{uid}/meta/onboarding.bedtimePromptShown so it never shows
-          again. */}
-      <BedtimePromptModal
-        visible={bedtimePromptOpen}
-        defaultHour={profile?.bedtimeHour ?? 22}
-        defaultMinute={profile?.bedtimeMinute ?? 0}
-        onConfirm={confirmBedtimePrompt}
-        onSkip={skipBedtimePrompt}
-      />
+          again. See the comment above WeightPromptModal for why this is
+          conditionally mounted rather than always-mounted-with-visible. */}
+      {bedtimePromptOpen && !dailyPromptOpen && (
+        <BedtimePromptModal
+          visible
+          defaultHour={profile?.bedtimeHour ?? 22}
+          defaultMinute={profile?.bedtimeMinute ?? 0}
+          onConfirm={confirmBedtimePrompt}
+          onSkip={skipBedtimePrompt}
+        />
+      )}
 
     </ScrollView>
     </View>
@@ -1624,6 +1602,21 @@ function makeStyles(palette: ReturnType<typeof usePalette>) {
       flexDirection: 'row',
       alignItems: 'center',
       marginTop: spacing.md,
+    },
+    freezeChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 2,
+      marginLeft: spacing.xs,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: radius.pill,
+      backgroundColor: palette.accent,
+    },
+    freezeChipText: {
+      fontFamily: fontFamily.sansBold,
+      fontSize: 11,
+      color: palette.accentText,
     },
     nextRankLine: {
       fontFamily: fontFamily.sans,

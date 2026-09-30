@@ -1,8 +1,9 @@
 // Android Health Connect integration — read-only import of steps, exercise
 // sessions, weight, and sleep (plus heart rate as a small bonus) into
-// UpShift's existing Firestore shapes. See services/health.ts for the
-// Platform.OS dispatcher that exposes this alongside services/appleHealth
-// (iOS) under one identical interface.
+// UpShift's existing Firestore shapes. See services/health.ts, which
+// re-exports this module directly — Apple Health/HealthKit support used to
+// sit alongside it there but was removed on request; this is now the only
+// health source the app has.
 //
 // LIBRARY CHOICE: `react-native-health-connect` is the standard community
 // wrapper for Android's Health Connect API — actively maintained (releases

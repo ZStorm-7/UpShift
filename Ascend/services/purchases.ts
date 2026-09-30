@@ -188,7 +188,16 @@ async function getOfferings(): Promise<{
   }
 }
 
-async function purchaseMonthly(): Promise<'success' | 'cancelled' | 'error'> {
+export type PurchaseResult = 'success' | 'cancelled' | 'error' | 'unavailable';
+
+async function purchaseMonthly(): Promise<PurchaseResult> {
+  // Checked BEFORE ensureConfigured, which also returns null for this case —
+  // but "the native module doesn't exist in this build" (Expo Go, the web
+  // preview, or any JS-only environment) is a completely different situation
+  // from "the store rejected the purchase," and showing the same generic
+  // "Purchase failed" alert for both reads as a real bug in a build that's
+  // actually behaving exactly as expected.
+  if (!nativePurchasesAvailable()) return 'unavailable';
   const RNP = await ensureConfigured();
   if (!RNP) return 'error';
   try {
@@ -203,7 +212,8 @@ async function purchaseMonthly(): Promise<'success' | 'cancelled' | 'error'> {
   }
 }
 
-async function purchaseAnnual(): Promise<'success' | 'cancelled' | 'error'> {
+async function purchaseAnnual(): Promise<PurchaseResult> {
+  if (!nativePurchasesAvailable()) return 'unavailable';
   const RNP = await ensureConfigured();
   if (!RNP) return 'error';
   try {

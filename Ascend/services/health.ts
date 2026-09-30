@@ -1,22 +1,26 @@
-// Health data import — Platform.OS dispatcher over services/appleHealth.ts
-// (iOS HealthKit) and services/healthConnect.ts (Android Health Connect).
-// Two files rather than one because the underlying APIs (identifiers, query
-// shapes, permission models) share almost nothing between platforms — this
-// file is the one place that hides that split, so every caller (Settings,
-// Dashboard) imports from here and never has its own Platform.OS branch.
+// Health data import — Android Health Connect only. Apple Health/HealthKit
+// support (services/appleHealth.ts) was removed on request after it never
+// worked reliably for real iOS users; see git history if it needs to come
+// back. Every caller (Settings, Dashboard) still imports from this one file
+// rather than services/healthConnect.ts directly, so a future iOS path (or
+// dropping Android too) is a one-file change again, not a hunt through every
+// screen that reads health data.
 //
-// IMPORTANT — cannot be exercised in Expo Go or the web preview: both
-// underlying libraries are native modules requiring a custom dev client /
-// EAS build. Every function below still fails soft (false/null/[]/0) rather
-// than throwing when the native module isn't present, so importing this
-// file is always safe (e.g. from Expo web), but the actual health data path
-// has not been runtime-tested — see the final report.
+// IMPORTANT — cannot be exercised in Expo Go or the web preview: the
+// underlying library is a native module requiring a custom dev client / EAS
+// build. Every function below still fails soft (false/null/[]/0) rather than
+// throwing when the native module isn't present, so importing this file is
+// always safe (e.g. from Expo web), but the actual health data path has not
+// been runtime-tested — see the final report.
 
-import { Platform } from 'react-native';
-import * as AppleHealth from './appleHealth';
 import * as HealthConnect from './healthConnect';
 
-const impl = Platform.OS === 'ios' ? AppleHealth : HealthConnect;
+// iOS gets the same fail-soft "nothing available" behavior every OTHER
+// unsupported environment already gets (web, a device without the app) —
+// healthConnect.ts's own Platform.OS check (it only loads its native module
+// on Android) makes every function below resolve false/null/[]/0 there, no
+// separate branch needed here.
+const impl = HealthConnect;
 
 export type HealthWorkout = { type: string; durationMin: number; calories?: number; date: string };
 export type HealthSleepNight = { hours: number; date: string };

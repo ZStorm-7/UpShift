@@ -21,14 +21,24 @@ export type QuestContext = {
   level: number;
 };
 
-// "Hit your calorie goal" shouldn't demand you land exactly on the number —
-// being within 5% either way counts as hitting it.
-const CALORIE_TOLERANCE = 0.05;
+// "Hit your calorie goal" was requiring landing within ±5% of the number —
+// which meant staying comfortably UNDER goal (a calorie deficit day, the
+// whole point for plenty of users) failed to count as "hitting" it, because
+// coming in at, say, 80% of goal fell outside the ±5% band on the low side.
+// A calorie goal is a budget, not a target to land on exactly: the quest
+// should credit anyone who stayed at or under it, same as "under budget"
+// reads as success everywhere else in personal finance/fitness framing.
+// OVER-eating still needs a tolerance (nobody hits their goal to the exact
+// calorie), so that side keeps a small allowance; the ZERO_FLOOR just
+// excludes "logged almost nothing today" from counting as a deliberate
+// deficit rather than an empty food log.
+const CALORIE_OVER_TOLERANCE = 0.05;
+const CALORIE_ZERO_FLOOR = 0.5;
 
 function hitCalorieGoal(c: QuestContext): boolean {
   if (c.calorieGoal <= 0 || c.totalCalories <= 0) return false;
-  const low = c.calorieGoal * (1 - CALORIE_TOLERANCE);
-  const high = c.calorieGoal * (1 + CALORIE_TOLERANCE);
+  const low = c.calorieGoal * CALORIE_ZERO_FLOOR;
+  const high = c.calorieGoal * (1 + CALORIE_OVER_TOLERANCE);
   return c.totalCalories >= low && c.totalCalories <= high;
 }
 

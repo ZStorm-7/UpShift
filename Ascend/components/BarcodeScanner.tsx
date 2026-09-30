@@ -8,7 +8,7 @@
 // screen's food-search state.
 
 import { useEffect, useRef, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Modal, ActivityIndicator } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Modal, ActivityIndicator, Linking } from 'react-native';
 import { CameraView, useCameraPermissions, BarcodeScanningResult } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
@@ -164,9 +164,23 @@ export default function BarcodeScanner({ visible, onClose, onFound, palette }: B
               <Ionicons name="camera-outline" size={40} color="#fff" />
               <Text style={styles.permissionTitle}>Camera access needed</Text>
               <Text style={styles.permissionBody}>
-                UpShift needs your camera to scan a food's barcode.
+                {permission?.canAskAgain === false
+                  ? "Camera access was denied earlier — enable it for UpShift in Settings to scan a barcode."
+                  : "UpShift needs your camera to scan a food's barcode."}
               </Text>
-              <Button label="Grant permission" onPress={requestPermission} variant="primary" />
+              {/* Once canAskAgain is false, the OS will never show its own
+                  permission dialog again no matter how many times this
+                  button calls requestPermission() — it silently resolves to
+                  still-denied. Tapping "Grant permission" in that state
+                  looked like the button was simply broken (nothing visibly
+                  happens); it has to deep-link to Settings instead, same as
+                  every other camera/photo permission flow in this app
+                  already does (see EditProfileScreen/NutritionScreen). */}
+              {permission?.canAskAgain === false ? (
+                <Button label="Open Settings" onPress={() => Linking.openSettings()} variant="primary" />
+              ) : (
+                <Button label="Grant permission" onPress={requestPermission} variant="primary" />
+              )}
             </View>
           )}
         </View>

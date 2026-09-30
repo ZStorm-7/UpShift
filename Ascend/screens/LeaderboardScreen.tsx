@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { usePalette } from '../theme/themedColors';
 import { spacing, radius, type, layout } from '../theme/tokens';
 import { fontFamily } from '../theme/fonts';
-import { Screen, AppBar, EmptyState } from '../components/ui';
+import { Screen, AppBar, EmptyState, Button } from '../components/ui';
+import BottomSheet from '../components/BottomSheet';
 import { Shimmer, SlideInRow } from '../components/anim';
 import { Enter } from '../components/dashboard';
 import Avatar from '../components/Avatar';
@@ -22,8 +23,16 @@ import {
   setReaction,
   clearReaction,
 } from '../firebase/leaderboard';
+import { getBlockedUids, blockUser, reportUser } from '../firebase/messages';
 import { getRankIcon } from '../data/ranks';
 import { safeGoBack } from '../utils/nav';
+import { confirmAsync } from '../utils/confirm';
+import { NO_BIO_PLACEHOLDER } from '../utils/profileDisplay';
+
+// Same reasons ChatScreen offers when reporting a 1:1 message sender — one
+// shared vocabulary for "why are you reporting this person" everywhere the
+// app lets you report someone, not a different list per surface.
+const REPORT_REASONS = ['Spam', 'Harassment', 'Inappropriate content', 'Other'];
 
 // Component dimensions, not spacing. The skeleton reuses all three so the
 // layout doesn't shift when the real rows land on top of it.
@@ -74,16 +83,28 @@ export default function LeaderboardScreen({ navigation }: any) {
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [failed, setFailed] = useState(false);
   const [reactions, setReactions] = useState<Record<string, ReactionSummary>>({});
+  // The row a tap opened a profile sheet for — null when the sheet is
+  // closed. Set to a specific entry rather than a plain visible boolean so
+  // the sheet always renders the right person's name/bio/rank even while
+  // its own close animation is still playing out.
+  const [viewingEntry, setViewingEntry] = useState<LeaderboardEntry | null>(null);
+  const [blocking, setBlocking] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setLoading(true);
       try {
-        const top = await fetchTopEntries(50);
-        if (!cancelled) setEntries(top);
+        const [top, blockedUids] = await Promise.all([
+          fetchTopEntries(50),
+          authUser ? getBlockedUids(authUser.uid) : Promise.resolve<string[]>([]),
+        ]);
+        // Someone you've blocked shouldn't still show up on your own
+        // leaderboard — the whole point of blocking is not seeing them.
+        const visible = blockedUids.length ? top.filter(e => !blockedUids.includes(e.uid)) : top;
+        if (!cancelled) setEntries(visible);
 
-        const forReactions = top.slice(0, REACTION_ROW_LIMIT);
+        const forReactions = visible.slice(0, REACTION_ROW_LIMIT);
         const summaries = await Promise.all(forReactions.map(e => fetchReactions(e.uid)));
         if (!cancelled) {
           const map: Record<string, ReactionSummary> = {};
@@ -102,6 +123,53 @@ export default function LeaderboardScreen({ navigation }: any) {
       cancelled = true;
     };
   }, []);
+
+  const handleReport = (entry: LeaderboardEntry) => {
+    if (!authUser) return;
+    Alert.alert(
+      'Report user',
+      'Why are you reporting this person?',
+      [
+        ...REPORT_REASONS.map(reason => ({
+          text: reason,
+          onPress: async () => {
+            try {
+              await reportUser(authUser.uid, entry.uid, reason);
+              haptics.setComplete();
+              setViewingEntry(null);
+              Alert.alert('Report sent', 'Thanks — our team will take a look.');
+            } catch {
+              haptics.error();
+            }
+          },
+        })),
+        { text: 'Cancel', style: 'cancel' as const },
+      ],
+      { cancelable: true }
+    );
+  };
+
+  const handleBlock = async (entry: LeaderboardEntry) => {
+    if (!authUser || blocking) return;
+    const confirmed = await confirmAsync({
+      title: `Block ${entry.displayName}?`,
+      message: "They'll be removed from your leaderboard and won't be able to message you.",
+      confirmLabel: 'Block',
+      destructive: true,
+    });
+    if (!confirmed) return;
+    setBlocking(true);
+    try {
+      await blockUser(authUser.uid, entry.uid);
+      setEntries(prev => prev.filter(e => e.uid !== entry.uid));
+      haptics.setComplete();
+      setViewingEntry(null);
+    } catch {
+      haptics.error();
+    } finally {
+      setBlocking(false);
+    }
+  };
 
   // Optimistic toggle: updates local state immediately (so the tap feels
   // instant) and fires the write in the background. If the write fails —
@@ -238,16 +306,20 @@ export default function LeaderboardScreen({ navigation }: any) {
                   // as every other list in the app.
                   <SlideInRow key={entry.uid} index={index}>
                     {index > 0 && <View style={dynamicStyles.rowDivider} />}
-                    <View
+                    <Pressable
                       style={[styles.row, isMe && dynamicStyles.rowMe]}
+                      disabled={isMe}
+                      onPress={() => setViewingEntry(entry)}
                       accessible
+                      accessibilityRole={isMe ? undefined : 'button'}
                       // One sentence, in reading order. Left to itself a screen
                       // reader announces four disconnected fragments and the
                       // listener has to reassemble the row.
                       accessibilityLabel={
                         `${isMe ? `${t('you')}, ` : ''}rank ${index + 1}, ${entry.displayName}, ` +
                         `${entry.rank}, ${t('level')} ${entry.level}, ` +
-                        `${entry.totalXP.toLocaleString()} XP${streakPart}`
+                        `${entry.totalXP.toLocaleString()} XP${streakPart}` +
+                        (isMe ? '' : '. Double tap to view profile.')
                       }>
                       {/* The numeral is always rendered, medal or not: the
                           medals are a flourish on top of the rank, never the
@@ -302,7 +374,7 @@ export default function LeaderboardScreen({ navigation }: any) {
                       </View>
 
                       <Text style={dynamicStyles.xp}>{entry.totalXP.toLocaleString()}</Text>
-                    </View>
+                    </Pressable>
 
                     {/* No reacting to your own row — there's nothing to
                         acknowledge about your own standing, and it would
@@ -340,6 +412,57 @@ export default function LeaderboardScreen({ navigation }: any) {
       <Enter index={2}>
         <Text style={dynamicStyles.privacyNote}>{t('leaderboardPrivacy')}</Text>
       </Enter>
+
+      {/* Tapping any row but your own opens this — the "profile view"
+          Settings' own bio copy has always promised ("shown when someone
+          taps you on the leaderboard") but that tap never actually existed
+          until now. Report/Block live here because this is the only place
+          another user's public info (name, rank, bio) is ever shown to you
+          outside of chat, which already has the same two actions. */}
+      <BottomSheet visible={!!viewingEntry} onClose={() => setViewingEntry(null)} palette={palette}>
+        {viewingEntry && (() => {
+          const { firstName, lastInitial } = parseDisplayName(viewingEntry.displayName);
+          return (
+            <View style={styles.profileSheet}>
+              <Avatar
+                photoUrl={viewingEntry.avatar}
+                color={viewingEntry.avatarColor}
+                uid={viewingEntry.uid}
+                firstName={firstName}
+                lastInitial={lastInitial}
+                size={64}
+              />
+              <Text style={[styles.profileName, { color: palette.textPrimary }]}>
+                {viewingEntry.displayName}
+              </Text>
+              <View style={styles.rankLineRow}>
+                <Ionicons name={getRankIcon(viewingEntry.rank)} size={13} color={palette.textMuted} />
+                <Text style={[dynamicStyles.rankLine, { fontSize: 13 }]}>
+                  {' '}{viewingEntry.rank} · {t('level')} {viewingEntry.level}
+                </Text>
+              </View>
+              <Text style={[styles.profileBio, { color: palette.textSecondary }]}>
+                {viewingEntry.bio?.trim() || NO_BIO_PLACEHOLDER}
+              </Text>
+              <View style={styles.profileActions}>
+                <Button
+                  label="Report"
+                  variant="secondary"
+                  onPress={() => handleReport(viewingEntry)}
+                  style={styles.flexOne}
+                />
+                <Button
+                  label={blocking ? 'Blocking…' : 'Block'}
+                  variant="danger"
+                  disabled={blocking}
+                  onPress={() => handleBlock(viewingEntry)}
+                  style={styles.flexOne}
+                />
+              </View>
+            </View>
+          );
+        })()}
+      </BottomSheet>
     </Screen>
   );
 }
@@ -348,6 +471,29 @@ const styles = StyleSheet.create({
   container: {
     gap: layout.gap,
     paddingBottom: layout.bottomInset,
+  },
+  profileSheet: {
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingBottom: spacing.lg,
+  },
+  profileName: {
+    ...type.title,
+    fontSize: 20,
+  },
+  profileBio: {
+    ...type.body,
+    textAlign: 'center',
+    marginTop: spacing.xs,
+  },
+  profileActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    width: '100%',
+    marginTop: spacing.md,
+  },
+  flexOne: {
+    flex: 1,
   },
   skeletonCard: {
     borderRadius: radius.lg,

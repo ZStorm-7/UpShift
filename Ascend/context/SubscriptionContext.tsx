@@ -53,7 +53,7 @@ type SubscriptionContextValue = {
   // reads to decide whether the free-trial option should be offered at all.
   hasUsedTrial: boolean;
   startTrial: () => Promise<void>;
-  refreshEntitlement: () => Promise<void>;
+  refreshEntitlement: (uidOverride?: string) => Promise<SubscriptionStatus>;
   restorePurchases: () => Promise<void>;
   // Used by Settings → "Cancel subscription". Sets the local record to
   // "none" and lets RevenueCat manage the actual store cancellation
@@ -76,7 +76,7 @@ const SubscriptionContext = createContext<SubscriptionContextValue>({
   trialDaysRemaining: null,
   hasUsedTrial: false,
   startTrial: async () => {},
-  refreshEntitlement: async () => {},
+  refreshEntitlement: async () => 'none',
   restorePurchases: async () => {},
   goToManageSubscription: async () => {},
   presentPaywall: async () => 'not_presented',
@@ -92,17 +92,37 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<SubscriptionStatus>('loading');
   const [trialStartedAt, setTrialStartedAt] = useState<number | null>(null);
 
-  const refreshEntitlement = useCallback(async () => {
-    if (!authUser) {
+  // Returns the freshly-computed status, not just setting it — a caller that
+  // needs to make a routing decision RIGHT AFTER a sign-in (see AuthScreen's
+  // and AuthMethodScreen's log-in paths) can't rely on reading `status` off
+  // this hook immediately afterward: that's React state, and the setStatus
+  // call below won't be visible to the caller's own closure until the next
+  // render.
+  //
+  // `uidOverride` exists for that exact caller too, and isn't optional to
+  // skip for convenience: `signInWithEmailAndPassword`/`signInWithCredential`
+  // resolving does NOT mean this context's `authUser` has updated yet — that
+  // only happens once Firebase's separate `onAuthStateChanged` listener
+  // (UserContext) fires and re-renders this provider, which can land after
+  // the caller's very next line. Without the override, `refreshEntitlement`
+  // called right after a fresh sign-in reads the closure's stale `authUser`
+  // (still null from before), takes the `!authUser` branch below, and
+  // returns 'none' — which is exactly how a legitimately entitled user could
+  // get bounced to the paywall immediately after logging in. Passing the uid
+  // the caller just obtained directly from the sign-in result sidesteps the
+  // race entirely.
+  const refreshEntitlement = useCallback(async (uidOverride?: string): Promise<SubscriptionStatus> => {
+    const uid = uidOverride ?? authUser?.uid;
+    if (!uid) {
       setStatus('none');
       setTrialStartedAt(null);
-      return;
+      return 'none';
     }
 
     // Firestore: has the user started the app-side trial?
     let trialAt: number | null = null;
     try {
-      const snap = await getDoc(subDocRef(authUser.uid));
+      const snap = await getDoc(subDocRef(uid));
       const data = snap.exists() ? (snap.data() as SubscriptionDoc) : {};
       trialAt = data.trialStartedAt ?? null;
     } catch {
@@ -121,7 +141,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       // same person reads as the same customer whether they check
       // entitlement from this device, a reinstall, or (later) the web — as
       // opposed to each install getting its own anonymous RevenueCat ID.
-      paid = await purchases.getActiveEntitlement(authUser.uid);
+      paid = await purchases.getActiveEntitlement(uid);
     } catch {
       paid = null;
     }
@@ -132,18 +152,20 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       // notification wrong — cancel it rather than let it fire and tell a
       // paying subscriber their trial is about to run out.
       cancelTrialExpiryReminders().catch(() => {});
-      return;
+      return 'active_monthly';
     }
     if (paid === 'annual')  {
       setStatus('active_annual');
       cancelTrialExpiryReminders().catch(() => {});
-      return;
+      return 'active_annual';
     }
 
-    if (trialAt === null) { setStatus('none'); return; }
+    if (trialAt === null) { setStatus('none'); return 'none'; }
 
     const elapsed = Date.now() - trialAt;
-    setStatus(elapsed < TRIAL_MS ? 'trial' : 'trial_expired');
+    const next = elapsed < TRIAL_MS ? 'trial' : 'trial_expired';
+    setStatus(next);
+    return next;
   }, [authUser?.uid]);
 
   // Refresh entitlement whenever the signed-in user changes, and once at

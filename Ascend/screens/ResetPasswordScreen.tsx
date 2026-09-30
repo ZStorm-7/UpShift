@@ -5,7 +5,7 @@
 // it matches, sets the new password server-side via the Admin SDK.
 
 import { useState, useRef } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { usePalette } from '../theme/themedColors';
 import { spacing, type } from '../theme/tokens';
 import { fontFamily } from '../theme/fonts';
@@ -68,10 +68,14 @@ export default function ResetPasswordScreen({ navigation, route }: any) {
   return (
     <Screen>
       <AppBar title="Enter your code" onBack={() => navigation.goBack()} />
-      <View style={styles.content}>
+      <KeyboardAvoidingView style={styles.flexOne} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <Enter index={0}>
           <Text style={[styles.body, { color: palette.textSecondary }]}>
             We sent a 6-digit code to {email}. Enter it below along with your new password.
+          </Text>
+          <Text style={[styles.spamNote, { color: palette.textMuted }]}>
+            Don't see it? Check your spam or junk folder — automated emails sometimes end up there.
           </Text>
         </Enter>
         <Enter index={1} style={styles.form}>
@@ -123,7 +127,7 @@ export default function ResetPasswordScreen({ navigation, route }: any) {
               {resending
                 ? 'Sending…'
                 : resent
-                ? 'Code resent — check your email'
+                ? 'Code resent — check your email (and spam folder)'
                 : "Didn't get a code? "}
               {!resending && !resent && (
                 <Text style={[styles.resendAction, { color: palette.accentText }]}>Resend it</Text>
@@ -131,19 +135,27 @@ export default function ResetPasswordScreen({ navigation, route }: any) {
             </Text>
           </Pressable>
         </Enter>
-      </View>
+      </ScrollView>
+      </KeyboardAvoidingView>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  content: {
+  flexOne: {
     flex: 1,
+  },
+  content: {
     gap: spacing.lg,
     paddingTop: spacing.xl,
+    paddingBottom: spacing.xxl,
   },
   body: {
     ...type.body,
+  },
+  spamNote: {
+    ...type.bodySm,
+    marginTop: spacing.xs,
   },
   form: {
     gap: spacing.md,

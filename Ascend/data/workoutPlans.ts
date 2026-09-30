@@ -430,13 +430,24 @@ export function isRestDay(daysSinceStart: number): boolean {
   return daysSinceStart % REST_CYCLE_LENGTH === WORKOUT_DAYS_PER_CYCLE;
 }
 
-export function tierFromOnboardingAnswer(answer: string): WorkoutTier {
-  switch (answer) {
-    case 'never':        return 'beginner';
-    case 'sometimes':    return 'beginner';
-    case 'regular':      return 'intermediate';
-    case 'experienced':  return 'advanced';
-    case 'competitive':  return 'pro';
+// Was keyed on a single "never/sometimes/regular/experienced/competitive"
+// answer that never actually existed in the onboarding flow — Onboarding
+// asks lifting and cardio experience as two SEPARATE questions, each
+// answered with 'None' | 'Beginner' | 'Intermediate' | 'Advanced' (see
+// OnboardingScreen's experienceOptions). Because the values never matched,
+// this was dead code and every new account silently started at 'beginner'
+// regardless of what they answered. Lifting experience is what actually
+// drives these templates (they're strength-focused, not cardio programs),
+// so that's the input here; cardio experience has no separate say in the
+// TIER, only in which run/walk-pattern exercises make sense later.
+// 'Advanced' is the highest onboarding can select into — 'pro' stays
+// something only earned through in-app progression, never assigned upfront.
+export function tierFromOnboardingAnswer(liftingExperience: string): WorkoutTier {
+  switch (liftingExperience) {
+    case 'Intermediate': return 'intermediate';
+    case 'Advanced':     return 'advanced';
+    case 'None':
+    case 'Beginner':
     default:             return 'beginner';
   }
 }

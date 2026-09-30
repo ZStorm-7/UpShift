@@ -18,6 +18,7 @@ import AnimatedTabBar from '../components/AnimatedTabBar';
 import { doc, setDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { Screen, Field, Button } from '../components/ui';
+import BottomSheet from '../components/BottomSheet';
 import { spacing, radius, layout } from '../theme/tokens';
 import { fontFamily } from '../theme/fonts';
 import { usePalette, useTheme } from '../theme/themedColors';
@@ -122,7 +123,10 @@ export default function SettingsScreen({ navigation }: any) {
 
   const notificationsEnabled = profile?.notificationsEnabled !== false;
   const healthSyncEnabled = profile?.healthSyncEnabled === true;
-  const healthLabel = Platform.OS === 'ios' ? 'Apple Health' : 'Health Connect';
+  // Health Connect is Android-only — Apple Health/HealthKit support was
+  // removed on request, so this whole section is hidden on iOS below rather
+  // than shown with a label for something that no longer exists.
+  const healthLabel = 'Health Connect';
   const [connectingHealth, setConnectingHealth] = useState(false);
 
   // Turning ON asks for the OS permission right away (rather than just
@@ -130,9 +134,9 @@ export default function SettingsScreen({ navigation }: any) {
   // actually granted — same reasoning as every other permission flow in
   // this file (verification email, trusted devices). Turning OFF just stops
   // Dashboard's health sync from running again; it deliberately does NOT
-  // try to revoke the OS-level grant, since neither HealthKit nor Health
-  // Connect lets an app do that from inside itself — only the user can, from
-  // the Health/Health Connect app's own settings.
+  // try to revoke the OS-level grant, since Health Connect doesn't let an
+  // app do that from inside itself — only the user can, from the Health
+  // Connect app's own settings.
   async function handleToggleHealthSync(next: boolean) {
     if (connectingHealth) return;
     if (!next) {
@@ -145,9 +149,7 @@ export default function SettingsScreen({ navigation }: any) {
       if (!available) {
         Alert.alert(
           `${healthLabel} isn't available`,
-          Platform.OS === 'ios'
-            ? 'HealthKit needs a physical device — it isn\'t available in the Simulator or on the web.'
-            : 'Install the Health Connect app from the Play Store, then try again.'
+          'Install the Health Connect app from the Play Store, then try again.'
         );
         return;
       }
@@ -155,7 +157,7 @@ export default function SettingsScreen({ navigation }: any) {
       if (!granted) {
         Alert.alert(
           'Permission denied',
-          `UpShift wasn't given access to ${healthLabel}. You can turn this on again anytime, or grant access from your device's ${Platform.OS === 'ios' ? 'Health app' : 'Health Connect app'} settings.`
+          `UpShift wasn't given access to ${healthLabel}. You can turn this on again anytime, or grant access from your device's Health Connect app settings.`
         );
         return;
       }
@@ -311,22 +313,39 @@ export default function SettingsScreen({ navigation }: any) {
   }
 
   const [deletingAccount, setDeletingAccount] = useState(false);
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  // The code the user has to retype exactly (case included) before the
+  // Delete button enables — freshly generated each time the modal opens
+  // (see openDeleteModal), never reused across attempts.
+  const [deleteCode, setDeleteCode] = useState('');
+  const [deleteInput, setDeleteInput] = useState('');
+
+  // Excludes visually-ambiguous characters (0/O, 1/l/I) for the same reason
+  // firebase/friends.ts's friend-code alphabet does — this one gets READ
+  // off the screen and retyped by hand, so a character nobody can tell
+  // apart from another would make "type it exactly" needlessly frustrating
+  // rather than more deliberate. Mixed case (unlike the friend code, which
+  // is uppercase-only) is the whole point here: retyping the exact case is
+  // what makes this a real transcription task instead of a glance-and-tap.
+  function generateDeleteCode(): string {
+    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+    let code = '';
+    for (let i = 0; i < 10; i++) {
+      code += alphabet[Math.floor(Math.random() * alphabet.length)];
+    }
+    return code;
+  }
+
+  function openDeleteModal() {
+    if (!authUser || deletingAccount) return;
+    setDeleteCode(generateDeleteCode());
+    setDeleteInput('');
+    setDeleteModalVisible(true);
+  }
 
   async function handleDeleteAccount() {
-    if (!authUser || deletingAccount) return;
-    // A single confirm, matching this screen's own "Log out of all
-    // devices" precedent rather than a second type-to-confirm step — see
-    // confirmAsync's comment on why a two-button dialog is the ceiling on
-    // web anyway (window.confirm has no room for typed input). The wording
-    // carries the weight instead: spelling out exactly what's gone, not
-    // just that it's permanent.
-    const confirmed = await confirmAsync({
-      title: 'Delete your account?',
-      message: 'This permanently deletes your profile, logged food and workouts, streak, weight history, and leaderboard position. This cannot be undone.',
-      confirmLabel: 'Delete account',
-      destructive: true,
-    });
-    if (!confirmed) return;
+    if (deleteInput !== deleteCode) return;
+    setDeleteModalVisible(false);
     setDeletingAccount(true);
     try {
       await deleteAccount();
@@ -588,7 +607,7 @@ export default function SettingsScreen({ navigation }: any) {
             <Section title="Danger zone" palette={palette}>
               <TappableRow
                 label={deletingAccount ? 'Deleting…' : 'Delete account'}
-                onPress={handleDeleteAccount}
+                onPress={openDeleteModal}
                 palette={palette}
                 destructive
               />
@@ -716,32 +735,36 @@ export default function SettingsScreen({ navigation }: any) {
               />
             </Section>
 
-            {/* Requires a native EAS/dev-client build — see services/health.ts.
-                The toggle itself is always visible and always fails soft
-                (isHealthAvailable/requestHealthPermission never throw), so
-                this is harmless to show even in Expo Go or on web; it'll
-                just report "not available" there. */}
-            <Section title="Health sync" palette={palette}>
-              <Row
-                label={`Connect ${healthLabel}`}
-                palette={palette}
-                right={
-                  connectingHealth ? (
-                    <Text style={[styles.rowValue, { color: palette.textMuted }]}>Connecting…</Text>
-                  ) : (
-                    <AnimatedToggle
-                      value={healthSyncEnabled}
-                      onValueChange={handleToggleHealthSync}
-                      palette={palette}
-                      accessibilityLabel={`Connect ${healthLabel}`}
-                    />
-                  )
-                }
-              />
-              <Text style={[styles.hint, { color: palette.textMuted, padding: spacing.lg, paddingTop: 0 }]}>
-                Pulls in today's step count and offers your logged weight when you check in — read-only, nothing is ever written back to {healthLabel}.
-              </Text>
-            </Section>
+            {/* Android only — Health Connect is the only health source left
+                (Apple Health/HealthKit was removed on request), and it
+                doesn't exist on iOS at all. Requires a native EAS/dev-client
+                build — see services/health.ts. The toggle itself always
+                fails soft (isHealthAvailable/requestHealthPermission never
+                throw), so this is harmless to show even in Expo Go or on
+                web; it'll just report "not available" there. */}
+            {Platform.OS !== 'ios' && (
+              <Section title="Health sync" palette={palette}>
+                <Row
+                  label={`Connect ${healthLabel}`}
+                  palette={palette}
+                  right={
+                    connectingHealth ? (
+                      <Text style={[styles.rowValue, { color: palette.textMuted }]}>Connecting…</Text>
+                    ) : (
+                      <AnimatedToggle
+                        value={healthSyncEnabled}
+                        onValueChange={handleToggleHealthSync}
+                        palette={palette}
+                        accessibilityLabel={`Connect ${healthLabel}`}
+                      />
+                    )
+                  }
+                />
+                <Text style={[styles.hint, { color: palette.textMuted, padding: spacing.lg, paddingTop: 0 }]}>
+                  Pulls in today's step count and offers your logged weight when you check in — read-only, nothing is ever written back to {healthLabel}.
+                </Text>
+              </Section>
+            )}
 
             <Section title="About" palette={palette}>
               <TappableRow
@@ -754,6 +777,54 @@ export default function SettingsScreen({ navigation }: any) {
           </>
         )}
       </ScrollView>
+
+      {/* Delete-account confirmation — retyping a freshly generated,
+          case-sensitive code rather than a plain Yes/No dialog. The random
+          code (never a fixed word like "DELETE") means this can't be
+          muscle-memory-tapped through by someone used to confirming other
+          dialogs in the app; they have to actually read the screen. */}
+      <BottomSheet
+        visible={deleteModalVisible}
+        onClose={() => setDeleteModalVisible(false)}
+        palette={palette}>
+        <Text style={[styles.deleteModalTitle, { color: palette.textPrimary }]}>Delete your account?</Text>
+        <Text style={[styles.deleteModalBody, { color: palette.textSecondary }]}>
+          This permanently deletes your profile, logged food and workouts, streak, weight history, and
+          leaderboard position. This cannot be undone.
+        </Text>
+        <Text style={[styles.deleteModalBody, { color: palette.textSecondary }]}>
+          Type the code below exactly (capitalization included) to confirm.
+        </Text>
+        <View style={[styles.deleteCodeBox, { backgroundColor: palette.surfaceSunken, borderColor: palette.border }]}>
+          <Text style={[styles.deleteCodeText, { color: palette.textPrimary }]} selectable>
+            {deleteCode}
+          </Text>
+        </View>
+        <Field
+          placeholder="Type the code above"
+          value={deleteInput}
+          onChangeText={setDeleteInput}
+          autoCapitalize="none"
+          autoCorrect={false}
+          autoComplete="off"
+          textContentType="none"
+        />
+        <View style={styles.deleteModalButtons}>
+          <Button
+            label="Cancel"
+            onPress={() => setDeleteModalVisible(false)}
+            variant="secondary"
+            style={styles.flexOne}
+          />
+          <Button
+            label="Delete account"
+            onPress={handleDeleteAccount}
+            variant="danger"
+            disabled={deleteInput !== deleteCode}
+            style={styles.flexTwo}
+          />
+        </View>
+      </BottomSheet>
     </Screen>
   );
 }
@@ -807,6 +878,33 @@ function TappableRow({ label, onPress, palette, destructive }: any) {
 }
 
 const styles = StyleSheet.create({
+  deleteModalTitle: {
+    fontFamily: fontFamily.serif,
+    fontSize: 20,
+  },
+  deleteModalBody: {
+    fontFamily: fontFamily.sans,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  deleteCodeBox: {
+    borderWidth: layout.hairline,
+    borderRadius: radius.md,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+  },
+  deleteCodeText: {
+    fontFamily: fontFamily.sansBold,
+    fontSize: 20,
+    letterSpacing: 3,
+  },
+  deleteModalButtons: {
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  flexOne: { flex: 1 },
+  flexTwo: { flex: 2 },
+
   header: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: spacing.lg, paddingTop: spacing.md,
