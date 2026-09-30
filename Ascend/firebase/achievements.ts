@@ -60,12 +60,26 @@ export async function checkAchievements(
       const value = stats[achievement.stat] ?? 0;
       if (value >= achievement.threshold) {
         newlyUnlocked.push(achievement);
-        updates[`unlocked.${achievement.id}`] = now;
+        updates[achievement.id] = now;
       }
     }
 
     if (newlyUnlocked.length > 0) {
-      tx.set(ref, updates, { merge: true });
+      // A NESTED object under `unlocked`, not dotted string keys like
+      // `unlocked.${id}` at the top level — that was the actual bug behind
+      // achievements re-firing at random and never actually staying
+      // unlocked. Dot-path string keys are only special to Firestore's
+      // updateDoc()/tx.update(), which parses them into nested fields;
+      // set()/tx.set() — even with {merge: true} — treats a key with a
+      // literal dot in it as one literal field NAME. So every "unlock"
+      // was writing a field actually called "unlocked.first_food_log"
+      // rather than nesting into an "unlocked" map, which meant
+      // `alreadyUnlocked` above was reading an `unlocked` field that never
+      // existed, always got back `{}`, and every single check treated
+      // every already-earned achievement as brand new — the "shuffled,
+      // wrong achievement for different things" symptom. A plain nested
+      // object merges correctly under tx.set with merge:true.
+      tx.set(ref, { unlocked: updates }, { merge: true });
     }
   });
 
