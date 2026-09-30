@@ -11,6 +11,7 @@ import {
 import { auth, db } from '../firebase/config';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { getDeviceId, ensureDeviceRegistered, startFreshSession, subscribeToSessionValidity } from '../firebase/sessions';
+import { applyFontScale } from '../utils/textScale';
 type UserProfile = {
   firstName: string;
   // Full legal name, captured at onboarding. `lastInitial` (below) is kept
@@ -193,6 +194,16 @@ export function UserProvider({ children }: { children: ReactNode }) {
   // Tracked separately from authUser.emailVerified — see refreshEmailVerified
   // for why reading it straight off the User object doesn't pick up changes.
   const [emailVerified, setEmailVerified] = useState(false);
+
+  // Settings' "Text size" preference — applied globally here (rather than at
+  // whatever screen happens to be mounted) so it takes effect immediately on
+  // login/profile load and stays applied across every screen, not just the
+  // one that changed it. See utils/textScale.ts for how a single number
+  // reaches every Text in the app without editing each one. Undefined (never
+  // set) behaves as 1 — unchanged from today.
+  useEffect(() => {
+    applyFontScale(profile?.fontScale ?? 1);
+  }, [profile?.fontScale]);
 
   // Registers once when the app starts. Fires with the current user
   // (or null) as soon as Firebase finishes checking for a saved

@@ -53,13 +53,23 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'customize', label: 'Customize' },
 ];
 
-// Text-size options. Applied as a multiplier on the app's own type scale —
-// see UserProfile.fontScale.
+// Text-size options — see UserProfile.fontScale and utils/textScale.ts for
+// how this actually reaches rendered text (it didn't, at all, until that
+// file existed; this was a purely cosmetic switcher before).
+//
+// Deliberately tiny steps. This app leans on a lot of precisely-fitted
+// layouts — rings with labels stacked to the pixel, badges sized around a
+// fixed number of characters — several of which already needed their own
+// `maxFontSizeMultiplier` caps just to survive the OS's OWN "Larger Text"
+// accessibility setting (see CalorieRing.tsx, NutritionScreen.tsx). The
+// previous range here (0.9–1.3, a 44% spread top to bottom) was large
+// enough to genuinely break those same spots. A few percent per step is
+// still a visible difference side by side without touching that ceiling.
 const FONT_SCALES: { label: string; value: number }[] = [
-  { label: 'Small', value: 0.9 },
+  { label: 'Small', value: 0.96 },
   { label: 'Default', value: 1 },
-  { label: 'Large', value: 1.15 },
-  { label: 'Larger', value: 1.3 },
+  { label: 'Large', value: 1.04 },
+  { label: 'Larger', value: 1.08 },
 ];
 
 export default function SettingsScreen({ navigation }: any) {
