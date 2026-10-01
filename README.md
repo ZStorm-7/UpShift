@@ -45,7 +45,8 @@ You will need:
 - Node.js
 - npm
 - An iOS or Android device, simulator, or emulator
-- Expo Go for basic previews, or an Expo development build for native functionality such as full RevenueCat purchase testing
+- Expo Go for basic previews
+- An Expo development build for full native RevenueCat purchase testing
 
 ## Installation
 
@@ -93,43 +94,25 @@ For a basic preview:
 npx expo start --go
 ```
 
-Scan the displayed QR code using Expo Go.
-
-### 6. Run using an Expo development build
-
-UpShift includes native functionality that cannot be fully tested through Expo Go.
-
-Install the development client dependency if necessary:
-
-```bash
-npx expo install expo-dev-client
-```
-
-Then create or install an UpShift development build and start Metro using:
-
-```bash
-npx expo start --dev-client
-```
-
-Open the installed UpShift development build and connect it to the development server.
+Scan the displayed QR code with your phone and open the project in Expo Go.
 
 ## RevenueCat
 
-UpShift uses RevenueCat to manage premium access and subscription entitlements.
+UpShift uses RevenueCat to manage premium access, subscription entitlements, and the app's premium access flow.
 
 ### Expo Go
 
-RevenueCat supports a Preview API Mode when running through Expo Go. This allows the app to demonstrate subscription UI and subscription-related application logic without crashing.
+When UpShift is run through Expo Go, RevenueCat operates in Preview API Mode.
 
-Real purchases are not performed through Expo Go.
+This allows the app to demonstrate its paywall, subscription UI, and subscription-related logic without crashing. The RevenueCat integration is still present in the project, but Expo Go does not complete a real native in-app purchase.
+
+In the Shipaton demo, UpShift is shown running through Expo Go, so the RevenueCat paywall and premium-access flow are demonstrated in Preview API Mode.
 
 ### Development Build
 
-Full RevenueCat functionality requires an Expo development build.
+A full native purchase requires an Expo development build rather than Expo Go.
 
-This allows UpShift to communicate with RevenueCat's native SDK and test actual purchase and entitlement behavior.
-
-The intended flow is:
+With a development build, UpShift can use RevenueCat's native SDK functionality to test the complete purchase and entitlement flow:
 
 ```text
 UpShift Paywall
@@ -143,7 +126,9 @@ Premium Entitlement Activated
 Premium Features Unlocked
 ```
 
-For Shipaton development, RevenueCat's Test Store can be used to test the subscription flow without requiring a production App Store or Google Play release.
+The intended production flow uses RevenueCat to determine whether a user's premium entitlement is active before unlocking premium functionality.
+
+For Shipaton development and testing, RevenueCat's Test Store can be used with a compatible development build to test purchases without requiring a production App Store or Google Play release.
 
 ## Configuration Notes
 
