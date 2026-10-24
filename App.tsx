@@ -25,6 +25,7 @@ import HistoryScreen from './screens/HistoryScreen';
 import LeaderboardScreen from './screens/LeaderboardScreen';
 import FriendsScreen from './screens/FriendsScreen';
 import ChallengesScreen from './screens/ChallengesScreen';
+import CoachWidget from './components/CoachWidget';
 
 const Stack = createNativeStackNavigator();
 
@@ -96,6 +97,7 @@ function ThemedNavigator() {
     <View style={{ flex: 1, backgroundColor: palette.bg }}>
       <NavigationContainer>
         <RootNavigator />
+        <CoachWidget />
       </NavigationContainer>
     </View>
   );
