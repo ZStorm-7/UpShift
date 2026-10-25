@@ -11,6 +11,7 @@ import haptics from '../services/haptics';
 import { useUser } from '../context/UserContext';
 import { useLanguage } from '../i18n/LanguageContext';
 import { LeaderboardEntry, parseDisplayName } from '../firebase/leaderboard';
+import { frameColorOf } from '../services/breaks/rewards';
 import {
   FriendRequest,
   getOrCreateFriendCode,
@@ -303,6 +304,7 @@ export default function FriendsScreen({ navigation }: any) {
                     firstName={firstName}
                     lastInitial={lastInitial}
                     size={AVATAR_SIZE}
+                    frame={frameColorOf(friend.breakFrame)}
                   />
                   <View style={styles.friendInfo}>
                     <Text style={styles.friendName} numberOfLines={1}>

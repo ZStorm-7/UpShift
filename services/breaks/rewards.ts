@@ -67,6 +67,11 @@ export function bestFrame(longest: number) {
   return got.length ? got[got.length - 1] : null;
 }
 
+// The ring colour for a frame id that came from the server (a friend's row), or null.
+export function frameColorOf(id: unknown): string | null {
+  return FRAMES.find(f => f.id === id)?.color ?? null;
+}
+
 // The next frame to work toward, with how many more days it takes.
 export function nextFrame(longest: number): { id: FrameId; nameKey: string; daysLeft: number } | null {
   const f = FRAMES.find(x => longest < x.days);

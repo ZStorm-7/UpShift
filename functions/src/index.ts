@@ -27,6 +27,7 @@ import { cleanScore } from './scores.ts';
 import { signedAvatarParams, CLOUD_NAME } from './cloudinary.ts';
 import { deleteAllUserData } from './account.ts';
 import { resolveTrialStart, trialClaimId } from './trial.ts';
+import { frameForLongest } from './frames.ts';
 
 const GEMINI_API_KEY = defineSecret('GEMINI_API_KEY');
 const REVENUECAT_SECRET = defineSecret('REVENUECAT_SECRET_KEY');
@@ -364,7 +365,9 @@ export const publishBreakStreak = onCall({ region: 'us-central1' }, async (req: 
   const asked = Math.max(0, Math.floor(Number(req.data?.breakStreak)) || 0);
   const now = Date.now();
   const created = Date.parse((await getAuth().getUser(uid)).metadata.creationTime) || now;
-  const value = Math.min(asked, maxPlausibleStreak(created, now), 10_000);
+  const cap = Math.min(maxPlausibleStreak(created, now), 10_000);
+  const value = Math.min(asked, cap);
+  const askedLongest = Math.min(Math.max(0, Math.floor(Number(req.data?.breakLongest)) || 0), cap);
 
   const lbRef = db.doc(`leaderboard/${uid}`);
   const rlRef = db.doc(`rateLimits/${uid}`);
@@ -373,7 +376,9 @@ export const publishBreakStreak = onCall({ region: 'us-central1' }, async (req: 
     const limited = hit(rl.data()?.streakPub, now, 30, 60 * 60 * 1000);
     if (!limited) return 'limited' as const;
     if (!lb.exists) return 'no-row' as const;
-    tx.set(lbRef, { breakStreak: value }, { merge: true });
+    // A frame is never taken away: the longest streak only ever goes up.
+    const longest = Math.max(Number(lb.data()?.breakLongest) || 0, askedLongest, value);
+    tx.set(lbRef, { breakStreak: value, breakLongest: longest, breakFrame: frameForLongest(longest) }, { merge: true });
     tx.set(rlRef, { streakPub: limited }, { merge: true });
     return 'ok' as const;
   });

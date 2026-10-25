@@ -10,6 +10,7 @@ import Avatar from '../components/Avatar';
 import haptics from '../services/haptics';
 import { useUser } from '../context/UserContext';
 import { useLanguage } from '../i18n/LanguageContext';
+import { frameColorOf } from '../services/breaks/rewards';
 import {
   LeaderboardEntry,
   fetchTopEntries,
@@ -230,6 +231,7 @@ export default function LeaderboardScreen({ navigation }: any) {
                         firstName={firstName}
                         lastInitial={lastInitial}
                         size={AVATAR_SIZE}
+                        frame={frameColorOf(entry.breakFrame)}
                       />
 
                       <View style={styles.nameBlock}>

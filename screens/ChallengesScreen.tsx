@@ -11,6 +11,7 @@ import { useUser } from '../context/UserContext';
 import { useLanguage } from '../i18n/LanguageContext';
 import { getDoc } from 'firebase/firestore';
 import { leaderboardDocRef, LeaderboardEntry, parseDisplayName } from '../firebase/leaderboard';
+import { frameColorOf } from '../services/breaks/rewards';
 import {
   Challenge,
   getMyChallenges,
@@ -160,6 +161,7 @@ export default function ChallengesScreen({ navigation }: any) {
                     firstName={c.opponent ? parseDisplayName(c.opponent.displayName).firstName : undefined}
                     lastInitial={c.opponent ? parseDisplayName(c.opponent.displayName).lastInitial : undefined}
                     size={AVATAR_SIZE}
+                    frame={frameColorOf(c.opponent?.breakFrame)}
                   />
                   <Text style={styles.participantLabel} numberOfLines={1}>
                     {c.opponent?.displayName ?? t('friend')}

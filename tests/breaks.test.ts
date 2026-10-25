@@ -256,3 +256,26 @@ test('new settings are validated', () => {
   assert.equal(s.strictUntil, now + 60_000); // still running
   assert.equal(normalizeSettings({ pattern: 'box' } as any).pattern, 'box');
 });
+
+// ---- friends see avatar frames: the server's thresholds must match the app's ----
+import { FRAMES as APP_FRAMES, frameColorOf } from '../services/breaks/rewards';
+import { frameForLongest, FRAME_DAYS } from '../functions/src/frames';
+
+test('server frame thresholds match the app', () => {
+  for (const f of APP_FRAMES) assert.equal(FRAME_DAYS[f.id], f.days, f.id);
+  assert.equal(APP_FRAMES.length, Object.keys(FRAME_DAYS).length);
+});
+test('frameForLongest hands out the best earned frame and never an unearned one', () => {
+  assert.equal(frameForLongest(0), null);
+  assert.equal(frameForLongest(2), null);
+  assert.equal(frameForLongest(3), 'dawn');
+  assert.equal(frameForLongest(29), 'aurora');
+  assert.equal(frameForLongest(30), 'zen');
+  assert.equal(frameForLongest(NaN), null);
+  assert.equal(frameForLongest(-5), null);
+});
+test('frameColorOf ignores anything that is not a known frame id', () => {
+  assert.equal(frameColorOf('zen'), '#F5C84B');
+  assert.equal(frameColorOf('gold-plated'), null);
+  assert.equal(frameColorOf(undefined), null);
+});

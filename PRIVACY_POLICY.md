@@ -114,7 +114,7 @@ leaderboard and to your friends:
 - Your avatar
 - Your level, rank, total XP, and current streak
 - Your mindful-break streak (a number of days; the server limits it to how old your
-  account is)
+  account is) and the avatar frame you earned from it (a coloured ring)
 
 The following is **never** visible to other users: your email, age, height,
 weight, gender, anything you have logged, your coach chats, or your sleep and

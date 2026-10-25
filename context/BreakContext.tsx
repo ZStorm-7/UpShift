@@ -139,7 +139,7 @@ export function BreakProvider({ children, ready = true }: { children: ReactNode;
         setSettings(s);
         setStreakState(streak);
         // Let friends see where the streak stands (the server bounds it; failure is harmless).
-        publishBreakStreak(liveBreakStreak(streak, dayKey(new Date()))).catch(() => {});
+        publishBreakStreak(liveBreakStreak(streak, dayKey(new Date())), streak.longest).catch(() => {});
         if (today) { setPassesUsed(today.passes); breaksTodayRef.current = today.done; setDoneToday(today.done); }
         applySettings(s, getAndroidWatchedPackages()).catch(() => {});
       })
@@ -205,7 +205,7 @@ export function BreakProvider({ children, ready = true }: { children: ReactNode;
     if (uid) {
       recordBreakEvent(uid, { kind: 'done', outcome, intent, mood, hour: new Date().getHours() }).catch(() => {});
       saveBreakStreak(uid, nextStreak).catch(() => {});
-      publishBreakStreak(nextStreak.current).catch(() => {});
+      publishBreakStreak(nextStreak.current, nextStreak.longest).catch(() => {});
       // Capped: only the first few breaks a day pay out (see services/breaks/rewards.ts).
       xp = breakXp(before);
       if (xp > 0) awardXP(uid, xp).then(() => emitDayDataChanged()).catch(() => { xp = 0; });

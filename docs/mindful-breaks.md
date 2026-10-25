@@ -53,7 +53,7 @@ The local module in `modules/` is autolinked. On the phone:
    break appears. Try pressing Home mid-exercise: it restarts when you return.
 
 ### iPhone
-1. Get Apple's approval for the **Family Controls (Distribution)** capability. You
+1. Get Apple's approval for the **Family Controls (Distribution)** capability (request text and steps: `docs/apple-family-controls-request.md`). You
    need it for the app and for each of the three extensions (ActivityMonitor,
    ShieldAction, ShieldConfiguration). Until then it only runs from Xcode.
 2. `APPLE_TEAM_ID=YOURTEAMID eas build --platform ios --profile development`
@@ -147,7 +147,8 @@ injected bugs. Run it again whenever either side changes.
 * **Reflection**: one short original line a day (14 per language, `data/reflections.ts`).
 * **Rewards**: 10 XP for each of your first 3 breaks a day (30 max) via the existing XP
   transaction, and avatar frames at a 3, 7 and 30 day break streak (your longest streak,
-  so a missed day never takes one away). Frames show on your own Dashboard avatar.
+  so a missed day never takes one away). Frames show on your own Dashboard avatar and, to friends, on the
+  leaderboard, friends list and challenges. The server works out the frame (`functions/src/frames.ts`) from the longest streak it accepted, so it can't be faked.
   Themes were not built.
 * **Coach**: "Break insights" reads your tally (including the busiest hour of the day) and can
   suggest a breathing style; you confirm before it changes.
