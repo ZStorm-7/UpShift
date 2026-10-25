@@ -95,7 +95,7 @@ export default function DashboardScreen({ navigation }: any) {
   const questClockPausedRef = useRef(false);
   questClockPausedRef.current = questClockPaused;
   const { authUser, profile, logOut } = useUser();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
 
   // The reverse of AuthScreen's sign-in transition: the same 500ms-floor
   // overlay, going the other way — signed-in back to signed-out. Same
@@ -874,7 +874,7 @@ export default function DashboardScreen({ navigation }: any) {
   const { rank, next } = getRankInfo(level);
   // getRankInfo returns either "Warrior at Level 20" or the top-of-ladder
   // message. Only the first wants a "Next:" in front of it.
-  const nextRankLabel = next.includes('at Level') ? `Next: ${next}` : next;
+  const nextRankLabel = next.includes('at Level') ? t('dashNext').replace('{x}', next) : next;
   const questsDone = quests_.filter(q => q.completed).length;
   const currentStreakDays = liveStreak(streak, getQuestCycleKey());
 
@@ -953,7 +953,8 @@ export default function DashboardScreen({ navigation }: any) {
   // daily record rather than a game HUD, and this is what establishes that
   // register before anything else on screen does.
   const now = new Date();
-  const dateline = `${now.toLocaleDateString('en-US', { weekday: 'long' })} · ${now.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}`;
+  const locale = DATE_LOCALE[language] ?? 'en-US';
+  const dateline = `${now.toLocaleDateString(locale, { weekday: 'long' })} · ${now.toLocaleDateString(locale, { month: 'long', day: 'numeric' })}`;
 
   return (
     <View style={styles.screen}>
@@ -1091,7 +1092,7 @@ export default function DashboardScreen({ navigation }: any) {
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>{t('dailyQuests')}</Text>
             <Text style={styles.sectionCount}>
-              {questsDone} / {quests_.length} done
+              {t('dashQuestsDone').replace('{a}', String(questsDone)).replace('{b}', String(quests_.length))}
             </Text>
           </View>
 
@@ -1186,8 +1187,8 @@ export default function DashboardScreen({ navigation }: any) {
       <Modal visible={waterModalVisible} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Log Water</Text>
-            <Text style={styles.modalSubtitle}>How much did you drink? (ml)</Text>
+            <Text style={styles.modalTitle}>{t('waterModalTitle')}</Text>
+            <Text style={styles.modalSubtitle}>{t('waterModalAsk')}</Text>
             <View style={styles.quickButtons}>
               {[250, 350, 500, 750].map(amount => (
                 <Button
@@ -1205,9 +1206,9 @@ export default function DashboardScreen({ navigation }: any) {
                 />
               ))}
             </View>
-            <Text style={styles.orText}>or enter custom amount</Text>
+            <Text style={styles.orText}>{t('orCustom')}</Text>
             <Field
-              placeholder="Custom amount (ml)"
+              placeholder={t('waterCustomPlaceholder')}
               value={waterInput}
               onChangeText={setWaterInput}
               keyboardType="numeric"
@@ -1229,8 +1230,8 @@ export default function DashboardScreen({ navigation }: any) {
       <Modal visible={sleepModalVisible} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Log Sleep</Text>
-            <Text style={styles.modalSubtitle}>How many hours did you sleep?</Text>
+            <Text style={styles.modalTitle}>{t('sleepModalTitle')}</Text>
+            <Text style={styles.modalSubtitle}>{t('sleepModalAsk')}</Text>
             <View style={styles.quickButtons}>
               {[6, 7, 8, 9].map(hours => (
                 <Button
@@ -1252,9 +1253,9 @@ export default function DashboardScreen({ navigation }: any) {
                 />
               ))}
             </View>
-            <Text style={styles.orText}>or enter custom amount</Text>
+            <Text style={styles.orText}>{t('orCustom')}</Text>
             <Field
-              placeholder="Hours (e.g. 7.5)"
+              placeholder={t('sleepCustomPlaceholder')}
               value={sleepInput}
               onChangeText={setSleepInput}
               keyboardType="numeric"
@@ -1269,23 +1270,23 @@ export default function DashboardScreen({ navigation }: any) {
               <Button label={t('save')} onPress={logSleep} style={styles.flexTwo} />
             </View>
 
-            <Text style={styles.orText}>or calculate from bedtime & wake time</Text>
+            <Text style={styles.orText}>{t('sleepFromTimes')}</Text>
             <View style={styles.rowInputsSleep}>
               <Field
                 style={styles.flexOne}
-                placeholder="Bedtime (11:00 PM)"
+                placeholder={t('bedtimePlaceholder')}
                 value={bedTimeInput}
                 onChangeText={setBedTimeInput}
               />
               <Field
                 style={styles.flexOne}
-                placeholder="Wake time (7:00 AM)"
+                placeholder={t('waketimePlaceholder')}
                 value={wakeTimeInput}
                 onChangeText={setWakeTimeInput}
               />
             </View>
             {sleepTimeError !== '' && <Text style={styles.error}>{sleepTimeError}</Text>}
-            <Button label="Calculate & Save" onPress={calculateSleepFromTimes} variant="secondary" fullWidth />
+            <Button label={t('calcAndSave')} onPress={calculateSleepFromTimes} variant="secondary" fullWidth />
           </View>
         </View>
       </Modal>
@@ -1357,6 +1358,8 @@ export default function DashboardScreen({ navigation }: any) {
     </View>
   );
 }
+
+const DATE_LOCALE: Record<string, string> = { en: 'en-US', es: 'es-ES', fr: 'fr-FR', zh: 'zh-CN', te: 'te-IN' };
 
 // The masthead links are 22px tall; this lifts the tap area to 44px without changing the look.
 const NAV_HIT = { top: 11, bottom: 11, left: 4, right: 4 };

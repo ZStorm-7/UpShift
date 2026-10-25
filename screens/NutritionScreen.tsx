@@ -166,12 +166,19 @@ export default function NutritionScreen({ navigation }: any) {
     return () => { active = false; clearTimeout(timeout); };
   }, [searchQuery]);
 
+  // USDA returns the same food several times under different ids; show each name + macros once.
+  const seen = new Set<string>();
   const searchResults = [
     ...localResults,
     ...apiResults.filter(
       api => !localResults.some(local => local.name.toLowerCase() === api.name.toLowerCase())
     ),
-  ].slice(0, 40);
+  ].filter(f => {
+    const key = `${f.name.toLowerCase()}|${f.calories}|${f.protein}|${f.carbs}|${f.fat}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, 40);
 
   function pickResult(item: FoodDatabaseItem) {
     addFood({
@@ -216,7 +223,7 @@ export default function NutritionScreen({ navigation }: any) {
             <View style={styles.ringWrap}>
               {loading
                 ? <Shimmer style={{ width: RING_SIZE, height: RING_SIZE, borderRadius: RING_SIZE / 2 }} />
-                : <CalorieRing value={totalCalories} goal={CALORIE_GOAL} size={RING_SIZE} />}
+                : <CalorieRing value={totalCalories} goal={CALORIE_GOAL} size={RING_SIZE} hideCenter />}
               <Text style={[styles.ringNumber, { color: palette.textPrimary }]}>
                 {calOverage > 0 ? calOverage : caloriesRemaining}
               </Text>

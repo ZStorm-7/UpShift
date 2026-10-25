@@ -15,6 +15,7 @@ import Svg, { Circle } from 'react-native-svg';
 import { spacing } from '../theme/tokens';
 import { fontFamily } from '../theme/fonts';
 import { minimalColors as c } from '../theme/minimal';
+import { useLanguage } from '../i18n/LanguageContext';
 
 type Props = {
   level: number;                // 1..∞
@@ -24,6 +25,7 @@ type Props = {
 };
 
 export default function CircularRankBadge({ level, progress, rankName, size = 140 }: Props) {
+  const { t } = useLanguage();
   const strokeWidth = Math.round(size * 0.075);
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
@@ -64,7 +66,7 @@ export default function CircularRankBadge({ level, progress, rankName, size = 14
         {/* Level numeral sits inside the ring */}
         <View style={[styles.inner, { width: size, height: size }]}>
           <Text style={[styles.rankGlyph, { color: c.textSecondary, fontSize: size * 0.13 }]}>
-            RANK {level}
+            {t('level').toUpperCase()}
           </Text>
           <Text style={[styles.levelNumber, { color: c.ink, fontSize: size * 0.32 }]}>
             {level}

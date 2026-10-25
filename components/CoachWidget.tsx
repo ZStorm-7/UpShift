@@ -33,6 +33,8 @@ import {
   loadPrefs, savePrefs, loadHistory, saveMessage, clearHistory, loadTodayCheckin, saveCheckin, sendFeedback,
 } from '../services/coach';
 
+// Screens with a full-width button pinned to the bottom: the button sits under the circle there, so lift the circle above it.
+const BOTTOM_BUTTON_ROUTES = new Set(['Nutrition']);
 const HIDDEN_ROUTES = new Set(['Welcome', 'Auth', 'Subscription', 'Onboarding', 'Workout', 'WorkoutSummary', 'Break']);
 
 // Quick-reply chips change with the screen (values are translation keys).
@@ -487,7 +489,7 @@ export default function CoachWidget() {
   return (
     <>
       {!open && (
-        <View pointerEvents="box-none" style={[styles.fabWrap, { bottom: insets.bottom + spacing.xl, right: spacing.lg }]}>
+        <View pointerEvents="box-none" style={[styles.fabWrap, { bottom: insets.bottom + spacing.xl + (routeName && BOTTOM_BUTTON_ROUTES.has(routeName) ? 72 : 0), right: spacing.lg }]}>
           <Animated.View pointerEvents="none" style={[styles.ring, { borderColor: p.accent,
             opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.5, 0] }),
             transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.7] }) }] }]} />

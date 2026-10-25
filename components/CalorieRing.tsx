@@ -51,6 +51,8 @@ type CalorieRingProps = {
   caption?: string;
   /** Direction of fill. 'down' means the arc empties as the value falls. */
   countdown?: boolean;
+  /** Draw only the ring. For a screen that puts its own numbers in the middle. */
+  hideCenter?: boolean;
 };
 
 export function CalorieRing({
@@ -62,6 +64,7 @@ export function CalorieRing({
   color = colors.accent,
   instant = false,
   caption,
+  hideCenter = false,
 }: CalorieRingProps) {
   // The stroke is centred on the path, so the radius has to come in by half
   // the thickness or the ring is clipped by the viewBox.
@@ -132,14 +135,14 @@ export function CalorieRing({
         />
       </Svg>
 
-      <View style={styles.center} pointerEvents="none">
+      {!hideCenter && <View style={styles.center} pointerEvents="none">
         <Text style={styles.value} numberOfLines={1} adjustsFontSizeToFit>
           {Math.round(value).toLocaleString()}
         </Text>
         <Text style={styles.label}>
           {caption ?? (goal > 0 ? `of ${Math.round(goal).toLocaleString()} ${label}` : label)}
         </Text>
-      </View>
+      </View>}
     </View>
   );
 }

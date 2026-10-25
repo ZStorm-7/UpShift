@@ -21,6 +21,7 @@ import { Shimmer } from '../components/anim';
 import { Enter } from '../components/dashboard';
 import { useUser } from '../context/UserContext';
 import { useLanguage } from '../i18n/LanguageContext';
+import { workoutXp } from '../services/workoutXp';
 import { awardXP, incrementTodayField } from '../firebase/progress';
 import { loadWorkoutState, saveWorkoutState } from '../firebase/workoutState';
 import { loadPlan, planDayToTemplate } from '../services/coach';
@@ -39,7 +40,6 @@ import sound from '../services/sound';
 
 // XP per completed workout — same value as before the redesign so
 // existing users don't feel their reward changed.
-const WORKOUT_XP = 60;
 
 // Day-of-year, used as the deterministic input to the workout picker.
 function dayOfYear(): number {
@@ -101,7 +101,9 @@ export default function WorkoutScreen({ navigation }: any) {
     setFinishing(true);
     try {
       // Award XP + bump the daily "workoutsCompleted" counter
-      const { level, currentXP } = await awardXP(authUser.uid, WORKOUT_XP);
+      // Pay in proportion to the work done, so tapping one set and finishing can't farm full XP.
+      const xp = workoutXp(doneSets, totalSets);
+      await awardXP(authUser.uid, xp);
       await incrementTodayField(authUser.uid, 'workoutsCompleted', 1);
 
       // Advance workout progression
@@ -113,15 +115,12 @@ export default function WorkoutScreen({ navigation }: any) {
       // doesn't return to a "completed" workout that could be finished
       // again.
       navigation.replace('WorkoutSummary', {
-        xpGained: WORKOUT_XP,
-        level,
-        currentXP,
+        xpEarned: xp,
+        completedSets: doneSets,
         totalSets,
-        workoutTitle: workout.title,
-        durationMin: workout.durationMin,
-        tierBefore: state.tier,
-        tierAfter: nextState.tier,
-        leveledUpTier: state.tier !== nextState.tier,
+        exerciseCount: workout.exercises.length,
+        muscleGroup: workout.focus,
+        durationMinutes: workout.durationMin,
       });
     } catch {
       inFlight.current = false;

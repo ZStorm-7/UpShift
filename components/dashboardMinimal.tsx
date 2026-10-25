@@ -37,6 +37,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { minimalColors as c, minimalType as type, minimalSpacing as spacing, minimalRadius as radius } from '../theme/minimal';
 import { fontFamily } from '../theme/fonts';
+import { useLanguage } from '../i18n/LanguageContext';
 import { duration, easing, beat, PRESS_SCALE } from '../animation/motion';
 
 /* ------------------------------------------------------------------ *
@@ -276,6 +277,7 @@ export function StatCard({ value, label, onPress }: StatCardProps) {
  * ------------------------------------------------------------------ */
 
 export function WaterBlock({ total, goal, onLog }: { total: number; goal: number; onLog: () => void }) {
+  const { t } = useLanguage();
   const target = goal > 0 ? Math.max(0, Math.min(1, total / goal)) : 0;
   const fill = useSharedValue(0);
   const press = useSharedValue(1);
@@ -295,7 +297,7 @@ export function WaterBlock({ total, goal, onLog }: { total: number; goal: number
   return (
     <View style={styles.waterCard}>
       <View style={styles.waterHeader}>
-        <Text style={styles.waterLabel}>Water</Text>
+        <Text style={styles.waterLabel}>{t('water')}</Text>
         <Text style={styles.waterReadout}>
           {total}ml / {goal}ml
         </Text>
@@ -312,7 +314,7 @@ export function WaterBlock({ total, goal, onLog }: { total: number; goal: number
           onPressIn={() => setPress(PRESS_SCALE)}
           onPressOut={() => setPress(1)}
           style={styles.waterButton}>
-          <Text style={styles.waterButtonLabel}>+ Log water</Text>
+          <Text style={styles.waterButtonLabel}>{t('logWater')}</Text>
         </Pressable>
       </Animated.View>
     </View>

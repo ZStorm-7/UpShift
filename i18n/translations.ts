@@ -490,7 +490,20 @@ type TranslationKey =
   | 'weightSave'
   | 'weightSaveLabel'
   | 'weightSaving'
-  | 'weightSkip';
+  | 'weightSkip'
+  | 'dashNext'
+  | 'dashQuestsDone'
+  | 'waterModalTitle'
+  | 'waterModalAsk'
+  | 'orCustom'
+  | 'waterCustomPlaceholder'
+  | 'sleepModalTitle'
+  | 'sleepModalAsk'
+  | 'sleepCustomPlaceholder'
+  | 'sleepFromTimes'
+  | 'bedtimePlaceholder'
+  | 'waketimePlaceholder'
+  | 'calcAndSave';
 
 export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, string>>> = {
   en: {
@@ -962,6 +975,19 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     weightSaveLabel: "Save today's weight",
     weightSaving: "Saving…",
     weightSkip: "Skip today",
+    dashNext: "Next: {x}",
+    dashQuestsDone: "{a} / {b} done",
+    waterModalTitle: "Log water",
+    waterModalAsk: "How much did you drink? (ml)",
+    orCustom: "or enter custom amount",
+    waterCustomPlaceholder: "Custom amount (ml)",
+    sleepModalTitle: "Log sleep",
+    sleepModalAsk: "How many hours did you sleep?",
+    sleepCustomPlaceholder: "Hours (e.g. 7.5)",
+    sleepFromTimes: "or calculate from bedtime & wake time",
+    bedtimePlaceholder: "Bedtime (11:00 PM)",
+    waketimePlaceholder: "Wake time (7:00 AM)",
+    calcAndSave: "Calculate & Save",
   },
   es: {
     goodMorning: 'Buenos días',
@@ -1432,6 +1458,19 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     weightSaveLabel: "Guardar el peso de hoy",
     weightSaving: "Guardando…",
     weightSkip: "Omitir hoy",
+    dashNext: "Siguiente: {x}",
+    dashQuestsDone: "{a} / {b} hechas",
+    waterModalTitle: "Registrar agua",
+    waterModalAsk: "¿Cuánto bebiste? (ml)",
+    orCustom: "o escribe otra cantidad",
+    waterCustomPlaceholder: "Cantidad (ml)",
+    sleepModalTitle: "Registrar sueño",
+    sleepModalAsk: "¿Cuántas horas dormiste?",
+    sleepCustomPlaceholder: "Horas (p. ej. 7,5)",
+    sleepFromTimes: "o calcula con la hora de dormir y despertar",
+    bedtimePlaceholder: "Hora de dormir (11:00 PM)",
+    waketimePlaceholder: "Hora de despertar (7:00 AM)",
+    calcAndSave: "Calcular y guardar",
   },
   fr: {
     goodMorning: 'Bonjour',
@@ -1902,6 +1941,19 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     weightSaveLabel: "Enregistrer le poids du jour",
     weightSaving: "Enregistrement…",
     weightSkip: "Passer aujourd’hui",
+    dashNext: "Suivant : {x}",
+    dashQuestsDone: "{a} / {b} faites",
+    waterModalTitle: "Noter l’eau",
+    waterModalAsk: "Combien as-tu bu ? (ml)",
+    orCustom: "ou saisis une autre quantité",
+    waterCustomPlaceholder: "Quantité (ml)",
+    sleepModalTitle: "Noter le sommeil",
+    sleepModalAsk: "Combien d’heures as-tu dormi ?",
+    sleepCustomPlaceholder: "Heures (ex. 7,5)",
+    sleepFromTimes: "ou calcule à partir de l’heure du coucher et du réveil",
+    bedtimePlaceholder: "Coucher (23:00)",
+    waketimePlaceholder: "Réveil (7:00)",
+    calcAndSave: "Calculer et enregistrer",
   },
   zh: {
     goodMorning: '早上好',
@@ -2372,6 +2424,19 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     weightSaveLabel: "保存今日体重",
     weightSaving: "正在保存…",
     weightSkip: "今天跳过",
+    dashNext: "下一级：{x}",
+    dashQuestsDone: "已完成 {a} / {b}",
+    waterModalTitle: "记录饮水",
+    waterModalAsk: "你喝了多少？（毫升）",
+    orCustom: "或输入其他数量",
+    waterCustomPlaceholder: "自定义数量（毫升）",
+    sleepModalTitle: "记录睡眠",
+    sleepModalAsk: "你睡了几个小时？",
+    sleepCustomPlaceholder: "小时数（如 7.5）",
+    sleepFromTimes: "或根据就寝和起床时间计算",
+    bedtimePlaceholder: "就寝时间（晚上 11:00）",
+    waketimePlaceholder: "起床时间（早上 7:00）",
+    calcAndSave: "计算并保存",
   },
   te: {
     goodMorning: 'శుభోదయం',
@@ -2842,5 +2907,18 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     weightSaveLabel: "నేటి బరువు సేవ్ చేయండి",
     weightSaving: "సేవ్ అవుతోంది…",
     weightSkip: "ఈరోజు వదిలేయండి",
+    dashNext: "తదుపరి: {x}",
+    dashQuestsDone: "{a} / {b} పూర్తయ్యాయి",
+    waterModalTitle: "నీరు నమోదు",
+    waterModalAsk: "ఎంత తాగారు? (మి.లీ)",
+    orCustom: "లేదా మరో మొత్తం నమోదు చేయండి",
+    waterCustomPlaceholder: "మొత్తం (మి.లీ)",
+    sleepModalTitle: "నిద్ర నమోదు",
+    sleepModalAsk: "ఎన్ని గంటలు నిద్రపోయారు?",
+    sleepCustomPlaceholder: "గంటలు (ఉదా. 7.5)",
+    sleepFromTimes: "లేదా నిద్రపోయిన, లేచిన సమయం నుండి లెక్కించండి",
+    bedtimePlaceholder: "నిద్రపోయే సమయం (రాత్రి 11:00)",
+    waketimePlaceholder: "లేచే సమయం (ఉదయం 7:00)",
+    calcAndSave: "లెక్కించి సేవ్ చేయండి",
   },
 };
