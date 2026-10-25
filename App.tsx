@@ -41,7 +41,7 @@ const Stack = createNativeStackNavigator();
 //   3. Signed in with subscription/trial but no profile → Onboarding
 //   4. Signed in with everything → Dashboard
 //
-// SubscriptionScreen writes a trialStartedAt (or completes a purchase),
+// SubscriptionScreen asks the startTrial function to record the trial (or completes a purchase),
 // then routes to Onboarding — so by the time a user reaches Onboarding
 // they are already entitled.
 function RootNavigator() {

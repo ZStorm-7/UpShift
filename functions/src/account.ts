@@ -22,6 +22,8 @@ export async function deleteAllUserData(uid: string, secrets: { cloudinaryKey?: 
   await db.recursiveDelete(db.doc(`leaderboard/${uid}`));
   await db.recursiveDelete(db.doc(`coachUsage/${uid}`));
   await db.doc(`rateLimits/${uid}`).delete();
+  // trialClaims/{hash(email)} is kept on purpose: it is what stops delete-and-re-sign-up from restarting a trial.
+  await db.doc(`trials/${uid}`).delete();
   await deleteQuery(db.collection('friendCodes').where('uid', '==', uid));
   await deleteQuery(db.collection('friendRequests').where('fromUid', '==', uid));
   await deleteQuery(db.collection('friendRequests').where('toUid', '==', uid));

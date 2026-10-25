@@ -8,8 +8,9 @@ holds the API key, checks consent, enforces limits and runs the safety screen.
    Functions and Secret Manager are not available on the free Spark plan.
    Set a budget alert in Google Cloud so costs can't surprise you.
 2. **Rotate the Gemini key.** The old key was pasted into a chat and was used
-   in a development build, so treat it as exposed. Create a new key in Google
-   AI Studio and delete the old one.
+   in a development build, so treat it as exposed. In Google AI Studio, create a new key
+   first, then delete the old one. (The old key is not in this repo or its git history; only
+   Firebase's public web key is, which is meant to be public.)
 3. Store the secrets (never in the repo or `.env`):
    ```
    firebase functions:secrets:set GEMINI_API_KEY
@@ -26,6 +27,8 @@ holds the API key, checks consent, enforces limits and runs the safety screen.
    **Deploy the functions before (or together with) the rules.** The new rules
    stop the app from writing `leaderboard/{uid}` directly, so an app build that
    still calls the old code would be refused.
+   The `startTrial` function (the free trial's start date) deploys with the others. Existing users
+   are migrated the first time they open the paywall: their old date is honoured only if it is in the past.
 4b. Turn on automatic deletion of old chats and feedback (one time):
    ```
    gcloud firestore fields ttls update expireAt --collection-group=coachMessages --enable-ttl

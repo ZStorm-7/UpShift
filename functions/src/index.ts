@@ -26,6 +26,7 @@ import { hit, applyXpBank, isRecentLogin, maxPlausibleStreak, type XpState } fro
 import { cleanScore } from './scores.ts';
 import { signedAvatarParams, CLOUD_NAME } from './cloudinary.ts';
 import { deleteAllUserData } from './account.ts';
+import { resolveTrialStart, trialClaimId } from './trial.ts';
 
 const GEMINI_API_KEY = defineSecret('GEMINI_API_KEY');
 const REVENUECAT_SECRET = defineSecret('REVENUECAT_SECRET_KEY');
@@ -378,4 +379,29 @@ export const publishBreakStreak = onCall({ region: 'us-central1' }, async (req: 
   });
   if (ok === 'limited') throw new HttpsError('resource-exhausted', 'Too many updates.');
   return { ok: ok === 'ok', breakStreak: value };
+});
+
+// ---------------------------------------------------------------------------
+// startTrial: the only place a trial begins. Idempotent: calling it again returns
+// the same start date. See trial.ts for why the date is kept on the server.
+// ---------------------------------------------------------------------------
+export const startTrial = onCall({ region: 'us-central1' }, async (req: CallableRequest) => {
+  const uid = req.auth?.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'Sign in first.');
+  const email = typeof req.auth?.token?.email === 'string' ? req.auth.token.email : '';
+  if (!email) throw new HttpsError('failed-precondition', 'An email address is needed to start a trial.');
+  const now = Date.now();
+  const trialRef = db.doc(`trials/${uid}`);
+  const claimRef = db.doc(`trialClaims/${trialClaimId(email)}`);
+  const legacyRef = db.doc(`users/${uid}/meta/subscription`);
+
+  const startedAt = await db.runTransaction(async tx => {
+    const [trial, claim, legacy] = await Promise.all([tx.get(trialRef), tx.get(claimRef), tx.get(legacyRef)]);
+    if (trial.exists) return Number(trial.data()?.startedAt);
+    const start = resolveTrialStart({ now, claim: claim.data()?.startedAt, legacy: legacy.data()?.trialStartedAt });
+    tx.set(trialRef, { startedAt: start });
+    if (!claim.exists) tx.set(claimRef, { startedAt: start });
+    return start;
+  });
+  return { startedAt };
 });

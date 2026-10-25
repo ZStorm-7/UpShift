@@ -2,10 +2,10 @@
 // has app access at all.
 //
 // The plan the user picked from us at signup:
-//   1. Days 0–7: an APP-SIDE trial. No card, no store involvement. A
-//      trialStartedAt timestamp is written to Firestore when the user taps
-//      "Start 7-day free trial" on the paywall. `isEntitled` returns true
-//      for the 7 days after that timestamp.
+//   1. Days 0–7: an APP-SIDE trial. No card, no store involvement. The `startTrial`
+//      Cloud Function records the start date (trials/{uid}, which the app can read
+//      but not write) when the user taps "Start 7-day free trial" on the paywall.
+//      `isEntitled` returns true for the 7 days after that date.
 //   2. Day 7 onwards: RevenueCat takes over. When the trial expires,
 //      isEntitled flips to false unless RevenueCat reports an active
 //      subscription (monthly $10 or annual $100).
@@ -22,8 +22,9 @@
 // gates on it.
 
 import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { db } from '../firebase/config';
+import { doc, getDoc } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
+import { db, functions } from '../firebase/config';
 import { useUser } from './UserContext';
 import purchases from '../services/purchases';
 
@@ -33,14 +34,10 @@ const TRIAL_MS = TRIAL_DAYS * 24 * 60 * 60 * 1000;
 export type SubscriptionStatus =
   | 'loading'          // haven't checked Firestore/RevenueCat yet
   | 'none'             // signed in, no trial started, no subscription
-  | 'trial'            // in-trial (trialStartedAt within last 7 days)
+  | 'trial'            // in-trial (trial start date within last 7 days)
   | 'trial_expired'    // trial ran out, no paid subscription
   | 'active_monthly'   // paying $10/mo through RevenueCat
   | 'active_annual';   // paying $100/yr through RevenueCat
-
-type SubscriptionDoc = {
-  trialStartedAt?: number; // ms since epoch
-};
 
 type SubscriptionContextValue = {
   status: SubscriptionStatus;
@@ -66,8 +63,9 @@ const SubscriptionContext = createContext<SubscriptionContextValue>({
   goToManageSubscription: async () => {},
 });
 
-function subDocRef(uid: string) {
-  return doc(db, 'users', uid, 'meta', 'subscription');
+// Server-written; see functions/src/trial.ts and the `trials` rule.
+function trialDocRef(uid: string) {
+  return doc(db, 'trials', uid);
 }
 
 export function SubscriptionProvider({ children }: { children: ReactNode }) {
@@ -85,9 +83,9 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     // Firestore: has the user started the app-side trial?
     let trialAt: number | null = null;
     try {
-      const snap = await getDoc(subDocRef(authUser.uid));
-      const data = snap.exists() ? (snap.data() as SubscriptionDoc) : {};
-      trialAt = data.trialStartedAt ?? null;
+      const snap = await getDoc(trialDocRef(authUser.uid));
+      const startedAt = snap.exists() ? Number(snap.data().startedAt) : NaN;
+      trialAt = Number.isFinite(startedAt) ? startedAt : null;
     } catch {
       // If the read fails we'd rather assume trial-active than lock the user
       // out of an app they may have paid for. status will reconcile on the
@@ -132,11 +130,10 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
 
   const startTrial = useCallback(async () => {
     if (!authUser) throw new Error('Sign in first.');
-    const now = Date.now();
-    await setDoc(subDocRef(authUser.uid), { trialStartedAt: now }, { merge: true });
-    setTrialStartedAt(now);
-    setStatus('trial');
-  }, [authUser?.uid]);
+    // The server picks the date (and may return an earlier one if this person already had a trial).
+    await httpsCallable(functions, 'startTrial')({});
+    await refreshEntitlement();
+  }, [authUser?.uid, refreshEntitlement]);
 
   const restorePurchases = useCallback(async () => {
     try {

@@ -13,6 +13,9 @@
 // profile data (name, age, weight) stays on EditProfile.
 
 import { useState, useRef } from 'react';
+import { doc, updateDoc } from 'firebase/firestore';
+import { db } from '../firebase/config';
+import { requestNotificationPermission, hasNotificationPermission, cancelAllReminders } from '../services/notifications';
 import { View, Text, StyleSheet, Pressable, ScrollView, Switch, Alert, Linking, Platform, Modal, TextInput, ActivityIndicator } from 'react-native';
 import { Screen } from '../components/ui';
 import { spacing, radius, layout } from '../theme/tokens';
@@ -30,7 +33,7 @@ import { getAuthErrorMessage } from '../firebase/authErrors';
 export default function SettingsScreen({ navigation }: any) {
   const palette = usePalette();
   const { mode, setMode } = useTheme();
-  const { profile, logOut, authUser, emailVerified, resendVerification, refreshEmailVerified, reauthenticate } = useUser();
+  const { profile, setProfile, logOut, authUser, emailVerified, resendVerification, refreshEmailVerified, reauthenticate } = useUser();
   const { t } = useLanguage();
   const { settings: breakSettings, disableAll: disableBreaks } = useBreak();
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -43,17 +46,38 @@ export default function SettingsScreen({ navigation }: any) {
   const inFlight = useRef(false);
 
   const notificationsEnabled = profile?.notificationsEnabled !== false;
+  const [reminderNote, setReminderNote] = useState('');
+
+  // Saves straight away. The Dashboard reschedules (or cancels) the evening reminder
+  // whenever this profile field changes, so turning it on needs no extra scheduling here.
+  async function toggleReminders(on: boolean) {
+    if (!profile || !authUser) return;
+    haptics.selection();
+    setReminderNote('');
+    if (on) {
+      const allowed = (await hasNotificationPermission()) || (await requestNotificationPermission());
+      if (!allowed) { setReminderNote(t('setRemindersDenied')); return; }
+    } else {
+      await cancelAllReminders();
+    }
+    setProfile({ ...profile, notificationsEnabled: on });
+    try {
+      await updateDoc(doc(db, 'users', authUser.uid), { notificationsEnabled: on });
+    } catch {
+      setProfile({ ...profile, notificationsEnabled: !on });
+    }
+  }
 
   async function handleLogout() {
     if (inFlight.current) return;
     inFlight.current = true;
     Alert.alert(
-      'Log out?',
-      'Are you sure you want to log out? Your data stays saved and will be here when you sign back in.',
+      t('setLogoutTitle'),
+      t('setLogoutBody'),
       [
-        { text: 'Cancel', style: 'cancel', onPress: () => { inFlight.current = false; } },
+        { text: t('cancel'), style: 'cancel', onPress: () => { inFlight.current = false; } },
         {
-          text: 'Log out',
+          text: t('logOut'),
           style: 'destructive',
           onPress: async () => {
             setLoggingOut(true);
@@ -102,12 +126,12 @@ export default function SettingsScreen({ navigation }: any) {
 
   function handleCancelSubscription() {
     Alert.alert(
-      'Cancel subscription?',
-      'This will end your access to UpShift when your current billing period ends. Your progress and data stay saved, but you won\'t be able to log new entries.',
+      t('setCancelSubTitle'),
+      t('setCancelSubBody'),
       [
-        { text: 'Keep subscription', style: 'cancel' },
+        { text: t('setKeepSub'), style: 'cancel' },
         {
-          text: 'Manage in store',
+          text: t('setManageStore'),
           onPress: () => goToManageSubscription(),
         },
       ],
@@ -115,11 +139,11 @@ export default function SettingsScreen({ navigation }: any) {
   }
 
   const subscriptionLabel =
-    status === 'trial' ? `Free trial · ${trialDaysRemaining ?? 0} days left`
-    : status === 'active_monthly' ? 'Active · Monthly'
-    : status === 'active_annual'  ? 'Active · Annual'
-    : status === 'trial_expired'  ? 'Trial expired'
-    : 'Not subscribed';
+    status === 'trial' ? t('setTrialLeft').replace('{n}', String(trialDaysRemaining ?? 0))
+    : status === 'active_monthly' ? t('setActiveMonthly')
+    : status === 'active_annual'  ? t('setActiveAnnual')
+    : status === 'trial_expired'  ? t('setTrialExpired')
+    : t('setNotSubscribed');
 
   return (
     <Screen style={{ backgroundColor: palette.bg }}>
@@ -129,17 +153,17 @@ export default function SettingsScreen({ navigation }: any) {
           <Pressable
             onPress={() => navigation.goBack()}
             hitSlop={16}
-            accessibilityLabel="Back"
+            accessibilityLabel={t('back')}
             accessibilityRole="button">
-            <Text style={[styles.back, { color: palette.textPrimary }]}>‹ Back</Text>
+            <Text style={[styles.back, { color: palette.textPrimary }]}>‹ {t('back')}</Text>
           </Pressable>
-          <Text style={[styles.title, { color: palette.textPrimary }]}>Settings</Text>
+          <Text style={[styles.title, { color: palette.textPrimary }]}>{t('settings')}</Text>
           <View style={{ width: 60 }} />
         </View>
 
         {/* Account */}
-        <Section title="Account" palette={palette}>
-          <Row label="Email" value={authUser?.email ?? ''} palette={palette} />
+        <Section title={t('setAccount')} palette={palette}>
+          <Row label={t('email')} value={authUser?.email ?? ''} palette={palette} />
           <Row
             label={t('verifyEmail')}
             value={emailVerified ? t('emailVerified') : t('emailNotVerified')}
@@ -163,15 +187,15 @@ export default function SettingsScreen({ navigation }: any) {
         </Section>
 
         {/* Appearance */}
-        <Section title="Appearance" palette={palette}>
+        <Section title={t('setAppearance')} palette={palette}>
           <Row
-            label="Dark mode"
+            label={t('setDarkMode')}
             palette={palette}
             right={
               <Switch
                 value={mode === 'dark'}
                 onValueChange={v => { haptics.selection(); setMode(v ? 'dark' : 'light'); }}
-                accessibilityLabel="Dark mode"
+                accessibilityLabel={t('setDarkMode')}
                 trackColor={{ true: palette.accent, false: palette.borderStrong }}
               />
             }
@@ -179,11 +203,11 @@ export default function SettingsScreen({ navigation }: any) {
         </Section>
 
         {/* Subscription */}
-        <Section title="Subscription" palette={palette}>
-          <Row label="Status" value={subscriptionLabel} palette={palette} />
+        <Section title={t('setSubscription')} palette={palette}>
+          <Row label={t('setStatus')} value={subscriptionLabel} palette={palette} />
           {(status === 'active_monthly' || status === 'active_annual') && (
             <TappableRow
-              label="Manage or cancel"
+              label={t('setManage')}
               onPress={handleCancelSubscription}
               palette={palette}
               destructive
@@ -191,7 +215,7 @@ export default function SettingsScreen({ navigation }: any) {
           )}
           {(status === 'trial_expired' || status === 'none') && (
             <TappableRow
-              label="View plans"
+              label={t('setViewPlans')}
               onPress={() => navigation.navigate('Subscription')}
               palette={palette}
             />
@@ -208,38 +232,41 @@ export default function SettingsScreen({ navigation }: any) {
         </Section>
 
         {/* Notifications */}
-        <Section title="Notifications" palette={palette}>
+        <Section title={t('setNotifications')} palette={palette}>
           <Row
-            label="Streak & quest reminders"
+            label={t('setReminders')}
             palette={palette}
             right={
               <Switch
                 value={notificationsEnabled}
-                onValueChange={() => {/* wired via EditProfile currently */}}
-                accessibilityLabel="Streak and quest reminders"
+                onValueChange={toggleReminders}
+                accessibilityLabel={t('setReminders')}
                 trackColor={{ true: palette.accent, false: palette.borderStrong }}
               />
             }
           />
+          {reminderNote !== '' && (
+            <Text style={{ color: palette.textSecondary, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, fontSize: 13 }}>{reminderNote}</Text>
+          )}
         </Section>
 
         {/* About */}
-        <Section title="About" palette={palette}>
+        <Section title={t('setAbout')} palette={palette}>
           <TappableRow
-            label="Privacy policy"
+            label={t('privacyPolicy')}
             onPress={() => Linking.openURL('https://upshift.app/privacy')}
             palette={palette}
           />
           <TappableRow
-            label="Send feedback"
-            onPress={() => Linking.openURL('mailto:hello@upshift.app?subject=UpShift feedback')}
+            label={t('setFeedback')}
+            onPress={() => Linking.openURL('mailto:Ridu.1029384756@gmail.com?subject=UpShift feedback')}
             palette={palette}
           />
-          <Row label="Version" value="1.0.0" palette={palette} />
+          <Row label={t('setVersion')} value="1.0.0" palette={palette} />
         </Section>
 
         {/* Danger zone */}
-        <Section title="Your data" palette={palette}>
+        <Section title={t('setYourData')} palette={palette}>
           <TappableRow
             label={t('deleteAccount')}
             onPress={() => { setDeletePassword(''); setDeleteError(''); setDeleteOpen(true); }}
@@ -254,10 +281,10 @@ export default function SettingsScreen({ navigation }: any) {
             onPress={handleLogout}
             style={[styles.logoutBtn, { borderColor: palette.borderStrong }]}
             accessibilityRole="button"
-            accessibilityLabel="Log out"
+            accessibilityLabel={t('logOut')}
             disabled={loggingOut}>
             <Text style={[styles.logoutText, { color: palette.loss }]}>
-              {loggingOut ? 'Signing out…' : 'Log out'}
+              {loggingOut ? t('setSigningOut') : t('logOut')}
             </Text>
           </Pressable>
         </View>

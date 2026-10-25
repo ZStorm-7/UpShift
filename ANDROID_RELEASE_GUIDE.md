@@ -127,7 +127,7 @@ collects email and health data, so this is mandatory, not optional.
 Free options: publish `PRIVACY_POLICY.md` as a GitHub Pages site, or paste it
 into a public GitHub Gist. Either gives you a URL.
 
-Fill in `[YOUR EMAIL]` first — placeholders get listings rejected.
+The policy's contact email is already filled in; check it is the address you want public.
 
 ### 3. Build the production AAB
 

@@ -1014,8 +1014,8 @@ export default function DashboardScreen({ navigation }: any) {
               <Text style={styles.navLabel}>{t('history')}</Text>
             </Pressable>
             <View style={styles.navDivider} />
-            <Pressable accessibilityRole="button" accessibilityLabel="Settings" hitSlop={NAV_HIT} onPress={handleSettings} style={styles.navItem}>
-              <Text style={styles.navLabel}>Settings</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel={t('settings')} hitSlop={NAV_HIT} onPress={handleSettings} style={styles.navItem}>
+              <Text style={styles.navLabel}>{t('settings')}</Text>
             </Pressable>
           </View>
         </View>

@@ -184,6 +184,15 @@ service cloud.firestore {
         && request.resource.data.at == request.time;
     }
 
+    // ---- Free trial start date ----
+    // Written only by the `startTrial` Cloud Function. The app can read its own
+    // date but cannot change it. `trialClaims` (keyed by a hash of the email) is
+    // server-only and never readable.
+    match /trials/{userId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if false;
+    }
+
     // ---- Deny everything else ----
     // Anything not explicitly allowed above is refused, so an unplanned or
     // typo'd collection path fails closed rather than open.

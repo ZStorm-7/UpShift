@@ -456,7 +456,41 @@ type TranslationKey =
   | 'challengeBreaksGoal'
   | 'coachToolBreaks'
   | 'coachUseStyle'
-  | 'coachStyleApplied';
+  | 'coachStyleApplied'
+  | 'setAccount'
+  | 'setAppearance'
+  | 'setDarkMode'
+  | 'setSubscription'
+  | 'setStatus'
+  | 'setManage'
+  | 'setViewPlans'
+  | 'setNotifications'
+  | 'setReminders'
+  | 'setRemindersDenied'
+  | 'setAbout'
+  | 'setFeedback'
+  | 'setVersion'
+  | 'setYourData'
+  | 'setLogoutTitle'
+  | 'setLogoutBody'
+  | 'setSigningOut'
+  | 'setCancelSubTitle'
+  | 'setCancelSubBody'
+  | 'setKeepSub'
+  | 'setManageStore'
+  | 'setTrialLeft'
+  | 'setActiveMonthly'
+  | 'setActiveAnnual'
+  | 'setTrialExpired'
+  | 'setNotSubscribed'
+  | 'weightTitle'
+  | 'weightSubLast'
+  | 'weightSubNew'
+  | 'weightInputLabel'
+  | 'weightSave'
+  | 'weightSaveLabel'
+  | 'weightSaving'
+  | 'weightSkip';
 
 export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, string>>> = {
   en: {
@@ -894,6 +928,40 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     coachToolBreaks: "🌬️ Break insights",
     coachUseStyle: "Use this style",
     coachStyleApplied: "✓ Now your breathing style",
+    setAccount: "Account",
+    setAppearance: "Appearance",
+    setDarkMode: "Dark mode",
+    setSubscription: "Subscription",
+    setStatus: "Status",
+    setManage: "Manage or cancel",
+    setViewPlans: "View plans",
+    setNotifications: "Notifications",
+    setReminders: "Streak & quest reminders",
+    setRemindersDenied: "Notifications are off for UpShift on this phone. Turn them on in your phone settings.",
+    setAbout: "About",
+    setFeedback: "Send feedback",
+    setVersion: "Version",
+    setYourData: "Your data",
+    setLogoutTitle: "Log out?",
+    setLogoutBody: "Are you sure you want to log out? Your data stays saved and will be here when you sign back in.",
+    setSigningOut: "Signing out…",
+    setCancelSubTitle: "Cancel subscription?",
+    setCancelSubBody: "This will end your access to UpShift when your current billing period ends. Your progress and data stay saved, but you won't be able to log new entries.",
+    setKeepSub: "Keep subscription",
+    setManageStore: "Manage in store",
+    setTrialLeft: "Free trial · {n} days left",
+    setActiveMonthly: "Active · Monthly",
+    setActiveAnnual: "Active · Annual",
+    setTrialExpired: "Trial expired",
+    setNotSubscribed: "Not subscribed",
+    weightTitle: "Today's weight",
+    weightSubLast: "Last: {n} lbs · Log today's to keep your trend accurate.",
+    weightSubNew: "Log daily to track your trend over time.",
+    weightInputLabel: "Weight in pounds",
+    weightSave: "Save weight",
+    weightSaveLabel: "Save today's weight",
+    weightSaving: "Saving…",
+    weightSkip: "Skip today",
   },
   es: {
     goodMorning: 'Buenos días',
@@ -1330,6 +1398,40 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     coachToolBreaks: "🌬️ Análisis de pausas",
     coachUseStyle: "Usar este estilo",
     coachStyleApplied: "✓ Ya es tu estilo de respiración",
+    setAccount: "Cuenta",
+    setAppearance: "Apariencia",
+    setDarkMode: "Modo oscuro",
+    setSubscription: "Suscripción",
+    setStatus: "Estado",
+    setManage: "Gestionar o cancelar",
+    setViewPlans: "Ver planes",
+    setNotifications: "Notificaciones",
+    setReminders: "Recordatorios de racha y misiones",
+    setRemindersDenied: "Las notificaciones de UpShift están desactivadas en este teléfono. Actívalas en los ajustes del teléfono.",
+    setAbout: "Acerca de",
+    setFeedback: "Enviar comentarios",
+    setVersion: "Versión",
+    setYourData: "Tus datos",
+    setLogoutTitle: "¿Cerrar sesión?",
+    setLogoutBody: "¿Seguro que quieres cerrar sesión? Tus datos siguen guardados y estarán aquí cuando vuelvas a entrar.",
+    setSigningOut: "Cerrando sesión…",
+    setCancelSubTitle: "¿Cancelar la suscripción?",
+    setCancelSubBody: "Perderás el acceso a UpShift cuando termine tu período de facturación actual. Tu progreso y tus datos se conservan, pero no podrás registrar nuevas entradas.",
+    setKeepSub: "Mantener suscripción",
+    setManageStore: "Gestionar en la tienda",
+    setTrialLeft: "Prueba gratuita · quedan {n} días",
+    setActiveMonthly: "Activa · Mensual",
+    setActiveAnnual: "Activa · Anual",
+    setTrialExpired: "Prueba terminada",
+    setNotSubscribed: "Sin suscripción",
+    weightTitle: "Peso de hoy",
+    weightSubLast: "Último: {n} lbs · Registra el de hoy para que tu tendencia sea precisa.",
+    weightSubNew: "Regístralo a diario para seguir tu tendencia.",
+    weightInputLabel: "Peso en libras",
+    weightSave: "Guardar peso",
+    weightSaveLabel: "Guardar el peso de hoy",
+    weightSaving: "Guardando…",
+    weightSkip: "Omitir hoy",
   },
   fr: {
     goodMorning: 'Bonjour',
@@ -1766,6 +1868,40 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     coachToolBreaks: "🌬️ Analyse des pauses",
     coachUseStyle: "Utiliser ce style",
     coachStyleApplied: "✓ C'est maintenant ton style",
+    setAccount: "Compte",
+    setAppearance: "Apparence",
+    setDarkMode: "Mode sombre",
+    setSubscription: "Abonnement",
+    setStatus: "Statut",
+    setManage: "Gérer ou résilier",
+    setViewPlans: "Voir les offres",
+    setNotifications: "Notifications",
+    setReminders: "Rappels de série et de quêtes",
+    setRemindersDenied: "Les notifications d’UpShift sont désactivées sur ce téléphone. Active-les dans les réglages du téléphone.",
+    setAbout: "À propos",
+    setFeedback: "Envoyer un avis",
+    setVersion: "Version",
+    setYourData: "Tes données",
+    setLogoutTitle: "Se déconnecter ?",
+    setLogoutBody: "Veux-tu vraiment te déconnecter ? Tes données restent enregistrées et seront là à ta reconnexion.",
+    setSigningOut: "Déconnexion…",
+    setCancelSubTitle: "Résilier l’abonnement ?",
+    setCancelSubBody: "Tu perdras l’accès à UpShift à la fin de ta période de facturation. Ta progression et tes données restent enregistrées, mais tu ne pourras plus ajouter d’entrées.",
+    setKeepSub: "Garder l’abonnement",
+    setManageStore: "Gérer dans la boutique",
+    setTrialLeft: "Essai gratuit · {n} jours restants",
+    setActiveMonthly: "Actif · Mensuel",
+    setActiveAnnual: "Actif · Annuel",
+    setTrialExpired: "Essai terminé",
+    setNotSubscribed: "Non abonné",
+    weightTitle: "Poids du jour",
+    weightSubLast: "Dernier : {n} lbs · Note celui du jour pour une tendance fiable.",
+    weightSubNew: "Note-le chaque jour pour suivre ta tendance.",
+    weightInputLabel: "Poids en livres",
+    weightSave: "Enregistrer le poids",
+    weightSaveLabel: "Enregistrer le poids du jour",
+    weightSaving: "Enregistrement…",
+    weightSkip: "Passer aujourd’hui",
   },
   zh: {
     goodMorning: '早上好',
@@ -2202,6 +2338,40 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     coachToolBreaks: "🌬️ 休息洞察",
     coachUseStyle: "使用这种方式",
     coachStyleApplied: "✓ 已设为你的呼吸方式",
+    setAccount: "账户",
+    setAppearance: "外观",
+    setDarkMode: "深色模式",
+    setSubscription: "订阅",
+    setStatus: "状态",
+    setManage: "管理或取消",
+    setViewPlans: "查看套餐",
+    setNotifications: "通知",
+    setReminders: "连续天数与任务提醒",
+    setRemindersDenied: "此手机已关闭 UpShift 的通知。请在手机设置中开启。",
+    setAbout: "关于",
+    setFeedback: "发送反馈",
+    setVersion: "版本",
+    setYourData: "你的数据",
+    setLogoutTitle: "退出登录？",
+    setLogoutBody: "确定要退出登录吗？你的数据会保留，重新登录后仍在。",
+    setSigningOut: "正在退出…",
+    setCancelSubTitle: "取消订阅？",
+    setCancelSubBody: "当前计费周期结束后，你将无法使用 UpShift。你的进度和数据会保留，但无法再记录新内容。",
+    setKeepSub: "保留订阅",
+    setManageStore: "在商店中管理",
+    setTrialLeft: "免费试用 · 剩余 {n} 天",
+    setActiveMonthly: "已订阅 · 按月",
+    setActiveAnnual: "已订阅 · 按年",
+    setTrialExpired: "试用已结束",
+    setNotSubscribed: "未订阅",
+    weightTitle: "今日体重",
+    weightSubLast: "上次：{n} 磅 · 记录今天的体重以保持趋势准确。",
+    weightSubNew: "每天记录，追踪你的体重趋势。",
+    weightInputLabel: "体重（磅）",
+    weightSave: "保存体重",
+    weightSaveLabel: "保存今日体重",
+    weightSaving: "正在保存…",
+    weightSkip: "今天跳过",
   },
   te: {
     goodMorning: 'శుభోదయం',
@@ -2638,5 +2808,39 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     coachToolBreaks: "🌬️ విరామ అంతర్దృష్టులు",
     coachUseStyle: "ఈ శైలిని ఉపయోగించండి",
     coachStyleApplied: "✓ ఇప్పుడు మీ శ్వాస శైలి",
+    setAccount: "ఖాతా",
+    setAppearance: "రూపం",
+    setDarkMode: "డార్క్ మోడ్",
+    setSubscription: "సబ్‌స్క్రిప్షన్",
+    setStatus: "స్థితి",
+    setManage: "నిర్వహించండి లేదా రద్దు చేయండి",
+    setViewPlans: "ప్లాన్‌లను చూడండి",
+    setNotifications: "నోటిఫికేషన్‌లు",
+    setReminders: "స్ట్రీక్ & క్వెస్ట్ రిమైండర్లు",
+    setRemindersDenied: "ఈ ఫోన్‌లో UpShift నోటిఫికేషన్‌లు ఆఫ్‌లో ఉన్నాయి. ఫోన్ సెట్టింగ్‌లలో ఆన్ చేయండి.",
+    setAbout: "గురించి",
+    setFeedback: "అభిప్రాయం పంపండి",
+    setVersion: "వెర్షన్",
+    setYourData: "మీ డేటా",
+    setLogoutTitle: "లాగ్ అవుట్ చేయాలా?",
+    setLogoutBody: "లాగ్ అవుట్ చేయాలనుకుంటున్నారా? మీ డేటా సేవ్ అయి ఉంటుంది, మళ్లీ సైన్ ఇన్ చేసినప్పుడు ఉంటుంది.",
+    setSigningOut: "సైన్ అవుట్ అవుతోంది…",
+    setCancelSubTitle: "సబ్‌స్క్రిప్షన్ రద్దు చేయాలా?",
+    setCancelSubBody: "మీ ప్రస్తుత బిల్లింగ్ వ్యవధి ముగిసినప్పుడు UpShift యాక్సెస్ ఆగిపోతుంది. మీ పురోగతి, డేటా సేవ్ అయి ఉంటాయి, కానీ కొత్త నమోదులు చేయలేరు.",
+    setKeepSub: "సబ్‌స్క్రిప్షన్ ఉంచండి",
+    setManageStore: "స్టోర్‌లో నిర్వహించండి",
+    setTrialLeft: "ఉచిత ట్రయల్ · {n} రోజులు మిగిలి ఉన్నాయి",
+    setActiveMonthly: "క్రియాశీలం · నెలవారీ",
+    setActiveAnnual: "క్రియాశీలం · వార్షికం",
+    setTrialExpired: "ట్రయల్ ముగిసింది",
+    setNotSubscribed: "సబ్‌స్క్రైబ్ కాలేదు",
+    weightTitle: "నేటి బరువు",
+    weightSubLast: "చివరిది: {n} పౌండ్లు · మీ ట్రెండ్ సరిగ్గా ఉండేందుకు నేటి బరువు నమోదు చేయండి.",
+    weightSubNew: "కాలక్రమేణా ట్రెండ్ చూడటానికి ప్రతిరోజూ నమోదు చేయండి.",
+    weightInputLabel: "బరువు పౌండ్లలో",
+    weightSave: "బరువు సేవ్ చేయండి",
+    weightSaveLabel: "నేటి బరువు సేవ్ చేయండి",
+    weightSaving: "సేవ్ అవుతోంది…",
+    weightSkip: "ఈరోజు వదిలేయండి",
   },
 };

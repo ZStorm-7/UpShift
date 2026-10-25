@@ -6,16 +6,14 @@ UpShift ("the app") is a personal health and fitness tracking app. This policy
 explains what data the app collects, why, who it is shared with, and how you
 can delete it.
 
-> **Before you publish:** replace every `[YOUR EMAIL]` below with a real contact
-> address (Google Play requires a working contact method), and have a lawyer
-> review this policy. It describes the app as built; health data is regulated
-> differently in different places (see `docs/coach-legal-review.md`).
+> Have a lawyer review this policy before launch. It describes the app as built;
+> health data is regulated differently in different places (see `docs/coach-legal-review.md`).
 
 ---
 
 ## Who runs this app
 
-UpShift is an independent project. Contact: **[YOUR EMAIL]**
+UpShift is an independent project. Contact: **Ridu.1029384756@gmail.com**
 
 ## What data is collected
 
@@ -142,7 +140,7 @@ workout details.
   challenges, leaderboard entry, profile photo and subscription record, and then
   your sign-in. This cannot be undone. An active subscription is not cancelled
   automatically; cancel it in your app store settings. You can also email
-  **[YOUR EMAIL]**.
+  **Ridu.1029384756@gmail.com**.
 - **Coach:** clear chats and turn off personalization any time.
 - **Mindful breaks:** turn off anytime in Settings; revoke Usage Access or
   Screen Time permission in your device settings.
@@ -151,13 +149,16 @@ workout details.
 
 UpShift is not directed at children under 13, and accounts are not knowingly
 created for them. If you believe a child under 13 has created an account,
-contact **[YOUR EMAIL]** and it will be deleted.
+contact **Ridu.1029384756@gmail.com** and it will be deleted.
 
 ## Data retention
 
 Your data is kept for as long as your account exists. Coach chats and the daily
 break tally are deleted after 90 days and coach feedback after 180 days. Deleting your account removes
-everything described above.
+everything described above, with one exception: to stop a free trial from being restarted by
+deleting and re-creating an account, we keep a one-way hash of your email address (not the address
+itself) and the date your trial began. It is used for nothing else, and you can ask us to remove
+it by emailing Ridu.1029384756@gmail.com once your trial period would have ended.
 
 ## Security
 
@@ -173,4 +174,4 @@ changes will be communicated in the app.
 
 ## Contact
 
-Questions about this policy or your data: **[YOUR EMAIL]**
+Questions about this policy or your data: **Ridu.1029384756@gmail.com**

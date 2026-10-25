@@ -8,6 +8,7 @@ import { spacing, radius, layout } from '../theme/tokens';
 import { fontFamily } from '../theme/fonts';
 import { usePalette } from '../theme/themedColors';
 import haptics from '../services/haptics';
+import { useLanguage } from '../i18n/LanguageContext';
 
 type Props = {
   visible: boolean;
@@ -18,6 +19,7 @@ type Props = {
 
 export default function WeightPromptModal({ visible, currentWeight, onSubmit, onSkip }: Props) {
   const palette = usePalette();
+  const { t } = useLanguage();
   const [value, setValue] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -47,16 +49,16 @@ export default function WeightPromptModal({ visible, currentWeight, onSubmit, on
   const valid = value.length > 0 && Number.isFinite(num) && num > 0 && num < 1500;
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={handleSkip} accessibilityLabel="Today's weight">
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={handleSkip} accessibilityLabel={t('weightTitle')}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={[styles.scrim, { backgroundColor: palette.scrim }]}>
         <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-          <Text style={[styles.title, { color: palette.textPrimary }]}>Today's weight</Text>
+          <Text style={[styles.title, { color: palette.textPrimary }]}>{t('weightTitle')}</Text>
           <Text style={[styles.subtitle, { color: palette.textSecondary }]}>
             {currentWeight
-              ? `Last: ${currentWeight} lbs · Log today's to keep your trend accurate.`
-              : 'Log daily to track your trend over time.'}
+              ? t('weightSubLast').replace('{n}', String(currentWeight))
+              : t('weightSubNew')}
           </Text>
 
           <View style={[styles.inputRow, { borderColor: valid || value === '' ? palette.borderStrong : palette.danger }]}>
@@ -70,7 +72,7 @@ export default function WeightPromptModal({ visible, currentWeight, onSubmit, on
               autoFocus
               onSubmitEditing={valid ? handleSubmit : undefined}
               returnKeyType="done"
-              accessibilityLabel="Weight in pounds"
+              accessibilityLabel={t('weightInputLabel')}
             />
             <Text style={[styles.unit, { color: palette.textMuted }]}>lbs</Text>
           </View>
@@ -84,14 +86,14 @@ export default function WeightPromptModal({ visible, currentWeight, onSubmit, on
               (!valid || submitting) && { opacity: 0.5 },
             ]}
             accessibilityRole="button"
-            accessibilityLabel="Save today's weight">
+            accessibilityLabel={t('weightSaveLabel')}>
             <Text style={[styles.saveText, { color: palette.textOnAccent }]}>
-              {submitting ? 'Saving…' : 'Save weight'}
+              {submitting ? t('weightSaving') : t('weightSave')}
             </Text>
           </Pressable>
 
           <Pressable onPress={handleSkip} hitSlop={12} style={styles.skip}>
-            <Text style={[styles.skipText, { color: palette.textMuted }]}>Skip today</Text>
+            <Text style={[styles.skipText, { color: palette.textMuted }]}>{t('weightSkip')}</Text>
           </Pressable>
         </View>
       </KeyboardAvoidingView>

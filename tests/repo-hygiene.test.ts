@@ -58,8 +58,8 @@ test('no API key or private key material is committed', () => {
   assert.deepEqual(hits, []);
 });
 
-test('the privacy policy has no unfilled placeholder except the contact email', () => {
+test('the privacy policy has no unfilled placeholder', () => {
   const policy = readFileSync(join(root, 'PRIVACY_POLICY.md'), 'utf8');
-  const placeholders = [...policy.matchAll(/\[[A-Z][A-Z ]+\]/g)].map(m => m[0]).filter(p => p !== '[YOUR EMAIL]');
+  const placeholders = [...policy.matchAll(/\[[A-Z][A-Z ]+\]/g)].map(m => m[0]);
   assert.deepEqual(placeholders, []);
 });
