@@ -193,6 +193,33 @@ service cloud.firestore {
               'status', 'scores', 'winnerUid', 'createdAt']);
     }
 
+    // ---- AI coach usage (server-owned) ----
+    // Quota, burst and abuse state for the coach. The Cloud Function writes it
+    // with the Admin SDK (which bypasses these rules); clients may only READ
+    // their own document. `write: if false` is what makes the daily limit
+    // impossible to reset from the app.
+    match /coachUsage/{userId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if false;
+    }
+
+    // ---- AI coach feedback / problem reports (write-only) ----
+    // Thumbs up/down and "report a problem". Create-only and bounded; nobody
+    // reads these from the client, review them in the Firebase console.
+    match /coachFeedback/{feedbackId} {
+      allow read, update, delete: if false;
+      allow create: if request.auth != null
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(
+             ['uid', 'kind', 'rating', 'reason', 'note', 'messageId', 'replyText', 'at'])
+        && request.resource.data.kind in ['rating', 'problem']
+        && (!('rating' in request.resource.data) || request.resource.data.rating in ['up', 'down'])
+        && (!('reason' in request.resource.data) || request.resource.data.reason.size() <= 40)
+        && (!('note' in request.resource.data) || request.resource.data.note.size() <= 500)
+        && (!('replyText' in request.resource.data) || request.resource.data.replyText.size() <= 1500)
+        && request.resource.data.at == request.time;
+    }
+
     // ---- Deny everything else ----
     // Anything not explicitly allowed above is refused, so an unplanned or
     // typo'd collection path fails closed rather than open.

@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
+import { getFunctions } from 'firebase/functions';
 
 // Not secrets — see the mentor chat for why it's safe for these values to be public.
 // Real protection lives in Firestore's security rules, not in hiding this file.
@@ -45,3 +46,7 @@ export const db = getFirestore(app);
 // for a few kilobytes, so profile photos go to Cloudinary instead. See
 // services/cloudinary.ts. Auth and Firestore both still work fine on the
 // no-cost Spark plan.
+
+// The AI coach's Cloud Function (functions/src/index.ts). Region must match the
+// function's `region` option.
+export const functions = getFunctions(app, 'us-central1');

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Pressable, Modal, ScrollView, AccessibilityInfo, Alert } from 'react-native';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { getStreakRescueLine } from '../services/coach';
+import { onDayDataChanged } from '../services/dataEvents';
 import { db } from '../firebase/config';
 // Dashboard redesign proof of concept — reads its own light/editorial theme
 // (theme/minimal.ts) rather than the app's shipped dark theme. See that
@@ -477,10 +478,12 @@ export default function DashboardScreen({ navigation }: any) {
     // Held in a ref so the rollover watcher below can call the same loader
     // without this effect having to re-run (and re-show the spinner).
     reloadRef.current = () => loadProgress(false);
+    // Reload when the floating AI coach logs a meal (Dashboard stays mounted under it).
+    const offDataEvents = onDayDataChanged(() => loadProgress(false));
 
     loadProgress(true);
     const unsubscribe = navigation.addListener('focus', () => loadProgress(false));
-    return unsubscribe;
+    return () => { unsubscribe(); offDataEvents(); };
   }, [authUser, navigation]);
 
   // Ticks the clock every second, and once a minute checks two boundaries

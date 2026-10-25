@@ -15,6 +15,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, Modal, FlatList } from 'react-native';
 import { getDoc, setDoc } from 'firebase/firestore';
+import { onDayDataChanged } from '../services/dataEvents';
 import { spacing, radius, layout } from '../theme/tokens';
 import { fontFamily } from '../theme/fonts';
 import { usePalette } from '../theme/themedColors';
@@ -97,6 +98,17 @@ export default function NutritionScreen({ navigation }: any) {
         setLoading(false);
       }
     })();
+  }, [authUser?.uid]);
+
+  // The floating AI coach can log meals while this screen stays mounted
+  // underneath it, so reload today's log whenever it announces a change.
+  useEffect(() => {
+    if (!authUser) return;
+    return onDayDataChanged(() => {
+      getDoc(dayDocRef(authUser.uid))
+        .then(snap => setFoodLog((snap.data()?.foodLog as FoodEntry[]) || []))
+        .catch(() => {});
+    });
   }, [authUser?.uid]);
 
   const totalCalories = foodLog.reduce((sum, item) => sum + item.calories, 0);

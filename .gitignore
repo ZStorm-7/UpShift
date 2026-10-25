@@ -23,3 +23,7 @@ web-build/
 .env
 .env.local
 google-services.json
+
+# Cloud Functions
+functions/node_modules/
+functions/lib/
