@@ -287,7 +287,63 @@ type TranslationKey =
   | 'deleting'
   | 'deleteFailed'
   | 'privacyPolicy'
-  | 'passwordTooShort';
+  | 'passwordTooShort'
+  | 'breakEyebrow'
+  | 'breakFrom'
+  | 'breakCloseEyes'
+  | 'breakIn'
+  | 'breakHold'
+  | 'breakOut'
+  | 'breakOpenEyes'
+  | 'breakSubtitle'
+  | 'breakDoneTitle'
+  | 'breakDoneBody'
+  | 'breakStay'
+  | 'breakExit'
+  | 'breakExitTo'
+  | 'breakExitNoteIos'
+  | 'breakGotIt'
+  | 'breaksTitle'
+  | 'breaksIntro'
+  | 'breaksToggle'
+  | 'breaksStatusOn'
+  | 'breaksStatusSetup'
+  | 'breaksEvery'
+  | 'breaksMinutes'
+  | 'breaksDefault'
+  | 'breaksCustom'
+  | 'breaksApps'
+  | 'breaksAppsHint'
+  | 'breaksSearch'
+  | 'breaksSelectedCount'
+  | 'breaksNoApps'
+  | 'breaksIncludeUpShift'
+  | 'breaksIosChoose'
+  | 'breaksIosHint'
+  | 'breaksPauses'
+  | 'breaksPauseWorkout'
+  | 'breaksPauseAudio'
+  | 'breaksPauseQuest'
+  | 'breaksPauseQuestHint'
+  | 'breaksPermissions'
+  | 'breaksPermUsage'
+  | 'breaksPermUsageWhy'
+  | 'breaksPermOverlay'
+  | 'breaksPermOverlayWhy'
+  | 'breaksPermBattery'
+  | 'breaksPermBatteryWhy'
+  | 'breaksPermScreenTime'
+  | 'breaksPermScreenTimeWhy'
+  | 'breaksGrant'
+  | 'breaksGranted'
+  | 'breaksDisclosureTitle'
+  | 'breaksDisclosureBody'
+  | 'breaksContinue'
+  | 'breaksTryNow'
+  | 'breaksUnavailable'
+  | 'breaksNoteAndroid'
+  | 'breaksNoteIos'
+  | 'breaksSection';
 
 export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, string>>> = {
   en: {
@@ -556,6 +612,62 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     deleteFailed: "We couldn't delete your account. Check your connection and try again.",
     privacyPolicy: "Privacy policy",
     passwordTooShort: "Use at least 8 characters.",
+    breakEyebrow: "MINDFUL BREAK",
+    breakFrom: "You've been in {app} for a while",
+    breakCloseEyes: "Close your eyes",
+    breakIn: "Breathe in",
+    breakHold: "Hold",
+    breakOut: "Breathe out",
+    breakOpenEyes: "Open your eyes",
+    breakSubtitle: "Let your eyes rest. Look away from the screen if you like.",
+    breakDoneTitle: "Nicely done",
+    breakDoneBody: "Your eyes and mind just got a rest.",
+    breakStay: "Stay in UpShift",
+    breakExit: "Exit",
+    breakExitTo: "Back to {app}",
+    breakExitNoteIos: "Your apps are unlocked. Switch back to the app you were using.",
+    breakGotIt: "Got it",
+    breaksTitle: "Mindful breaks",
+    breaksIntro: "After a set time in the apps you choose, UpShift brings you a 15-second breathing break to rest your eyes and mind. It can't be skipped, and when you finish you can stay or go back.",
+    breaksToggle: "Remind me to breathe",
+    breaksStatusOn: "On",
+    breaksStatusSetup: "Needs setup",
+    breaksEvery: "Every",
+    breaksMinutes: "{n} min",
+    breaksDefault: "Default",
+    breaksCustom: "Custom: {n} minutes of use",
+    breaksApps: "Apps that count",
+    breaksAppsHint: "Time in these apps counts toward your next break.",
+    breaksSearch: "Search apps",
+    breaksSelectedCount: "{n} selected",
+    breaksNoApps: "No apps found.",
+    breaksIncludeUpShift: "Include UpShift itself",
+    breaksIosChoose: "Choose apps",
+    breaksIosHint: "iOS shows its own picker. UpShift never sees which apps you pick.",
+    breaksPauses: "While a break is showing, pause",
+    breaksPauseWorkout: "Workout and rest timers",
+    breaksPauseAudio: "Coach voice and audio",
+    breaksPauseQuest: "Quest and streak countdown",
+    breaksPauseQuestHint: "Only the on-screen countdown pauses. A break never changes your streak or quest reset time.",
+    breaksPermissions: "Permissions",
+    breaksPermUsage: "Usage access",
+    breaksPermUsageWhy: "Lets UpShift see which app is in front so it can count your time. It stays on your device.",
+    breaksPermOverlay: "Display over other apps",
+    breaksPermOverlayWhy: "Lets the break come to the front when you are in another app.",
+    breaksPermBattery: "Keep running in the background",
+    breaksPermBatteryWhy: "Recommended on some phones, which otherwise stop background apps.",
+    breaksPermScreenTime: "Screen Time access",
+    breaksPermScreenTimeWhy: "Lets iOS count your time in the apps you pick and pause them when a break is due.",
+    breaksGrant: "Allow",
+    breaksGranted: "Allowed",
+    breaksDisclosureTitle: "Before you allow this",
+    breaksDisclosureBody: "UpShift will use Usage access to detect which app is in front, only for the apps you choose, so it can start a breathing break after your chosen time. This information stays on your device and is never uploaded or shared. You can turn this off at any time.",
+    breaksContinue: "Continue",
+    breaksTryNow: "Try a break now",
+    breaksUnavailable: "Breaks in other apps need the installed UpShift app (not Expo Go). Breaks inside UpShift still work.",
+    breaksNoteAndroid: "Breaks come to the front over the app you are using. They cannot be skipped, and leaving UpShift mid-exercise restarts the 15 seconds.",
+    breaksNoteIos: "On iPhone, Apple blocks your chosen apps when time is up and sends a notification. Tap it to open UpShift and finish the break to unlock them.",
+    breaksSection: "Mindful breaks",
   },
   es: {
     goodMorning: 'Buenos días',
@@ -823,6 +935,62 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     deleteFailed: "No pudimos eliminar tu cuenta. Revisa tu conexión e inténtalo de nuevo.",
     privacyPolicy: "Política de privacidad",
     passwordTooShort: "Usa al menos 8 caracteres.",
+    breakEyebrow: "PAUSA CONSCIENTE",
+    breakFrom: "Llevas un rato en {app}",
+    breakCloseEyes: "Cierra los ojos",
+    breakIn: "Inhala",
+    breakHold: "Mantén",
+    breakOut: "Exhala",
+    breakOpenEyes: "Abre los ojos",
+    breakSubtitle: "Deja descansar tus ojos. Si quieres, aparta la vista de la pantalla.",
+    breakDoneTitle: "Muy bien",
+    breakDoneBody: "Tus ojos y tu mente acaban de descansar.",
+    breakStay: "Quedarme en UpShift",
+    breakExit: "Salir",
+    breakExitTo: "Volver a {app}",
+    breakExitNoteIos: "Tus apps están desbloqueadas. Vuelve a la app que estabas usando.",
+    breakGotIt: "Entendido",
+    breaksTitle: "Pausas conscientes",
+    breaksIntro: "Tras un tiempo en las apps que elijas, UpShift te ofrece una pausa de respiración de 15 segundos para descansar la vista y la mente. No se puede saltar y, al terminar, puedes quedarte o volver.",
+    breaksToggle: "Recuérdame respirar",
+    breaksStatusOn: "Activado",
+    breaksStatusSetup: "Requiere configuración",
+    breaksEvery: "Cada",
+    breaksMinutes: "{n} min",
+    breaksDefault: "Predeterminado",
+    breaksCustom: "Personalizado: {n} minutos de uso",
+    breaksApps: "Apps que cuentan",
+    breaksAppsHint: "El tiempo en estas apps cuenta para tu próxima pausa.",
+    breaksSearch: "Buscar apps",
+    breaksSelectedCount: "{n} seleccionadas",
+    breaksNoApps: "No se encontraron apps.",
+    breaksIncludeUpShift: "Incluir UpShift",
+    breaksIosChoose: "Elegir apps",
+    breaksIosHint: "iOS muestra su propio selector. UpShift nunca ve qué apps eliges.",
+    breaksPauses: "Mientras se muestra una pausa, detener",
+    breaksPauseWorkout: "Temporizadores de entrenamiento y descanso",
+    breaksPauseAudio: "Voz y audio del coach",
+    breaksPauseQuest: "Cuenta atrás de misiones y racha",
+    breaksPauseQuestHint: "Solo se detiene la cuenta atrás en pantalla. Una pausa nunca cambia tu racha ni la hora de reinicio de misiones.",
+    breaksPermissions: "Permisos",
+    breaksPermUsage: "Acceso a datos de uso",
+    breaksPermUsageWhy: "Permite a UpShift ver qué app está al frente para contar tu tiempo. Se queda en tu dispositivo.",
+    breaksPermOverlay: "Mostrar sobre otras apps",
+    breaksPermOverlayWhy: "Permite que la pausa pase al frente cuando estás en otra app.",
+    breaksPermBattery: "Seguir en segundo plano",
+    breaksPermBatteryWhy: "Recomendado en algunos teléfonos que detienen las apps en segundo plano.",
+    breaksPermScreenTime: "Acceso a Tiempo de uso",
+    breaksPermScreenTimeWhy: "Permite que iOS cuente tu tiempo en las apps que elijas y las pause cuando toque una pausa.",
+    breaksGrant: "Permitir",
+    breaksGranted: "Permitido",
+    breaksDisclosureTitle: "Antes de permitirlo",
+    breaksDisclosureBody: "UpShift usará el acceso a datos de uso para detectar qué app está al frente, solo de las apps que elijas, y así iniciar una pausa de respiración tras el tiempo elegido. Esta información se queda en tu dispositivo y nunca se sube ni se comparte. Puedes desactivarlo en cualquier momento.",
+    breaksContinue: "Continuar",
+    breaksTryNow: "Probar una pausa ahora",
+    breaksUnavailable: "Las pausas en otras apps requieren la app UpShift instalada (no Expo Go). Las pausas dentro de UpShift siguen funcionando.",
+    breaksNoteAndroid: "Las pausas aparecen al frente sobre la app que usas. No se pueden saltar y, si sales de UpShift a mitad, los 15 segundos se reinician.",
+    breaksNoteIos: "En iPhone, Apple bloquea las apps elegidas al acabar el tiempo y envía una notificación. Tócala para abrir UpShift y termina la pausa para desbloquearlas.",
+    breaksSection: "Pausas conscientes",
   },
   fr: {
     goodMorning: 'Bonjour',
@@ -1090,6 +1258,62 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     deleteFailed: "Nous n'avons pas pu supprimer ton compte. Vérifie ta connexion et réessaie.",
     privacyPolicy: "Politique de confidentialité",
     passwordTooShort: "Utilise au moins 8 caractères.",
+    breakEyebrow: "PAUSE PLEINE CONSCIENCE",
+    breakFrom: "Tu es sur {app} depuis un moment",
+    breakCloseEyes: "Ferme les yeux",
+    breakIn: "Inspire",
+    breakHold: "Retiens",
+    breakOut: "Expire",
+    breakOpenEyes: "Ouvre les yeux",
+    breakSubtitle: "Laisse tes yeux se reposer. Détourne le regard de l'écran si tu veux.",
+    breakDoneTitle: "Bien joué",
+    breakDoneBody: "Tes yeux et ton esprit se sont reposés.",
+    breakStay: "Rester dans UpShift",
+    breakExit: "Quitter",
+    breakExitTo: "Retour à {app}",
+    breakExitNoteIos: "Tes applis sont déverrouillées. Retourne à l'appli que tu utilisais.",
+    breakGotIt: "Compris",
+    breaksTitle: "Pauses pleine conscience",
+    breaksIntro: "Après un temps passé dans les applis que tu choisis, UpShift te propose une pause respiration de 15 secondes pour reposer tes yeux et ton esprit. Elle ne peut pas être passée, et à la fin tu peux rester ou revenir.",
+    breaksToggle: "Rappelle-moi de respirer",
+    breaksStatusOn: "Activé",
+    breaksStatusSetup: "À configurer",
+    breaksEvery: "Toutes les",
+    breaksMinutes: "{n} min",
+    breaksDefault: "Par défaut",
+    breaksCustom: "Personnalisé : {n} minutes d'utilisation",
+    breaksApps: "Applis prises en compte",
+    breaksAppsHint: "Le temps passé dans ces applis compte pour ta prochaine pause.",
+    breaksSearch: "Rechercher des applis",
+    breaksSelectedCount: "{n} sélectionnées",
+    breaksNoApps: "Aucune appli trouvée.",
+    breaksIncludeUpShift: "Inclure UpShift",
+    breaksIosChoose: "Choisir des applis",
+    breaksIosHint: "iOS affiche son propre sélecteur. UpShift ne voit jamais quelles applis tu choisis.",
+    breaksPauses: "Pendant une pause, mettre en pause",
+    breaksPauseWorkout: "Minuteurs d'entraînement et de repos",
+    breaksPauseAudio: "Voix et audio du coach",
+    breaksPauseQuest: "Compte à rebours des quêtes et de la série",
+    breaksPauseQuestHint: "Seul le compte à rebours à l'écran se met en pause. Une pause ne modifie jamais ta série ni l'heure de réinitialisation des quêtes.",
+    breaksPermissions: "Autorisations",
+    breaksPermUsage: "Accès aux données d'utilisation",
+    breaksPermUsageWhy: "Permet à UpShift de voir quelle appli est au premier plan pour compter ton temps. Cela reste sur ton appareil.",
+    breaksPermOverlay: "Affichage par-dessus d'autres applis",
+    breaksPermOverlayWhy: "Permet à la pause de passer au premier plan quand tu es dans une autre appli.",
+    breaksPermBattery: "Continuer en arrière-plan",
+    breaksPermBatteryWhy: "Recommandé sur certains téléphones qui arrêtent les applis en arrière-plan.",
+    breaksPermScreenTime: "Accès à Temps d'écran",
+    breaksPermScreenTimeWhy: "Permet à iOS de compter ton temps dans les applis choisies et de les mettre en pause quand une pause est due.",
+    breaksGrant: "Autoriser",
+    breaksGranted: "Autorisé",
+    breaksDisclosureTitle: "Avant d'autoriser",
+    breaksDisclosureBody: "UpShift utilisera l'accès aux données d'utilisation pour détecter quelle appli est au premier plan, uniquement pour les applis que tu choisis, afin de lancer une pause respiration après le temps choisi. Ces informations restent sur ton appareil et ne sont jamais envoyées ni partagées. Tu peux désactiver cela à tout moment.",
+    breaksContinue: "Continuer",
+    breaksTryNow: "Essayer une pause maintenant",
+    breaksUnavailable: "Les pauses dans d'autres applis nécessitent l'appli UpShift installée (pas Expo Go). Les pauses dans UpShift fonctionnent toujours.",
+    breaksNoteAndroid: "Les pauses s'affichent au premier plan par-dessus l'appli que tu utilises. Elles ne peuvent pas être passées, et quitter UpShift en cours de route relance les 15 secondes.",
+    breaksNoteIos: "Sur iPhone, Apple bloque les applis choisies quand le temps est écoulé et envoie une notification. Touche-la pour ouvrir UpShift et termine la pause pour les débloquer.",
+    breaksSection: "Pauses pleine conscience",
   },
   zh: {
     goodMorning: '早上好',
@@ -1357,6 +1581,62 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     deleteFailed: "无法删除你的账户。请检查网络后重试。",
     privacyPolicy: "隐私政策",
     passwordTooShort: "请至少使用8个字符。",
+    breakEyebrow: "正念休息",
+    breakFrom: "你已经在 {app} 里待了一阵子",
+    breakCloseEyes: "闭上眼睛",
+    breakIn: "吸气",
+    breakHold: "屏住呼吸",
+    breakOut: "呼气",
+    breakOpenEyes: "睁开眼睛",
+    breakSubtitle: "让眼睛休息一下，也可以把视线移开屏幕。",
+    breakDoneTitle: "做得好",
+    breakDoneBody: "你的眼睛和大脑刚刚得到了休息。",
+    breakStay: "留在 UpShift",
+    breakExit: "退出",
+    breakExitTo: "返回 {app}",
+    breakExitNoteIos: "你的应用已解锁。请切换回刚才使用的应用。",
+    breakGotIt: "知道了",
+    breaksTitle: "正念休息",
+    breaksIntro: "在你选择的应用中使用一段时间后，UpShift 会带来15秒的呼吸休息，让眼睛和大脑放松。休息无法跳过，结束后你可以留下或返回。",
+    breaksToggle: "提醒我呼吸",
+    breaksStatusOn: "已开启",
+    breaksStatusSetup: "需要设置",
+    breaksEvery: "每隔",
+    breaksMinutes: "{n} 分钟",
+    breaksDefault: "默认",
+    breaksCustom: "自定义：使用 {n} 分钟",
+    breaksApps: "计入的应用",
+    breaksAppsHint: "在这些应用中的时间会计入下一次休息。",
+    breaksSearch: "搜索应用",
+    breaksSelectedCount: "已选 {n} 个",
+    breaksNoApps: "未找到应用。",
+    breaksIncludeUpShift: "包含 UpShift 本身",
+    breaksIosChoose: "选择应用",
+    breaksIosHint: "iOS 会显示系统自带的选择器，UpShift 永远看不到你选了哪些应用。",
+    breaksPauses: "休息进行时，暂停",
+    breaksPauseWorkout: "训练和休息计时器",
+    breaksPauseAudio: "教练语音和音频",
+    breaksPauseQuest: "任务和连续天数倒计时",
+    breaksPauseQuestHint: "仅屏幕上的倒计时会暂停。休息不会改变你的连续天数或任务重置时间。",
+    breaksPermissions: "权限",
+    breaksPermUsage: "使用情况访问权限",
+    breaksPermUsageWhy: "让 UpShift 知道哪个应用在前台以统计时间。数据仅保存在你的设备上。",
+    breaksPermOverlay: "在其他应用上层显示",
+    breaksPermOverlayWhy: "让休息在你使用其他应用时弹到前台。",
+    breaksPermBattery: "保持后台运行",
+    breaksPermBatteryWhy: "建议在会停止后台应用的手机上开启。",
+    breaksPermScreenTime: "屏幕使用时间权限",
+    breaksPermScreenTimeWhy: "让 iOS 统计你在所选应用中的时间，并在到点时暂停它们。",
+    breaksGrant: "允许",
+    breaksGranted: "已允许",
+    breaksDisclosureTitle: "允许之前",
+    breaksDisclosureBody: "UpShift 会使用“使用情况访问权限”来检测哪个应用在前台（仅限你选择的应用），以便在你设定的时间后开始呼吸休息。这些信息只保存在你的设备上，不会上传或分享。你可以随时关闭。",
+    breaksContinue: "继续",
+    breaksTryNow: "现在试一次休息",
+    breaksUnavailable: "在其他应用中的休息需要安装正式的 UpShift 应用（而非 Expo Go）。UpShift 内的休息仍可使用。",
+    breaksNoteAndroid: "休息会弹到你正在使用的应用上方。无法跳过，中途离开 UpShift 会让15秒重新开始。",
+    breaksNoteIos: "在 iPhone 上，时间到后 Apple 会锁定你选择的应用并发送通知。点按通知打开 UpShift，完成休息即可解锁。",
+    breaksSection: "正念休息",
   },
   te: {
     goodMorning: 'శుభోదయం',
@@ -1624,5 +1904,61 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     deleteFailed: "మీ ఖాతాను తొలగించలేకపోయాము. కనెక్షన్ చూసి మళ్లీ ప్రయత్నించండి.",
     privacyPolicy: "గోప్యతా విధానం",
     passwordTooShort: "కనీసం 8 అక్షరాలు ఉపయోగించండి.",
+    breakEyebrow: "మైండ్‌ఫుల్ బ్రేక్",
+    breakFrom: "మీరు కొంతసేపటి నుండి {app} లో ఉన్నారు",
+    breakCloseEyes: "కళ్లు మూసుకోండి",
+    breakIn: "శ్వాస తీసుకోండి",
+    breakHold: "ఆపండి",
+    breakOut: "శ్వాస వదలండి",
+    breakOpenEyes: "కళ్లు తెరవండి",
+    breakSubtitle: "మీ కళ్లకు విశ్రాంతి ఇవ్వండి. కావాలంటే స్క్రీన్ నుండి చూపు మరల్చండి.",
+    breakDoneTitle: "చాలా బాగుంది",
+    breakDoneBody: "మీ కళ్లకు, మనసుకు విశ్రాంతి లభించింది.",
+    breakStay: "UpShift లో ఉండండి",
+    breakExit: "నిష్క్రమించు",
+    breakExitTo: "{app} కి తిరిగి వెళ్లండి",
+    breakExitNoteIos: "మీ యాప్‌లు అన్‌లాక్ అయ్యాయి. మీరు వాడుతున్న యాప్‌కు తిరిగి వెళ్లండి.",
+    breakGotIt: "అర్థమైంది",
+    breaksTitle: "మైండ్‌ఫుల్ బ్రేక్‌లు",
+    breaksIntro: "మీరు ఎంచుకున్న యాప్‌లలో కొంత సమయం గడిపిన తర్వాత, మీ కళ్లకు, మనసుకు విశ్రాంతి ఇవ్వడానికి UpShift 15 సెకన్ల శ్వాస విరామం ఇస్తుంది. దీన్ని దాటవేయలేరు; ముగిశాక ఉండవచ్చు లేదా వెనక్కి వెళ్లవచ్చు.",
+    breaksToggle: "శ్వాస తీసుకోమని గుర్తు చేయి",
+    breaksStatusOn: "ఆన్",
+    breaksStatusSetup: "సెటప్ అవసరం",
+    breaksEvery: "ప్రతి",
+    breaksMinutes: "{n} నిమి",
+    breaksDefault: "డిఫాల్ట్",
+    breaksCustom: "కస్టమ్: {n} నిమిషాల వినియోగం",
+    breaksApps: "లెక్కించే యాప్‌లు",
+    breaksAppsHint: "ఈ యాప్‌లలో గడిపిన సమయం మీ తదుపరి విరామానికి లెక్కవేయబడుతుంది.",
+    breaksSearch: "యాప్‌లను వెతకండి",
+    breaksSelectedCount: "{n} ఎంచుకున్నారు",
+    breaksNoApps: "యాప్‌లు కనబడలేదు.",
+    breaksIncludeUpShift: "UpShift ను కూడా చేర్చు",
+    breaksIosChoose: "యాప్‌లను ఎంచుకోండి",
+    breaksIosHint: "iOS తన స్వంత పికర్‌ను చూపుతుంది. మీరు ఏ యాప్‌లు ఎంచుకున్నారో UpShift చూడదు.",
+    breaksPauses: "విరామం చూపిస్తున్నప్పుడు, ఆపండి",
+    breaksPauseWorkout: "వర్కౌట్ మరియు విశ్రాంతి టైమర్‌లు",
+    breaksPauseAudio: "కోచ్ వాయిస్ మరియు ఆడియో",
+    breaksPauseQuest: "క్వెస్ట్ మరియు స్ట్రీక్ కౌంట్‌డౌన్",
+    breaksPauseQuestHint: "తెరపై కౌంట్‌డౌన్ మాత్రమే ఆగుతుంది. విరామం మీ స్ట్రీక్‌ను లేదా క్వెస్ట్ రీసెట్ సమయాన్ని మార్చదు.",
+    breaksPermissions: "అనుమతులు",
+    breaksPermUsage: "వినియోగ యాక్సెస్",
+    breaksPermUsageWhy: "ఏ యాప్ ముందు ఉందో UpShift చూసి మీ సమయాన్ని లెక్కించడానికి అనుమతిస్తుంది. ఇది మీ పరికరంలోనే ఉంటుంది.",
+    breaksPermOverlay: "ఇతర యాప్‌లపై ప్రదర్శించు",
+    breaksPermOverlayWhy: "మీరు మరో యాప్‌లో ఉన్నప్పుడు విరామాన్ని ముందుకు తెస్తుంది.",
+    breaksPermBattery: "బ్యాక్‌గ్రౌండ్‌లో కొనసాగించు",
+    breaksPermBatteryWhy: "బ్యాక్‌గ్రౌండ్ యాప్‌లను ఆపే కొన్ని ఫోన్‌లలో సిఫార్సు చేయబడింది.",
+    breaksPermScreenTime: "స్క్రీన్ టైమ్ యాక్సెస్",
+    breaksPermScreenTimeWhy: "మీరు ఎంచుకున్న యాప్‌లలో మీ సమయాన్ని iOS లెక్కించి, విరామం సమయం వచ్చినప్పుడు వాటిని ఆపడానికి అనుమతిస్తుంది.",
+    breaksGrant: "అనుమతించు",
+    breaksGranted: "అనుమతించబడింది",
+    breaksDisclosureTitle: "అనుమతించే ముందు",
+    breaksDisclosureBody: "మీరు ఎంచుకున్న సమయం తర్వాత శ్వాస విరామం ప్రారంభించడానికి, ఏ యాప్ ముందు ఉందో (మీరు ఎంచుకున్న యాప్‌లకు మాత్రమే) గుర్తించడానికి UpShift వినియోగ యాక్సెస్‌ను ఉపయోగిస్తుంది. ఈ సమాచారం మీ పరికరంలోనే ఉంటుంది, ఎప్పుడూ అప్‌లోడ్ లేదా షేర్ చేయబడదు. దీన్ని ఎప్పుడైనా ఆపివేయవచ్చు.",
+    breaksContinue: "కొనసాగించు",
+    breaksTryNow: "ఇప్పుడు విరామం ప్రయత్నించండి",
+    breaksUnavailable: "ఇతర యాప్‌లలో విరామాలకు ఇన్‌స్టాల్ చేసిన UpShift యాప్ అవసరం (Expo Go కాదు). UpShift లోపల విరామాలు ఇంకా పని చేస్తాయి.",
+    breaksNoteAndroid: "విరామాలు మీరు వాడుతున్న యాప్‌పై ముందుకు వస్తాయి. వాటిని దాటవేయలేరు; మధ్యలో UpShift వదిలితే 15 సెకన్లు మళ్లీ మొదలవుతాయి.",
+    breaksNoteIos: "iPhone లో, సమయం పూర్తయ్యాక Apple మీరు ఎంచుకున్న యాప్‌లను బ్లాక్ చేసి నోటిఫికేషన్ పంపుతుంది. దాన్ని నొక్కి UpShift తెరిచి, విరామం పూర్తి చేస్తే అవి అన్‌లాక్ అవుతాయి.",
+    breaksSection: "మైండ్‌ఫుల్ బ్రేక్‌లు",
   },
 };

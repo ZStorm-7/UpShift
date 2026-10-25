@@ -11,9 +11,10 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigationState } from '@react-navigation/native';
+import { useCurrentRouteName } from '../services/navigationRef';
 import { useUser } from '../context/UserContext';
 import { useLanguage } from '../i18n/LanguageContext';
+import { useBreakPause } from '../context/BreakContext';
 import { usePalette } from '../theme/themedColors';
 import { spacing, radius, type } from '../theme/tokens';
 import { fontFamily } from '../theme/fonts';
@@ -31,7 +32,7 @@ import {
   loadPrefs, savePrefs, loadHistory, saveMessage, clearHistory, loadTodayCheckin, saveCheckin, sendFeedback,
 } from '../services/coach';
 
-const HIDDEN_ROUTES = new Set(['Welcome', 'Auth', 'Subscription', 'Onboarding', 'Workout', 'WorkoutSummary']);
+const HIDDEN_ROUTES = new Set(['Welcome', 'Auth', 'Subscription', 'Onboarding', 'Workout', 'WorkoutSummary', 'Break']);
 
 // Quick-reply chips change with the screen (values are translation keys).
 const CHIPS: Record<string, string[]> = {
@@ -59,11 +60,8 @@ function timeLeft(ms: number): string {
 }
 
 export default function CoachWidget() {
-  const routeName = useNavigationState(s => {
-    let r: any = s?.routes?.[s.index ?? 0];
-    while (r?.state) r = r.state.routes[r.state.index ?? 0];
-    return r?.name as string | undefined;
-  });
+  // Not useNavigationState: this widget sits outside the navigator, where that hook throws.
+  const routeName = useCurrentRouteName();
   const { authUser, profile } = useUser();
   const { t, language } = useLanguage();
   const p = usePalette();
@@ -92,6 +90,7 @@ export default function CoachWidget() {
   const loadedFor = useRef<string | null>(null);
 
   const uid = authUser?.uid;
+  const audioPaused = useBreakPause('audio');
   const { consented, useData, tone, speak: speakOn } = prefs;
   const agreed = hasConsent(prefs);
 
@@ -144,6 +143,14 @@ export default function CoachWidget() {
       } catch { /* best-effort */ }
     })();
   }, [uid, profile]);
+
+  // A mindful break silences the coach (spoken replies and the microphone).
+  useEffect(() => {
+    if (!audioPaused) return;
+    stopSpeaking();
+    stopListenRef.current?.();
+    setOpen(false);
+  }, [audioPaused]);
 
   // Typewriter reveal for the newest coach reply.
   useEffect(() => {

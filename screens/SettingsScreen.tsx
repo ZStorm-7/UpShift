@@ -24,6 +24,7 @@ import { withMinDuration, AUTH_TRANSITION_MS } from '../utils/timing';
 import haptics from '../services/haptics';
 import { useLanguage } from '../i18n/LanguageContext';
 import { deleteMyAccount } from '../firebase/account';
+import { useBreak } from '../context/BreakContext';
 import { getAuthErrorMessage } from '../firebase/authErrors';
 
 export default function SettingsScreen({ navigation }: any) {
@@ -31,6 +32,7 @@ export default function SettingsScreen({ navigation }: any) {
   const { mode, setMode } = useTheme();
   const { profile, logOut, authUser, emailVerified, resendVerification, refreshEmailVerified, reauthenticate } = useUser();
   const { t } = useLanguage();
+  const { settings: breakSettings, disableAll: disableBreaks } = useBreak();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
   const [deleting, setDeleting] = useState(false);
@@ -76,6 +78,7 @@ export default function SettingsScreen({ navigation }: any) {
       // The server insists on a login from the last few minutes.
       await reauthenticate(deletePassword);
       await deleteMyAccount();
+      await disableBreaks(); // stop the background monitor on this device
       haptics.setComplete();
       // The auth user no longer exists server-side; clear local state.
       await logOut().catch(() => {});
@@ -192,6 +195,15 @@ export default function SettingsScreen({ navigation }: any) {
               palette={palette}
             />
           )}
+        </Section>
+
+        {/* Mindful breaks */}
+        <Section title={t('breaksSection')} palette={palette}>
+          <TappableRow
+            label={`${t('breaksTitle')} · ${breakSettings.enabled ? t('breaksStatusOn') : '—'}`}
+            onPress={() => navigation.navigate('BreaksSettings')}
+            palette={palette}
+          />
         </Section>
 
         {/* Notifications */}

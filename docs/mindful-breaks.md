@@ -1,0 +1,90 @@
+# Mindful breaks
+
+After N minutes of use (default **30**) in the apps the user chooses, UpShift
+brings up a mandatory **15-second breathing break**: an eye closes, the user
+breathes with an orb and haptic cues, the eye opens, and they choose **Stay in
+UpShift** or **Exit** (back to the app they were in). It repeats every N minutes.
+Inspired by ClearSpace, which gates apps behind a notification and a breathing screen.
+
+## What works where
+
+| | Android | iPhone | Expo Go / web |
+|---|---|---|---|
+| Break inside UpShift | yes | yes | yes |
+| Break over **other** apps | yes, UpShift jumps to the front | yes, Apple shields the apps and sends a notification | no |
+| "Exit" returns to the other app | yes (resumes where they were) | **no**: iOS cannot switch apps, so the user is told to switch back | n/a |
+| Choose apps | by name, in UpShift | Apple's own picker (UpShift never learns the names) | n/a |
+| Needs | Usage access + Display over other apps | Screen Time authorization + Apple's Family Controls entitlement | nothing |
+
+Other-app breaks need a **development or production build**, not Expo Go.
+
+## Files
+
+* `screens/BreakScreen.tsx`: the exercise (eye + orb animation, haptics, Stay/Exit)
+* `screens/BreaksSettingsScreen.tsx`: interval, apps, what to pause, permissions
+* `services/breaks/timeline.ts`: the 15 s script as data (tested)
+* `services/breaks/usageTracker.ts`: decides when a break is due (tested)
+* `context/BreakContext.tsx`: settings, in-app timer, hand-off from native
+* `services/breaks/native.ts`: one interface over Android and iOS
+* `modules/upshift-breaks/`: Android module (foreground service, boot receiver)
+* `app.config.js`: adds the iOS native extensions only when `APPLE_TEAM_ID` is set
+
+The Kotlin `UsageTracker` is a port of the TypeScript one. Both were run on the
+same four scenarios and gave identical break times; change them together.
+
+## Building
+
+### Android
+```
+npx expo prebuild --platform android      # or just: eas build -p android --profile development
+```
+The local module in `modules/` is autolinked. On the phone:
+1. Settings > Mindful breaks: turn it on, tick some apps.
+2. **Usage access**: Allow > read the disclosure > Continue > enable UpShift in the system list.
+3. **Display over other apps**: Allow > enable UpShift.
+4. On phones that kill background apps (Xiaomi, Samsung, OnePlus, Huawei), also
+   allow "Keep running in the background".
+5. Set a short interval to test (the minimum is 5 minutes). Use a chosen app until the
+   break appears. Try pressing Home mid-exercise: it restarts when you return.
+
+### iPhone
+1. Get Apple's approval for the **Family Controls (Distribution)** capability. You
+   need it for the app and for each of the three extensions (ActivityMonitor,
+   ShieldAction, ShieldConfiguration). Until then it only runs from Xcode.
+2. `APPLE_TEAM_ID=YOURTEAMID eas build --platform ios --profile development`
+3. Settings > Mindful breaks > Screen Time access > Allow > Choose apps.
+
+## Store requirements (not optional)
+
+**Google Play**
+* Foreground service type **specialUse**: the Play Console asks you to declare it and
+  explain the use. Text: "Checks which app is in the foreground so a short breathing
+  break can start after the time the user chose in the apps they selected."
+* **Usage access** and **Display over other apps** are sensitive: use the in-app
+  disclosure that is already shown before the system screen, and describe the feature
+  in the listing. Play reviews apps that use these.
+* No Accessibility service and no `QUERY_ALL_PACKAGES` are used on purpose.
+* Update the Data safety form: app usage data is processed on-device only.
+
+**Apple**
+* The Family Controls entitlement request asks what the app does and why. Say it is a
+  wellbeing app that pauses chosen apps for a short breathing exercise after a
+  user-set time.
+* Add the Screen Time usage description to the App Store review notes.
+
+## Limits you should know about
+
+* **Android 14/15** restrict starting activities and foreground services from the
+  background. Granting "Display over other apps" is what allows the break to come to
+  the front; without it the app falls back to a notification the user taps (not a
+  hard stop).
+* A phone that force-stops UpShift stops the monitor until the app is opened again.
+* On iPhone the break is a shield plus a notification, not an instant takeover, and
+  Apple's API reports usage in whole-minute thresholds.
+* Pausing the "quest and streak countdown" only freezes the on-screen readout while
+  the break is showing. The day and quest cycle are wall-clock based, so a break
+  never changes a streak.
+* The Workout screen has no live timers today, so "workout and rest timers" has
+  nothing to pause yet. When a timer is added, gate it with `useBreakPause('workout')`.
+* The Android and iOS native code has been type-checked but **not run on a device**.
+  Test on at least one Pixel, one Samsung and one iPhone before releasing.

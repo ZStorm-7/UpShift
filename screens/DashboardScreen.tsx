@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Pressable, Modal, ScrollView, AccessibilityInfo
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { getStreakRescueLine } from '../services/coach';
 import { onDayDataChanged } from '../services/dataEvents';
+import { useBreakPause } from '../context/BreakContext';
 import { db } from '../firebase/config';
 // Dashboard redesign proof of concept — reads its own light/editorial theme
 // (theme/minimal.ts) rather than the app's shipped dark theme. See that
@@ -85,6 +86,13 @@ const AVATAR_SIZE = 36;
 // the dashboard and every other screen stagger by the same 60ms.
 
 export default function DashboardScreen({ navigation }: any) {
+  // While a mindful break is on screen, freeze the quest countdown readout and
+  // hold off the midnight/noon reload checks until it ends. This is display
+  // only: the underlying day and quest cycle are wall-clock based, so a break
+  // can never change a streak, and the checks simply catch up afterwards.
+  const questClockPaused = useBreakPause('questClock');
+  const questClockPausedRef = useRef(false);
+  questClockPausedRef.current = questClockPaused;
   const { authUser, profile, logOut } = useUser();
   const { t } = useLanguage();
 
@@ -505,7 +513,7 @@ export default function DashboardScreen({ navigation }: any) {
   // then breaks every read in the app.
   useEffect(() => {
     const boundaryInterval = setInterval(() => {
-      if (!authUser) return;
+      if (!authUser || questClockPausedRef.current) return;
 
       if (getTodayKey() !== loadedDayKeyRef.current) {
         reloadRef.current?.();
@@ -538,7 +546,9 @@ export default function DashboardScreen({ navigation }: any) {
 
   // Recompute the countdown every second too, cheaply, without a network call.
   useEffect(() => {
-    const interval = setInterval(() => setMsUntilNoon(getMsUntilNextNoon()), 1000);
+    const interval = setInterval(() => {
+      if (!questClockPausedRef.current) setMsUntilNoon(getMsUntilNextNoon());
+    }, 1000);
     return () => clearInterval(interval);
   }, []);
 

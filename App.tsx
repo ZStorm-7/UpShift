@@ -2,7 +2,10 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { UserProvider, useUser } from './context/UserContext';
+import { BreakProvider, useBreak, takePendingBreak } from './context/BreakContext';
+import { navigationRef } from './services/navigationRef';
 import { SubscriptionProvider, useSubscription } from './context/SubscriptionContext';
 import { LanguageProvider } from './i18n/LanguageContext';
 import { ThemeProvider } from './theme/ThemeProvider';
@@ -25,6 +28,8 @@ import HistoryScreen from './screens/HistoryScreen';
 import LeaderboardScreen from './screens/LeaderboardScreen';
 import FriendsScreen from './screens/FriendsScreen';
 import ChallengesScreen from './screens/ChallengesScreen';
+import BreakScreen from './screens/BreakScreen';
+import BreaksSettingsScreen from './screens/BreaksSettingsScreen';
 import CoachWidget from './components/CoachWidget';
 
 const Stack = createNativeStackNavigator();
@@ -87,15 +92,37 @@ function RootNavigator() {
       <Stack.Screen name="Leaderboard" component={LeaderboardScreen} />
       <Stack.Screen name="Friends" component={FriendsScreen} />
       <Stack.Screen name="Challenges" component={ChallengesScreen} />
+      <Stack.Screen name="BreaksSettings" component={BreaksSettingsScreen} />
+      {/* The break is mandatory: no swipe-back, and the screen itself blocks the back button. */}
+      <Stack.Screen
+        name="Break"
+        component={BreakScreen}
+        options={{ gestureEnabled: false, animation: 'fade', contentStyle: { backgroundColor: '#050A09' } }}
+      />
     </Stack.Navigator>
   );
 }
 
+// Lets `upshift://break?pkg=...&label=...` open the break, which is how the
+// Android service brings it to the front when the user is in another app.
+const linking = {
+  prefixes: ['upshift://'],
+  config: { screens: { Break: 'break' } },
+};
+
 function ThemedNavigator() {
   const palette = usePalette();
+  const { startBreak } = useBreak();
   return (
     <View style={{ flex: 1, backgroundColor: palette.bg }}>
-      <NavigationContainer>
+      <NavigationContainer
+        ref={navigationRef}
+        linking={linking}
+        onReady={() => {
+          // A break requested during startup (before navigation existed).
+          const pending = takePendingBreak();
+          if (pending) startBreak(pending);
+        }}>
         <RootNavigator />
         <CoachWidget />
       </NavigationContainer>
@@ -111,11 +138,15 @@ export default function App() {
 
   if (!fontsSettled) return <View style={styles.boot} />;
 
+  // SafeAreaProvider at the root: components outside the navigator (the floating
+  // AI coach) read insets too, and without a provider that throws.
   return (
+    <SafeAreaProvider>
     <UserProvider>
       <ThemeProvider>
         <SubscriptionProvider>
           <LanguageProvider>
+            <BreakProvider ready={splashDone}>
             <ThemedNavigator />
             {!splashDone && (
               <Splash
@@ -123,10 +154,12 @@ export default function App() {
                 onDone={() => setSplashDone(true)}
               />
             )}
+            </BreakProvider>
           </LanguageProvider>
         </SubscriptionProvider>
       </ThemeProvider>
     </UserProvider>
+    </SafeAreaProvider>
   );
 }
 
