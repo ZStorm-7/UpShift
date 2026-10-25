@@ -1,5 +1,6 @@
 import { doc, collection, query, orderBy, limit, getDocs, setDoc, deleteDoc } from 'firebase/firestore';
-import { db } from './config';
+import { httpsCallable } from 'firebase/functions';
+import { db, functions } from './config';
 import { TOTAL_XP_PER_LEVEL } from './progress';
 
 // Everything else in this app lives under users/{uid}/… and is readable only
@@ -9,7 +10,7 @@ import { TOTAL_XP_PER_LEVEL } from './progress';
 // So the leaderboard is a SEPARATE top-level collection holding only the few
 // fields that are meant to be public. Nothing private (email, weight, age,
 // food log) is ever copied here. Security rules let any signed-in user READ
-// the collection but only let each user WRITE their own row — see
+// the collection; only the `publishScore` Cloud Function may write rows — see
 // firestore.rules.
 export type LeaderboardEntry = {
   uid: string;
@@ -56,8 +57,12 @@ export function computeTotalXP(level: number, currentXP: number): number {
 // Called whenever a user's XP or profile changes. Uses their uid as the
 // document ID so each person has exactly one row that gets overwritten,
 // rather than accumulating a new entry every time they earn XP.
+//
+// Goes through the `publishScore` Cloud Function: firestore.rules no longer
+// lets the app write this collection, because a modified app could otherwise
+// post any score. The server validates the row and limits how fast XP can rise.
 export async function publishToLeaderboard(entry: LeaderboardEntry): Promise<void> {
-  await setDoc(leaderboardDocRef(entry.uid), entry);
+  await httpsCallable(functions, 'publishScore')(entry);
 }
 
 // Top N by total XP. Firestore does the sorting and limiting server-side, so

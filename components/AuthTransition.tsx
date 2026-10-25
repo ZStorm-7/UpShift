@@ -32,7 +32,7 @@ export default function AuthTransition() {
 
 const styles = StyleSheet.create({
   root: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: colors.bg,
     alignItems: 'center',
     justifyContent: 'center',

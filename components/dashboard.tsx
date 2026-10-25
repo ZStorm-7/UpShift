@@ -544,7 +544,7 @@ export function LevelUpTakeover({
       pointerEvents="none"
       accessibilityLiveRegion="polite"
       accessibilityLabel={`Level up. Level ${level}. ${rank}.`}
-      style={[StyleSheet.absoluteFillObject, styles.takeover, scrimStyle]}>
+      style={[StyleSheet.absoluteFill, styles.takeover, scrimStyle]}>
       {/* Four rays, drawn as rotated hairlines. Cheaper than an SVG burst and
           it reads the same at this size and speed. */}
       <Animated.View style={[styles.rays, raysStyle]}>

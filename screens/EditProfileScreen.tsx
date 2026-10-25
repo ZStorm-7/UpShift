@@ -650,7 +650,7 @@ const styles = StyleSheet.create({
   },
   notificationCopy: {
     flex: 1,
-    gap: spacing.xs4,
+    gap: spacing.xs,
   },
   notificationHint: {
     ...type.bodySm,

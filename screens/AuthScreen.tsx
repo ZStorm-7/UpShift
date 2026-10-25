@@ -31,12 +31,13 @@ const MARK_WIDTH = 44;
 const MARK_HEIGHT = 38;
 
 export default function AuthScreen({ navigation }: any) {
-  const { signUp, logIn, loadProfile } = useUser();
+  const { signUp, logIn, loadProfile, resetPassword } = useUser();
   const { t } = useLanguage();
   const [isSignUp, setIsSignUp] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   // Guards against a double submit, which the `submitting` STATE cannot do on
@@ -50,8 +51,15 @@ export default function AuthScreen({ navigation }: any) {
     if (inFlight.current) return;
     inFlight.current = true;
     setError('');
+    setInfo('');
     setSubmitting(true);
     try {
+      // Checked here, not left to Firebase's 6-character default.
+      if (isSignUp && password.length < 8) {
+        const e: any = new Error('weak');
+        e.code = 'auth/weak-password';
+        throw e;
+      }
       // The whole auth exchange — not just the network call — is held to a
       // 500ms floor, so the transition holds even when Firebase answers in
       // 50ms. See AUTH_TRANSITION_MS and utils/timing.ts.
@@ -80,6 +88,27 @@ export default function AuthScreen({ navigation }: any) {
       // Announcing and buzzing are the two channels that reach them.
       AccessibilityInfo.announceForAccessibility?.(message);
       haptics.error();
+    } finally {
+      inFlight.current = false;
+      setSubmitting(false);
+    }
+  }
+
+  async function handleForgotPassword() {
+    if (inFlight.current) return;
+    setError('');
+    setInfo('');
+    if (!email.trim()) { setError(getAuthErrorMessage({ code: 'auth/missing-email' })); return; }
+    inFlight.current = true;
+    setSubmitting(true);
+    try {
+      await resetPassword(email);
+      // Identical message whether or not the address has an account.
+      const message = t('resetEmailSent');
+      setInfo(message);
+      AccessibilityInfo.announceForAccessibility?.(message);
+    } catch (err: any) {
+      setError(getAuthErrorMessage(err));
     } finally {
       inFlight.current = false;
       setSubmitting(false);
@@ -163,6 +192,14 @@ export default function AuthScreen({ navigation }: any) {
               saying something went wrong. Index 0 because this is a reply to
               the user's tap, not part of the screen's arrival: staggering it
               would delay the answer they are waiting on. */}
+          {info !== '' && (
+            <Enter index={0}>
+              <View style={[styles.errorBanner, styles.infoBanner]} accessibilityRole="alert" accessibilityLiveRegion="polite">
+                <Text style={[styles.errorGlyph, styles.infoText]}>✓</Text>
+                <Text style={[styles.errorText, styles.infoText]}>{info}</Text>
+              </View>
+            </Enter>
+          )}
           {error !== '' && (
             <Enter index={0}>
               <View
@@ -191,9 +228,21 @@ export default function AuthScreen({ navigation }: any) {
             {/* The only other action on the screen, and deliberately a text
                 link rather than a second button: two equally-weighted buttons
                 would leave neither of them primary. */}
+            {!isSignUp && (
+              <Pressable
+                onPress={handleForgotPassword}
+                disabled={submitting}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={t('forgotPassword')}>
+                <Text style={[styles.toggleText, styles.toggleAction]}>{t('forgotPassword')}</Text>
+              </Pressable>
+            )}
+
             <Pressable
               onPress={() => {
                 setIsSignUp(!isSignUp);
+                setInfo('');
                 // A "no account found with that email" left over from the log
                 // in form is not true of the sign-up form the user just
                 // switched to, and reads as the new form having failed before
@@ -268,6 +317,13 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
+  },
+  infoBanner: {
+    backgroundColor: colors.successSoft,
+    borderColor: colors.success,
+  },
+  infoText: {
+    color: colors.success,
   },
   errorGlyph: {
     ...type.body,

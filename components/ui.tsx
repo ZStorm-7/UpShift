@@ -407,6 +407,7 @@ type FieldProps = {
   autoComplete?: 'email' | 'username' | 'password' | 'new-password' | 'off';
   textContentType?: 'emailAddress' | 'username' | 'password' | 'newPassword' | 'none';
   autoCorrect?: boolean;
+  autoFocus?: boolean;
   blurOnSubmit?: boolean;
   /** Overrides the announced name. Defaults to `label`, which is what ties the
    *  input to the words printed above it — without that, a screen reader
@@ -433,6 +434,7 @@ export function Field({
   autoComplete,
   textContentType,
   autoCorrect,
+  autoFocus,
   blurOnSubmit,
   accessibilityLabel,
   accessibilityHint,
@@ -460,6 +462,7 @@ export function Field({
         autoComplete={autoComplete}
         textContentType={textContentType}
         autoCorrect={autoCorrect}
+        autoFocus={autoFocus}
         blurOnSubmit={blurOnSubmit}
       />
       {!!error && <Text style={styles.fieldError}>{error}</Text>}

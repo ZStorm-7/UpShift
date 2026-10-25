@@ -1426,7 +1426,8 @@ const styles = StyleSheet.create({
   streakLine: {
     fontFamily: fontFamily.sansBold,
     fontSize: 13,
-    color: colors.xp,
+    // `xp` isn't part of the minimal palette; gold is its XP/level accent.
+    color: colors.gold,
     marginTop: spacing.xs,
   },
   nextRankLine: {

@@ -5,6 +5,10 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signOut,
+  sendEmailVerification,
+  sendPasswordResetEmail,
+  reauthenticateWithCredential,
+  EmailAuthProvider,
 } from 'firebase/auth';
 import { auth, db } from '../firebase/config';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
@@ -51,6 +55,15 @@ type UserContextType = {
   logIn: (email: string, password: string) => Promise<string>;
   loadProfile: (uid: string) => Promise<boolean>;
   logOut: () => Promise<void>;
+  // Sends a reset link. Always resolves the same way whether or not the email
+  // has an account, so it can't be used to discover who is registered.
+  resetPassword: (email: string) => Promise<void>;
+  resendVerification: () => Promise<void>;
+  // Re-reads the account from Firebase and reports whether the email is verified.
+  refreshEmailVerified: () => Promise<boolean>;
+  emailVerified: boolean;
+  // Re-enters the password: required before deleting the account.
+  reauthenticate: (password: string) => Promise<void>;
 };
 
 const UserContext = createContext<UserContextType>({
@@ -62,6 +75,11 @@ const UserContext = createContext<UserContextType>({
   logIn: async () => '',
   logOut: async () => {},
   loadProfile: async () => false,
+  resetPassword: async () => {},
+  resendVerification: async () => {},
+  refreshEmailVerified: async () => false,
+  emailVerified: false,
+  reauthenticate: async () => {},
 });
 
 export function UserProvider({ children }: { children: ReactNode }) {
@@ -83,7 +101,41 @@ export function UserProvider({ children }: { children: ReactNode }) {
   }, []);
 
   async function signUp(email: string, password: string) {
-    await createUserWithEmailAndPassword(auth, email, password);
+    const credential = await createUserWithEmailAndPassword(auth, email, password);
+    // Fire and forget: a failed verification email must not fail sign-up.
+    sendEmailVerification(credential.user).catch(() => {});
+  }
+
+  const [emailVerified, setEmailVerified] = useState(false);
+  useEffect(() => { setEmailVerified(!!authUser?.emailVerified); }, [authUser]);
+
+  async function resetPassword(email: string) {
+    try {
+      await sendPasswordResetEmail(auth, email.trim());
+    } catch (e: any) {
+      // Hide "no such user" so the response is identical either way; surface
+      // problems the user can act on (bad format, offline, rate limited).
+      if (e?.code === 'auth/user-not-found') return;
+      throw e;
+    }
+  }
+
+  async function resendVerification() {
+    if (auth.currentUser) await sendEmailVerification(auth.currentUser);
+  }
+
+  async function refreshEmailVerified() {
+    if (!auth.currentUser) return false;
+    await auth.currentUser.reload();
+    const verified = !!auth.currentUser.emailVerified;
+    setEmailVerified(verified);
+    return verified;
+  }
+
+  async function reauthenticate(password: string) {
+    const user = auth.currentUser;
+    if (!user?.email) throw new Error('No signed-in user');
+    await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, password));
   }
 
   async function logIn(email: string, password: string) {
@@ -106,7 +158,10 @@ async function loadProfile(uid: string): Promise<boolean> {
 
   return (
     <UserContext.Provider
-      value={{ authUser, authLoading, profile, setProfile, signUp, logIn, logOut, loadProfile }}>
+      value={{
+        authUser, authLoading, profile, setProfile, signUp, logIn, logOut, loadProfile,
+        resetPassword, resendVerification, refreshEmailVerified, emailVerified, reauthenticate,
+      }}>
       {children}
     </UserContext.Provider>
   );

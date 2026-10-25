@@ -14,12 +14,26 @@ holds the API key, checks consent, enforces limits and runs the safety screen.
    ```
    firebase functions:secrets:set GEMINI_API_KEY
    firebase functions:secrets:set REVENUECAT_SECRET_KEY   # a *secret* (sk_...) API key from RevenueCat
+   firebase functions:secrets:set CLOUDINARY_API_KEY      # Cloudinary dashboard > API Keys
+   firebase functions:secrets:set CLOUDINARY_API_SECRET
    ```
-4. Deploy functions and the new Firestore rules:
+4. Deploy functions, the new Firestore rules and the index the account-deletion
+   cleanup needs:
    ```
    npm --prefix functions install
-   firebase deploy --only functions,firestore:rules
+   firebase deploy --only functions,firestore:rules,firestore:indexes
    ```
+   **Deploy the functions before (or together with) the rules.** The new rules
+   stop the app from writing `leaderboard/{uid}` directly, so an app build that
+   still calls the old code would be refused.
+4b. Turn on automatic deletion of old chats and feedback (one time):
+   ```
+   gcloud firestore fields ttls update expireAt --collection-group=coachMessages --enable-ttl
+   gcloud firestore fields ttls update expireAt --collection-group=coachFeedback --enable-ttl
+   ```
+4c. In the Cloudinary console, **disable the old unsigned upload preset**
+   (`u4zelzyn`). It is in older app builds, and until it is off anyone can still
+   upload to your account with it.
 5. In the Google Cloud console, restrict the new Gemini key to the Generative
    Language API and set a daily quota on it as a second line of defence.
 6. Remove `EXPO_PUBLIC_GEMINI_API_KEY` from any local `.env` and EAS secrets.
@@ -39,3 +53,17 @@ holds the API key, checks consent, enforces limits and runs the safety screen.
 ```
 npm test            # client helpers + functions (safety, quota, validation)
 ```
+
+## Other limits worth knowing
+
+* **Leaderboard scores** are written only by the `publishScore` function, which
+  caps growth to 1,000 XP/day of allowance (banked up to 3 days). Change
+  `DAILY_XP_ALLOWANCE` in `functions/src/ratelimit.ts` if real players legitimately
+  earn more. This bounds cheating; it cannot prove a score was earned, because the
+  game logic runs in the app.
+* **Account deletion** (`deleteAccount`) needs a login under 5 minutes old; the
+  app asks for the password first.
+* **Avatar uploads** are signed per user (`signAvatarUpload`), limited to 10 a hour.
+* Firebase **App Check** is not enabled: the JavaScript Firebase SDK that this app
+  uses has no attestation provider for iOS or Android. Enabling it means moving
+  the app to React Native Firebase.

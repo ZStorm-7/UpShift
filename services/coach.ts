@@ -5,7 +5,7 @@
 
 import { httpsCallable } from 'firebase/functions';
 import {
-  addDoc, collection, doc, getDoc, getDocs, setDoc, query, orderBy, limit, writeBatch, serverTimestamp,
+  addDoc, collection, doc, getDoc, getDocs, setDoc, query, orderBy, limit, writeBatch, serverTimestamp, Timestamp,
 } from 'firebase/firestore';
 import { db, functions } from '../firebase/config';
 import { dayDocRef } from '../firebase/progress';
@@ -145,9 +145,16 @@ export async function loadHistory(uid: string): Promise<CoachMessage[]> {
   const snap = await getDocs(query(messages(uid), orderBy('at', 'desc'), limit(40)));
   return snap.docs.map(d => d.data() as CoachMessage).reverse();
 }
+// Chats and feedback are not kept forever: `expireAt` is what a Firestore TTL
+// policy deletes on (enable it once, see docs/coach-deploy.md).
+const DAY_MS = 86_400_000;
+export const CHAT_RETENTION_DAYS = 90;
+export const FEEDBACK_RETENTION_DAYS = 180;
+const expiry = (days: number) => Timestamp.fromMillis(Date.now() + days * DAY_MS);
+
 export const saveMessage = (uid: string, m: CoachMessage) =>
   // Firestore rejects `undefined` fields.
-  setDoc(doc(messages(uid), m.id), JSON.parse(JSON.stringify(m)));
+  setDoc(doc(messages(uid), m.id), { ...JSON.parse(JSON.stringify(m)), expireAt: expiry(CHAT_RETENTION_DAYS) });
 
 export async function clearHistory(uid: string): Promise<void> {
   const snap = await getDocs(messages(uid));
@@ -205,7 +212,7 @@ export const saveCheckin = (uid: string, c: Checkin) =>
 export async function sendFeedback(uid: string, f: {
   kind: 'rating' | 'problem'; rating?: 'up' | 'down'; reason?: string; note?: string; messageId?: string; replyText?: string;
 }): Promise<void> {
-  const body: Record<string, unknown> = { uid, kind: f.kind, at: serverTimestamp() };
+  const body: Record<string, unknown> = { uid, kind: f.kind, at: serverTimestamp(), expireAt: expiry(FEEDBACK_RETENTION_DAYS) };
   if (f.rating) body.rating = f.rating;
   if (f.reason) body.reason = f.reason.slice(0, 40);
   if (f.note) body.note = f.note.slice(0, 500);

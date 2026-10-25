@@ -1,13 +1,15 @@
 # UpShift — Privacy Policy
 
-**Last updated:** August 2026
+**Last updated:** October 2026
 
 UpShift ("the app") is a personal health and fitness tracking app. This policy
-explains what data the app collects, why, and what happens to it.
+explains what data the app collects, why, who it is shared with, and how you
+can delete it.
 
-> **Before you publish:** replace `[YOUR EMAIL]` below with a real contact
-> address. Google Play requires a working contact method, and a policy with a
-> placeholder in it can get your listing rejected.
+> **Before you publish:** replace every `[YOUR EMAIL]` below with a real contact
+> address (Google Play requires a working contact method), and have a lawyer
+> review this policy. It describes the app as built; health data is regulated
+> differently in different places (see `docs/coach-legal-review.md`).
 
 ---
 
@@ -18,79 +20,117 @@ UpShift is an independent project. Contact: **[YOUR EMAIL]**
 ## What data is collected
 
 **Account information**
-- Email address (used only to create and sign in to your account)
+- Email address and a password (the password is handled by Firebase
+  Authentication and is never visible to the developer)
 
 **Profile information you enter**
 - First name and last initial
 - Age, height, weight, gender
 - Activity level and fitness goal
-- Chosen avatar and language
+- Chosen avatar (initials color, or a photo you upload) and language
 
 **Health and activity data you log**
-- Food entries and their nutritional values
-- Water intake
-- Sleep hours
+- Food entries and nutritional values
+- Water intake and sleep hours
 - Completed workouts
 - Weight entries over time
+- Optional daily check-ins (mood and muscle soreness)
 
 **Progress data**
-- Experience points, level, rank, and daily streaks
+- Experience points, level, rank and daily streaks
 
-The app does **not** collect location, contacts, browsing history, advertising
-identifiers, or device identifiers. There is no analytics or tracking SDK, and
-no advertising of any kind.
+**AI coach data (only if you use the coach)**
+- The messages you send to the coach and its replies
+- Photos of meals you choose to analyze
+- If you leave "Personalize" on: your first name, goal, activity level and
+  calorie target, and the coach may read your last 7 to 30 days of logged data
+  to answer questions about your progress
+- Thumbs up/down ratings and problem reports you choose to send
+
+**Mindful breaks (only if you turn them on)**
+- On Android, the app uses Usage Access to see which app is in the foreground,
+  and the list of apps you choose to include. On iPhone it uses Apple's Screen
+  Time APIs, which show the app only a token for the apps you pick, never their
+  names. This information stays **on your device** and is not uploaded.
+
+**Technical data**
+- Anonymous step events during onboarding (which step you viewed), tied to your
+  account ID, to find where people drop out
+- Basic security logs on our servers (for example, rate-limit and abuse
+  counters for the coach)
+
+The app does **not** collect your location, contacts, browsing history, or
+advertising identifiers, and contains no advertising.
 
 ## How the data is used
 
-Your data is used only to operate features you can see:
-
 - Profile details calculate your personalised calorie and water goals
 - Logged food, water, sleep and workouts show your daily progress and history
-- Completed activity automatically verifies eligible daily quests
+- Completed activity verifies eligible daily quests
 - Level, rank and streak power the progress and leaderboard features
+- Coach data is used only to answer you, to apply safety checks, and to enforce
+  usage limits
+- Reports and ratings are used to improve and moderate the coach
 
 Your data is **never** sold, rented, or shared with advertisers.
 
+## AI coach and Google Gemini
+
+When you use the coach, your messages (and any meal photo or profile data you
+chose to share) are sent from our servers to **Google Gemini** to generate a
+reply. The coach is an AI: it can be wrong, it is not a doctor or dietitian, and
+it must not be used in an emergency. Coach chats are kept for **90 days** and
+then deleted automatically; ratings and problem reports for **180 days**. You
+can clear your chat history at any time in the coach, and turn off
+personalization in the coach settings.
+
 ## Where the data is stored
 
-Data is stored in **Google Firebase** (Firebase Authentication and Cloud
-Firestore), operated by Google LLC. Google's handling of that data is governed
-by the [Firebase Privacy and Security policy](https://firebase.google.com/support/privacy).
+Data is stored in **Google Firebase** (Authentication, Cloud Firestore and
+Cloud Functions), operated by Google LLC, governed by the
+[Firebase Privacy and Security policy](https://firebase.google.com/support/privacy).
 
 Access is restricted by server-side security rules: each account can read and
-write only its own data. These rules are enforced by the server, not by the
-app, so they cannot be bypassed by modifying the app.
+write only its own data. The leaderboard and the AI coach's usage counters are
+written only by our servers, not by the app.
 
 ## What other people can see
 
-UpShift has an opt-in-by-use leaderboard. If you use the app, the following
-becomes visible to other signed-in users:
+If you use the app, the following is visible to other signed-in users on the
+leaderboard and to your friends:
 
-- Your first name and last initial (e.g. "Alex M.")
+- Your first name and last initial (for example, "Alex M.")
 - Your avatar
 - Your level, rank, total XP, and current streak
 
-The following is **never** visible to other users:
-
-- Your email address
-- Your age, height, weight, or gender
-- Anything you have eaten, drunk, or logged
-- Your sleep or workout details
+The following is **never** visible to other users: your email, age, height,
+weight, gender, anything you have logged, your coach chats, or your sleep and
+workout details.
 
 ## Third-party services
 
-- **Google Firebase** — authentication and database storage
-- **USDA FoodData Central API** — when you search for a food, the search text
-  you type is sent to the U.S. Department of Agriculture's public food
-  database to retrieve nutrition information. No personal or account
+- **Google Firebase** — sign-in, database, and the servers that run the coach
+- **Google Gemini** — generates coach replies and analyzes meal photos
+- **RevenueCat** — manages subscriptions. It receives your account ID and
+  purchase status, and Apple or Google process the payment
+- **Cloudinary** — stores your profile photo if you upload one
+- **USDA FoodData Central** — when you search for a food, the search text you type
+  is sent to the U.S. Department of Agriculture's public database. No account
   information is sent with that request.
 
 ## Your rights and choices
 
-- **Access:** all of your data is visible inside the app.
-- **Correction:** profile details can be changed at any time in Settings.
-- **Deletion:** to delete your account and all associated data, email
-  **[YOUR EMAIL]** and the request will be honoured within 30 days.
+- **Access and correction:** your data is visible in the app, and profile details
+  can be changed at any time.
+- **Deletion:** go to **Settings → Your data → Delete account**. After you
+  confirm your password, we delete your profile, logs, coach chats, friends,
+  challenges, leaderboard entry, profile photo and subscription record, and then
+  your sign-in. This cannot be undone. An active subscription is not cancelled
+  automatically; cancel it in your app store settings. You can also email
+  **[YOUR EMAIL]**.
+- **Coach:** clear chats and turn off personalization any time.
+- **Mindful breaks:** turn off anytime in Settings; revoke Usage Access or
+  Screen Time permission in your device settings.
 
 ## Children's privacy
 
@@ -100,14 +140,16 @@ contact **[YOUR EMAIL]** and it will be deleted.
 
 ## Data retention
 
-Your data is kept for as long as your account exists. Deleting your account
-removes your profile, logged data, and leaderboard entry.
+Your data is kept for as long as your account exists. Coach chats are deleted
+after 90 days and coach feedback after 180 days. Deleting your account removes
+everything described above.
 
 ## Security
 
-All data is transmitted over encrypted HTTPS connections. Passwords are
-handled by Firebase Authentication and are never stored by the app or visible
-to its developer.
+All data is sent over encrypted HTTPS connections. Passwords are handled by
+Firebase Authentication. The AI service key and payment keys are kept on our
+servers, never in the app. Sign-in errors do not reveal whether an email has an
+account, and account deletion requires you to re-enter your password.
 
 ## Changes to this policy
 

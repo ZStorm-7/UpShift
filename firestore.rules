@@ -20,57 +20,21 @@ service cloud.firestore {
 
     // ---- Public leaderboard ----
     // A leaderboard fundamentally requires reading other people's rows, so
-    // this collection is readable by any signed-in user. Writes stay locked to
-    // the owner: the document ID must equal the writer's uid, making it
-    // impossible to edit someone else's score or invent an entry under a uid
-    // that isn't yours.
+    // this collection is readable by any signed-in user. It is a SEPARATE
+    // top-level collection rather than a field on the user document so that
+    // opening it up doesn't expose weight, age, meals and everything else.
     //
-    // This is why the leaderboard is a SEPARATE top-level collection rather
-    // than a field on the user document — opening up the user document would
-    // expose weight, age, meals and everything else along with it.
-    // The document ID check alone is not enough, which is subtle enough to be
-    // worth spelling out. The row also CONTAINS a `uid` field, and the client
-    // uses that field — not the document ID — to find "your position". So a
-    // user could write their own row with someone else's uid inside it, and
-    // the old rule would happily accept it: the victim would open the
-    // Leaderboard and see the attacker's fabricated score presented as their
-    // own standing, with their real row nowhere to be found.
-    //
-    // hasOnly() pins the shape so no extra fields can be smuggled in, and the
-    // type/range checks stop a hand-crafted request from writing totalXP as a
-    // string (which would break the orderBy) or as a negative number.
-    //
-    // What this still does NOT do is prove the score is honest — a determined
-    // user can write a well-formed but inflated total for themselves. Making
-    // that impossible needs a server-side write (a Cloud Function mirroring
-    // meta/stats), which the no-cost plan won't run.
+    // Rows are written only by the `publishScore` Cloud Function, never by the
+    // app. Before, the client wrote its own row, so a modified app could post
+    // any score (rules can check the shape of a number, not whether it was
+    // earned). The function validates each field, allows only our own
+    // Cloudinary avatar URLs, and limits how quickly totalXP can rise.
     match /leaderboard/{userId} {
       allow read: if request.auth != null;
-      allow write: if request.auth != null
-        && request.auth.uid == userId
-        && request.resource.data.uid == userId
-        && request.resource.data.keys().hasOnly(
-             ['uid', 'displayName', 'avatar', 'avatarColor', 'level', 'totalXP', 'rank', 'streak'])
-        && request.resource.data.displayName is string
-        && request.resource.data.displayName.size() <= 40
-        && request.resource.data.avatar is string
-        && request.resource.data.avatar.size() <= 300
-        // avatarColor is new and optional — hasOnly() above already allows a
-        // document that omits it, this just makes sure that WHEN it's present
-        // it can't be smuggled in as some other type or an arbitrarily long
-        // string (it's only ever one of 7 short hex codes from
-        // theme/colors.ts's avatarPalette, but rules can't reference app
-        // code, so the bound here is a generous "any hex-length string").
-        && (!('avatarColor' in request.resource.data)
-            || (request.resource.data.avatarColor is string
-                && request.resource.data.avatarColor.size() <= 9))
-        && request.resource.data.rank is string
-        && request.resource.data.level is int
-        && request.resource.data.level >= 1
-        && request.resource.data.totalXP is int
-        && request.resource.data.totalXP >= 0
-        && request.resource.data.streak is int
-        && request.resource.data.streak >= 0;
+      // Writes go through the `publishScore` Cloud Function (Admin SDK), which
+      // validates every field and bounds how fast totalXP can grow. Direct
+      // client writes are closed so a modified app can't post an arbitrary score.
+      allow write: if false;
     }
 
     // ---- Onboarding drop-off events (write-only) ----
@@ -211,7 +175,7 @@ service cloud.firestore {
       allow create: if request.auth != null
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.keys().hasOnly(
-             ['uid', 'kind', 'rating', 'reason', 'note', 'messageId', 'replyText', 'at'])
+             ['uid', 'kind', 'rating', 'reason', 'note', 'messageId', 'replyText', 'at', 'expireAt'])
         && request.resource.data.kind in ['rating', 'problem']
         && (!('rating' in request.resource.data) || request.resource.data.rating in ['up', 'down'])
         && (!('reason' in request.resource.data) || request.resource.data.reason.size() <= 40)

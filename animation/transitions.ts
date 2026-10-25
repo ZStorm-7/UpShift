@@ -28,9 +28,23 @@
 // as receding into the background rather than being shoved off-screen. The
 // combination is what makes it feel like depth instead of a slide.
 
-import { StackCardInterpolationProps, StackCardStyleInterpolator } from '@react-navigation/stack';
-import { Easing } from 'react-native';
+import { Animated, Easing } from 'react-native';
 import { duration } from './motion';
+
+// Local copies of the two types this file used from `@react-navigation/stack`.
+// That package isn't a dependency (the app uses native-stack), so importing it
+// failed type-checking; these structural types are all the interpolators need.
+type Progress = Animated.AnimatedInterpolation<number> | Animated.Value;
+type StackCardInterpolationProps = {
+  current: { progress: Progress };
+  next?: { progress: Progress };
+  inverted: Progress;
+  layouts: { screen: { width: number; height: number } };
+};
+type StackCardStyleInterpolator = (props: StackCardInterpolationProps) => {
+  cardStyle?: any;
+  overlayStyle?: any;
+};
 
 /**
  * The main transition. Use for forward progress through the app — Dashboard →

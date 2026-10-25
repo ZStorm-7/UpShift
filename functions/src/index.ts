@@ -19,11 +19,17 @@ import {
 } from './validate.ts';
 import { generate, textOf, parseJson, sourcesOf, type Content } from './gemini.ts';
 import {
-  loadPrefs, loadProfile, resolveTier, reserveUnit, releaseUnit, addStrike, readUsage, historyFor,
+  loadPrefs, loadProfile, resolveTier, reserveUnit, releaseUnit, addStrike, readUsage, historyFor, db,
 } from './store.ts';
+import { hit, applyXpBank, isRecentLogin, type XpState } from './ratelimit.ts';
+import { cleanScore } from './scores.ts';
+import { signedAvatarParams, CLOUD_NAME } from './cloudinary.ts';
+import { deleteAllUserData } from './account.ts';
 
 const GEMINI_API_KEY = defineSecret('GEMINI_API_KEY');
 const REVENUECAT_SECRET = defineSecret('REVENUECAT_SECRET_KEY');
+const CLOUDINARY_API_KEY = defineSecret('CLOUDINARY_API_KEY');
+const CLOUDINARY_API_SECRET = defineSecret('CLOUDINARY_API_SECRET');
 
 type Mode = 'usage' | 'chat' | 'photo' | 'plan' | 'mealplan' | 'rescue' | 'challenge';
 const BUCKET: Record<Exclude<Mode, 'usage'>, Bucket> = {
@@ -258,4 +264,77 @@ async function chat(c: Ctx, system: string): Promise<Record<string, unknown>> {
   }
   throw new HttpsError('unavailable', 'tool-loop');
 }
+
+
+
+// ---------------------------------------------------------------------------
+// Account deletion. Requires a login from the last 5 minutes so a stolen,
+// idle session can't wipe an account; the app re-asks for the password first.
+// ---------------------------------------------------------------------------
+export const deleteAccount = onCall(
+  { secrets: [REVENUECAT_SECRET, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET], timeoutSeconds: 300, region: 'us-central1' },
+  async (req: CallableRequest) => {
+    const uid = req.auth?.uid;
+    if (!uid) throw new HttpsError('unauthenticated', 'Sign in first.');
+    if (!isRecentLogin(req.auth?.token?.auth_time as number | undefined, Date.now())) {
+      throw new HttpsError('failed-precondition', 'recent-login-required');
+    }
+    logger.info('account.delete', { uid });
+    await deleteAllUserData(uid, {
+      cloudinaryKey: CLOUDINARY_API_KEY.value(), cloudinarySecret: CLOUDINARY_API_SECRET.value(),
+      revenuecat: REVENUECAT_SECRET.value(),
+    });
+    return { deleted: true };
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Signed avatar uploads (replaces the unsigned Cloudinary preset).
+// ---------------------------------------------------------------------------
+export const signAvatarUpload = onCall(
+  { secrets: [CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET], region: 'us-central1' },
+  async (req: CallableRequest) => {
+    const uid = req.auth?.uid;
+    if (!uid) throw new HttpsError('unauthenticated', 'Sign in first.');
+    const ref = db.doc(`rateLimits/${uid}`);
+    const now = Date.now();
+    const ok = await db.runTransaction(async tx => {
+      const snap = await tx.get(ref);
+      const next = hit(snap.data()?.signUpload, now, 10, 60 * 60 * 1000);
+      if (!next) return false;
+      tx.set(ref, { signUpload: next }, { merge: true });
+      return true;
+    });
+    if (!ok) throw new HttpsError('resource-exhausted', 'Too many uploads. Try again later.');
+    return signedAvatarParams(uid, CLOUDINARY_API_KEY.value(), CLOUDINARY_API_SECRET.value(), now);
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Leaderboard writes. Clients can no longer write `leaderboard/{uid}`; they
+// ask the server, which validates the row and bounds how quickly XP can grow.
+// ---------------------------------------------------------------------------
+export const publishScore = onCall({ region: 'us-central1' }, async (req: CallableRequest) => {
+  const uid = req.auth?.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'Sign in first.');
+  const entry = cleanScore(req.data, CLOUD_NAME);
+  if (!entry.displayName) throw new HttpsError('invalid-argument', 'Missing name.');
+  const now = Date.now();
+  const lbRef = db.doc(`leaderboard/${uid}`);
+  const rlRef = db.doc(`rateLimits/${uid}`);
+
+  const result = await db.runTransaction(async tx => {
+    const [lb, rl] = await Promise.all([tx.get(lbRef), tx.get(rlRef)]);
+    const limited = hit(rl.data()?.publish, now, 60, 60 * 60 * 1000);
+    if (!limited) return { limited: true as const };
+    const prev = lb.exists ? Number(lb.data()?.totalXP) || 0 : null;
+    const xp = applyXpBank(prev, rl.data()?.xp as XpState | undefined, entry.totalXP, now);
+    tx.set(lbRef, { uid, ...entry, totalXP: xp.total });
+    tx.set(rlRef, { publish: limited, xp: xp.state }, { merge: true });
+    return { limited: false as const, clamped: xp.clamped };
+  });
+  if (result.limited) throw new HttpsError('resource-exhausted', 'Too many updates.');
+  if (result.clamped) logger.warn('score.clamped', { uid });
+  return { ok: true };
+});
 

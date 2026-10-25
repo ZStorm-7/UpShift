@@ -347,8 +347,10 @@ export function SlideInRow({ children, index = 0, style }: SlideInRowProps) {
  * ------------------------------------------------------------------ */
 
 type ShimmerProps = {
-  width: number | string;
-  height: number;
+  // Both optional: callers that size the block through `style` (a card-shaped
+  // skeleton) don't need to repeat themselves.
+  width?: number | string;
+  height?: number;
   /**
    * Corner radius. Defaults to the small step, which is right for a stand-in
    * for a line of text; pass the radius of the CARD when the block is standing
@@ -483,7 +485,7 @@ export function AnimatedMeter({
       <Animated.View
         pointerEvents="none"
         style={[
-          StyleSheet.absoluteFillObject,
+          StyleSheet.absoluteFill,
           { backgroundColor: color, borderRadius: height / 2 },
           glowStyle,
         ]}

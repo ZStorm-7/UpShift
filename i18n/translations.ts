@@ -270,7 +270,24 @@ type TranslationKey =
   | 'coachChipWhatCanYouDo'
   | 'coachChipNextWorkout'
   | 'coachChipMeal'
-  | 'coachChipMotivate';
+  | 'coachChipMotivate'
+  | 'forgotPassword'
+  | 'resetEmailSent'
+  | 'verifyEmail'
+  | 'emailNotVerified'
+  | 'emailVerified'
+  | 'resendVerification'
+  | 'verificationSent'
+  | 'checkVerified'
+  | 'deleteAccount'
+  | 'deleteAccountTitle'
+  | 'deleteAccountBody'
+  | 'enterPasswordToConfirm'
+  | 'deleteForever'
+  | 'deleting'
+  | 'deleteFailed'
+  | 'privacyPolicy'
+  | 'passwordTooShort';
 
 export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, string>>> = {
   en: {
@@ -522,6 +539,23 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     coachChipNextWorkout: "Plan my next workout",
     coachChipMeal: "Quick healthy meal idea",
     coachChipMotivate: "Motivate me",
+    forgotPassword: "Forgot password?",
+    resetEmailSent: "If an account exists for that email, we've sent a link to reset the password.",
+    verifyEmail: "Verify your email",
+    emailNotVerified: "Not verified",
+    emailVerified: "Verified",
+    resendVerification: "Resend verification email",
+    verificationSent: "Verification email sent. Check your inbox.",
+    checkVerified: "I verified it",
+    deleteAccount: "Delete account",
+    deleteAccountTitle: "Delete your account?",
+    deleteAccountBody: "This permanently deletes your profile, workouts, food and weight logs, coach chats, friends and leaderboard entry. It cannot be undone. An active subscription is not cancelled automatically: cancel it in your app store settings.",
+    enterPasswordToConfirm: "Enter your password to confirm",
+    deleteForever: "Delete forever",
+    deleting: "Deleting…",
+    deleteFailed: "We couldn't delete your account. Check your connection and try again.",
+    privacyPolicy: "Privacy policy",
+    passwordTooShort: "Use at least 8 characters.",
   },
   es: {
     goodMorning: 'Buenos días',
@@ -772,6 +806,23 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     coachChipNextWorkout: "Planifica mi próximo entrenamiento",
     coachChipMeal: "Idea rápida de comida saludable",
     coachChipMotivate: "Motívame",
+    forgotPassword: "¿Olvidaste tu contraseña?",
+    resetEmailSent: "Si existe una cuenta con ese correo, hemos enviado un enlace para restablecer la contraseña.",
+    verifyEmail: "Verifica tu correo",
+    emailNotVerified: "Sin verificar",
+    emailVerified: "Verificado",
+    resendVerification: "Reenviar correo de verificación",
+    verificationSent: "Correo de verificación enviado. Revisa tu bandeja.",
+    checkVerified: "Ya lo verifiqué",
+    deleteAccount: "Eliminar cuenta",
+    deleteAccountTitle: "¿Eliminar tu cuenta?",
+    deleteAccountBody: "Esto elimina de forma permanente tu perfil, entrenamientos, registros de comida y peso, chats con el coach, amigos y tu entrada en la clasificación. No se puede deshacer. Una suscripción activa no se cancela automáticamente: cancélala en los ajustes de tu tienda de aplicaciones.",
+    enterPasswordToConfirm: "Escribe tu contraseña para confirmar",
+    deleteForever: "Eliminar para siempre",
+    deleting: "Eliminando…",
+    deleteFailed: "No pudimos eliminar tu cuenta. Revisa tu conexión e inténtalo de nuevo.",
+    privacyPolicy: "Política de privacidad",
+    passwordTooShort: "Usa al menos 8 caracteres.",
   },
   fr: {
     goodMorning: 'Bonjour',
@@ -1022,6 +1073,23 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     coachChipNextWorkout: "Planifie ma prochaine séance",
     coachChipMeal: "Idée de repas sain et rapide",
     coachChipMotivate: "Motive-moi",
+    forgotPassword: "Mot de passe oublié ?",
+    resetEmailSent: "Si un compte existe avec cet e-mail, nous avons envoyé un lien de réinitialisation.",
+    verifyEmail: "Vérifie ton e-mail",
+    emailNotVerified: "Non vérifié",
+    emailVerified: "Vérifié",
+    resendVerification: "Renvoyer l'e-mail de vérification",
+    verificationSent: "E-mail de vérification envoyé. Vérifie ta boîte de réception.",
+    checkVerified: "Je l'ai vérifié",
+    deleteAccount: "Supprimer le compte",
+    deleteAccountTitle: "Supprimer ton compte ?",
+    deleteAccountBody: "Cela supprime définitivement ton profil, tes séances, tes journaux alimentaires et de poids, tes discussions avec le coach, tes amis et ton entrée au classement. Action irréversible. Un abonnement actif n'est pas annulé automatiquement : annule-le dans les réglages de ta boutique d'applications.",
+    enterPasswordToConfirm: "Saisis ton mot de passe pour confirmer",
+    deleteForever: "Supprimer définitivement",
+    deleting: "Suppression…",
+    deleteFailed: "Nous n'avons pas pu supprimer ton compte. Vérifie ta connexion et réessaie.",
+    privacyPolicy: "Politique de confidentialité",
+    passwordTooShort: "Utilise au moins 8 caractères.",
   },
   zh: {
     goodMorning: '早上好',
@@ -1272,6 +1340,23 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     coachChipNextWorkout: "规划我的下次训练",
     coachChipMeal: "快速健康餐点子",
     coachChipMotivate: "给我打打气",
+    forgotPassword: "忘记密码？",
+    resetEmailSent: "如果该邮箱对应账户，我们已发送重置密码的链接。",
+    verifyEmail: "验证你的邮箱",
+    emailNotVerified: "未验证",
+    emailVerified: "已验证",
+    resendVerification: "重新发送验证邮件",
+    verificationSent: "验证邮件已发送，请查看收件箱。",
+    checkVerified: "我已验证",
+    deleteAccount: "删除账户",
+    deleteAccountTitle: "删除你的账户？",
+    deleteAccountBody: "这将永久删除你的资料、训练、饮食和体重记录、教练聊天、好友以及排行榜条目，且无法撤销。有效的订阅不会自动取消，请在应用商店设置中取消。",
+    enterPasswordToConfirm: "输入密码以确认",
+    deleteForever: "永久删除",
+    deleting: "正在删除…",
+    deleteFailed: "无法删除你的账户。请检查网络后重试。",
+    privacyPolicy: "隐私政策",
+    passwordTooShort: "请至少使用8个字符。",
   },
   te: {
     goodMorning: 'శుభోదయం',
@@ -1522,5 +1607,22 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     coachChipNextWorkout: "నా తదుపరి వర్కౌట్ ప్లాన్ చేయి",
     coachChipMeal: "త్వరిత ఆరోగ్యకర భోజన ఆలోచన",
     coachChipMotivate: "నన్ను ప్రేరేపించు",
+    forgotPassword: "పాస్‌వర్డ్ మర్చిపోయారా?",
+    resetEmailSent: "ఆ ఇమెయిల్‌కు ఖాతా ఉంటే, పాస్‌వర్డ్ రీసెట్ లింక్ పంపాము.",
+    verifyEmail: "మీ ఇమెయిల్‌ను ధృవీకరించండి",
+    emailNotVerified: "ధృవీకరించబడలేదు",
+    emailVerified: "ధృవీకరించబడింది",
+    resendVerification: "ధృవీకరణ ఇమెయిల్‌ను మళ్లీ పంపండి",
+    verificationSent: "ధృవీకరణ ఇమెయిల్ పంపబడింది. మీ ఇన్‌బాక్స్ చూడండి.",
+    checkVerified: "నేను ధృవీకరించాను",
+    deleteAccount: "ఖాతాను తొలగించండి",
+    deleteAccountTitle: "మీ ఖాతాను తొలగించాలా?",
+    deleteAccountBody: "ఇది మీ ప్రొఫైల్, వర్కౌట్‌లు, ఆహార మరియు బరువు లాగ్‌లు, కోచ్ చాట్‌లు, స్నేహితులు మరియు లీడర్‌బోర్డ్ ఎంట్రీని శాశ్వతంగా తొలగిస్తుంది. దీన్ని వెనక్కి తీసుకోలేరు. యాక్టివ్ సబ్‌స్క్రిప్షన్ ఆటోమేటిక్‌గా రద్దు కాదు: మీ యాప్ స్టోర్ సెట్టింగ్‌లలో రద్దు చేయండి.",
+    enterPasswordToConfirm: "నిర్ధారించడానికి మీ పాస్‌వర్డ్ నమోదు చేయండి",
+    deleteForever: "శాశ్వతంగా తొలగించు",
+    deleting: "తొలగిస్తోంది…",
+    deleteFailed: "మీ ఖాతాను తొలగించలేకపోయాము. కనెక్షన్ చూసి మళ్లీ ప్రయత్నించండి.",
+    privacyPolicy: "గోప్యతా విధానం",
+    passwordTooShort: "కనీసం 8 అక్షరాలు ఉపయోగించండి.",
   },
 };
