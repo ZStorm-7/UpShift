@@ -52,7 +52,8 @@
           "microphonePermission": "UpShift uses the microphone so you can talk to your AI coach.",
           "speechRecognitionPermission": "UpShift uses speech recognition to turn your voice into text for the AI coach."
         }
-      ]
+      ],
+      "expo-audio"
     ],
     "extra": {
       "eas": {
