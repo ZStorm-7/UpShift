@@ -1,6 +1,10 @@
 // A rank badge with the level's progress drawn as a ring around the
 // central shield/icon — Apple Watch activity-ring style.
 //
+// It only lives on the Dashboard, which is always the light editorial page
+// (theme/minimal.ts), so it takes its colours from there. Reading the app
+// theme instead drew pale text on the pale page whenever dark mode was on.
+//
 // Two arcs are stacked: a full grey track and a partial accent-colored
 // progress arc drawn over it, both using SVG's stroke-dasharray trick.
 // The percentage is (currentXP / TOTAL_XP_PER_LEVEL). The rank name sits
@@ -10,7 +14,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { spacing } from '../theme/tokens';
 import { fontFamily } from '../theme/fonts';
-import { usePalette } from '../theme/themedColors';
+import { minimalColors as c } from '../theme/minimal';
 
 type Props = {
   level: number;                // 1..∞
@@ -20,7 +24,6 @@ type Props = {
 };
 
 export default function CircularRankBadge({ level, progress, rankName, size = 140 }: Props) {
-  const palette = usePalette();
   const strokeWidth = Math.round(size * 0.075);
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
@@ -29,7 +32,7 @@ export default function CircularRankBadge({ level, progress, rankName, size = 14
 
   return (
     <View style={styles.container}>
-      <Text style={[styles.progressLabel, { color: palette.accent }]}>
+      <Text style={[styles.progressLabel, { color: c.gold }]}>
         {Math.round(clamped * 100)}%
       </Text>
 
@@ -40,7 +43,7 @@ export default function CircularRankBadge({ level, progress, rankName, size = 14
             cx={size / 2}
             cy={size / 2}
             r={radius}
-            stroke={palette.divider}
+            stroke={c.border}
             strokeWidth={strokeWidth}
             fill="none"
           />
@@ -49,7 +52,7 @@ export default function CircularRankBadge({ level, progress, rankName, size = 14
             cx={size / 2}
             cy={size / 2}
             r={radius}
-            stroke={palette.accent}
+            stroke={c.goldFill}
             strokeWidth={strokeWidth}
             strokeLinecap="round"
             fill="none"
@@ -60,16 +63,16 @@ export default function CircularRankBadge({ level, progress, rankName, size = 14
         </Svg>
         {/* Level numeral sits inside the ring */}
         <View style={[styles.inner, { width: size, height: size }]}>
-          <Text style={[styles.rankGlyph, { color: palette.textSecondary, fontSize: size * 0.13 }]}>
+          <Text style={[styles.rankGlyph, { color: c.textSecondary, fontSize: size * 0.13 }]}>
             RANK {level}
           </Text>
-          <Text style={[styles.levelNumber, { color: palette.textPrimary, fontSize: size * 0.32 }]}>
+          <Text style={[styles.levelNumber, { color: c.ink, fontSize: size * 0.32 }]}>
             {level}
           </Text>
         </View>
       </View>
 
-      <Text style={[styles.rankName, { color: palette.textPrimary }]}>{rankName.toUpperCase()}</Text>
+      <Text style={[styles.rankName, { color: c.ink }]}>{rankName.toUpperCase()}</Text>
     </View>
   );
 }

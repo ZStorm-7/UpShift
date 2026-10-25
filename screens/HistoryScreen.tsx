@@ -106,7 +106,7 @@ export default function HistoryScreen({ navigation }: any) {
       <AppBar title={t('history') || 'History'} onBack={() => navigation.goBack()} />
 
       {/* Tab switcher */}
-      <View style={[styles.tabs, { backgroundColor: palette.surfaceSunken, borderColor: palette.border }]}>
+      <View accessibilityRole="tablist" style={[styles.tabs, { backgroundColor: palette.surfaceSunken, borderColor: palette.border }]}>
         {([
           { key: 'nutrition', label: 'Nutrition' },
           { key: 'body',      label: 'Body'      },
@@ -117,6 +117,7 @@ export default function HistoryScreen({ navigation }: any) {
             onPress={() => setTab(t2.key)}
             style={[styles.tab, tab === t2.key && { backgroundColor: palette.accent }]}
             accessibilityRole="tab"
+            accessibilityLabel={t2.label}
             accessibilityState={{ selected: tab === t2.key }}>
             <Text style={[styles.tabText, { color: tab === t2.key ? palette.textOnAccent : palette.textSecondary }]}>
               {t2.label}
@@ -173,7 +174,7 @@ const styles = StyleSheet.create({
     padding: 3,
     marginTop: spacing.sm,
   },
-  tab: { flex: 1, paddingVertical: 8, borderRadius: radius.pill, alignItems: 'center' },
+  tab: { flex: 1, paddingVertical: 12, borderRadius: radius.pill, alignItems: 'center' },
   tabText: { fontFamily: fontFamily.sansBold, fontSize: 12, letterSpacing: 0.4 },
   hint: { fontFamily: fontFamily.sans, fontSize: 13, textAlign: 'center', padding: spacing.lg },
 });

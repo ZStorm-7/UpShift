@@ -1002,19 +1002,19 @@ export default function DashboardScreen({ navigation }: any) {
           <Text style={styles.dateline}>{dateline}</Text>
           <View style={styles.mastRule} />
           <View style={styles.navRow}>
-            <Pressable accessibilityRole="button" accessibilityLabel={t('friendsTitle')} onPress={() => navigation.navigate('Friends')} style={styles.navItem}>
+            <Pressable accessibilityRole="button" accessibilityLabel={t('friendsTitle')} hitSlop={NAV_HIT} onPress={() => navigation.navigate('Friends')} style={styles.navItem}>
               <Text style={styles.navLabel}>{t('friendsTitle')}</Text>
             </Pressable>
             <View style={styles.navDivider} />
-            <Pressable accessibilityRole="button" accessibilityLabel={t('leaderboard')} onPress={() => navigation.navigate('Leaderboard')} style={styles.navItem}>
+            <Pressable accessibilityRole="button" accessibilityLabel={t('leaderboard')} hitSlop={NAV_HIT} onPress={() => navigation.navigate('Leaderboard')} style={styles.navItem}>
               <Text style={styles.navLabel}>{t('leaderboard')}</Text>
             </Pressable>
             <View style={styles.navDivider} />
-            <Pressable accessibilityRole="button" accessibilityLabel={t('history')} onPress={() => navigation.navigate('History')} style={styles.navItem}>
+            <Pressable accessibilityRole="button" accessibilityLabel={t('history')} hitSlop={NAV_HIT} onPress={() => navigation.navigate('History')} style={styles.navItem}>
               <Text style={styles.navLabel}>{t('history')}</Text>
             </Pressable>
             <View style={styles.navDivider} />
-            <Pressable accessibilityRole="button" accessibilityLabel="Settings" onPress={handleSettings} style={styles.navItem}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Settings" hitSlop={NAV_HIT} onPress={handleSettings} style={styles.navItem}>
               <Text style={styles.navLabel}>Settings</Text>
             </Pressable>
           </View>
@@ -1357,6 +1357,9 @@ export default function DashboardScreen({ navigation }: any) {
     </View>
   );
 }
+
+// The masthead links are 22px tall; this lifts the tap area to 44px without changing the look.
+const NAV_HIT = { top: 11, bottom: 11, left: 4, right: 4 };
 
 const styles = StyleSheet.create({
   screen: {

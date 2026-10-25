@@ -46,6 +46,17 @@ function isRealPhoto(url?: string): url is string {
   return !!url && !url.startsWith('preset:');
 }
 
+// Black or white initials, whichever reads better on the chosen colour. The
+// pastel swatches fall to 3.4:1 under white text.
+function readableInk(hex: string): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex);
+  if (!m) return '#FFFFFF';
+  const [r, g, b] = [0, 2, 4].map(i => parseInt(m[1].slice(i, i + 2), 16) / 255)
+    .map(v => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+  const L = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return 1.05 / (L + 0.05) >= (L + 0.05) / 0.05 ? '#FFFFFF' : '#111111';
+}
+
 export default function Avatar({
   photoUrl,
   color,
@@ -86,6 +97,7 @@ function AvatarBase({ photoUrl, color, uid, firstName, lastInitial, size }: Omit
   }
 
   const fill = color || getDefaultAvatarColor(uid);
+  const ink = readableInk(fill);
   const initials = getInitials(firstName, lastInitial);
   // Roughly 40% of the diameter reads as "fills the circle without touching
   // the edge" across the sizes this app actually uses (28–96px). A fixed
@@ -96,7 +108,7 @@ function AvatarBase({ photoUrl, color, uid, firstName, lastInitial, size }: Omit
   return (
     <View style={[styles.initialsCircle, dimension, { backgroundColor: fill }]}>
       <Text
-        style={[styles.initialsText, { fontSize, lineHeight: fontSize * 1.15 }]}
+        style={[styles.initialsText, { fontSize, lineHeight: fontSize * 1.15, color: ink }]}
         // The initials are decorative once the accessibility label below is
         // in place — a screen reader saying "J D" for every avatar in a
         // leaderboard is noise; the surrounding row already announces the name.

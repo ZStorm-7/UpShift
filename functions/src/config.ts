@@ -2,7 +2,9 @@
 // server reports, and nothing the client sends can raise them.
 
 export const MODEL = 'gemini-2.5-flash';
-export const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
+// GEMINI_ENDPOINT_OVERRIDE exists only so tests can point at a local fake; it is never set in production.
+export const GEMINI_ENDPOINT = process.env.GEMINI_ENDPOINT_OVERRIDE
+  ?? `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 
 // Rolling 24-hour windows, not calendar days: a client-supplied timezone could
 // otherwise be flipped to reset the counter.

@@ -1,7 +1,7 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
-import { getFunctions } from 'firebase/functions';
+import { getAuth, connectAuthEmulator } from 'firebase/auth';
+import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
+import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
 
 // Not secrets — see the mentor chat for why it's safe for these values to be public.
 // Real protection lives in Firestore's security rules, not in hiding this file.
@@ -50,3 +50,14 @@ export const db = getFirestore(app);
 // The AI coach's Cloud Function (functions/src/index.ts). Region must match the
 // function's `region` option.
 export const functions = getFunctions(app, 'us-central1');
+
+// Local testing against the Firebase emulators (real security rules, no real data).
+// Opt-in: set EXPO_PUBLIC_FIREBASE_EMULATOR_HOST=localhost when starting Expo, and
+// run `firebase emulators:start`. It is a plain host name, not a secret, and when it
+// is unset (every production build) nothing here runs.
+const emulatorHost = process.env.EXPO_PUBLIC_FIREBASE_EMULATOR_HOST;
+if (emulatorHost) {
+  connectAuthEmulator(auth, `http://${emulatorHost}:9099`, { disableWarnings: true });
+  connectFirestoreEmulator(db, emulatorHost, 8080);
+  connectFunctionsEmulator(functions, emulatorHost, 5001);
+}

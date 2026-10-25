@@ -337,7 +337,8 @@ export default function EditProfileScreen({ navigation }: any) {
                         key={swatch}
                         accessibilityRole="radio"
                         accessibilityLabel={`${t('avatarColor')}: ${swatch}`}
-                        accessibilityState={{ selected }}
+                        accessibilityState={{ selected, checked: selected }}
+                        aria-checked={selected}
                         onPress={() => choose(setAvatarColor, swatch)}>
                         <View style={[styles.colorSwatch, { backgroundColor: swatch }]}>
                           {selected && <Text style={styles.colorSwatchMark}>{SELECTED_MARK}</Text>}
@@ -385,7 +386,8 @@ export default function EditProfileScreen({ navigation }: any) {
                       key={lang.code}
                       accessibilityRole="radio"
                       accessibilityLabel={lang.nativeLabel}
-                      accessibilityState={{ selected }}
+                      accessibilityState={{ selected, checked: selected }}
+                      aria-checked={selected}
                       onPress={() => choose(setLanguage, lang.code as LanguageCode)}>
                       <View style={[styles.chip, styles.chipRow, selected && styles.chipSelected]}>
                         <Text style={[styles.chipLabel, selected && styles.chipLabelSelected]}>
@@ -480,7 +482,8 @@ export default function EditProfileScreen({ navigation }: any) {
                         style={styles.chipGrowWrap}
                         accessibilityRole="radio"
                         accessibilityLabel={t(key)}
-                        accessibilityState={{ selected }}
+                        accessibilityState={{ selected, checked: selected }}
+                        aria-checked={selected}
                         onPress={() => choose(setGender, value)}>
                         <View
                           style={[
@@ -512,7 +515,8 @@ export default function EditProfileScreen({ navigation }: any) {
                         key={a.label}
                         accessibilityRole="radio"
                         accessibilityLabel={`${a.label}. ${a.description}`}
-                        accessibilityState={{ selected }}
+                        accessibilityState={{ selected, checked: selected }}
+                        aria-checked={selected}
                         onPress={() => choose(setActivityLevel, a.label)}>
                         <View style={[styles.chip, styles.chipBlock, selected && styles.chipSelected]}>
                           <View style={styles.chipTitleRow}>
@@ -542,7 +546,8 @@ export default function EditProfileScreen({ navigation }: any) {
                       key={g}
                       accessibilityRole="radio"
                       accessibilityLabel={g}
-                      accessibilityState={{ selected }}
+                      accessibilityState={{ selected, checked: selected }}
+                      aria-checked={selected}
                       onPress={() => choose(setGoal, g)}>
                       <View
                         style={[

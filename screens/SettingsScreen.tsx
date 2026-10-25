@@ -171,6 +171,7 @@ export default function SettingsScreen({ navigation }: any) {
               <Switch
                 value={mode === 'dark'}
                 onValueChange={v => { haptics.selection(); setMode(v ? 'dark' : 'light'); }}
+                accessibilityLabel="Dark mode"
                 trackColor={{ true: palette.accent, false: palette.borderStrong }}
               />
             }
@@ -215,6 +216,7 @@ export default function SettingsScreen({ navigation }: any) {
               <Switch
                 value={notificationsEnabled}
                 onValueChange={() => {/* wired via EditProfile currently */}}
+                accessibilityLabel="Streak and quest reminders"
                 trackColor={{ true: palette.accent, false: palette.borderStrong }}
               />
             }

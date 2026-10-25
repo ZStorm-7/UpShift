@@ -47,7 +47,7 @@ export default function WeightPromptModal({ visible, currentWeight, onSubmit, on
   const valid = value.length > 0 && Number.isFinite(num) && num > 0 && num < 1500;
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={handleSkip}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={handleSkip} accessibilityLabel="Today's weight">
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={[styles.scrim, { backgroundColor: palette.scrim }]}>
@@ -112,7 +112,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm,
     borderBottomWidth: 2, paddingVertical: spacing.sm, marginTop: spacing.sm,
   },
-  input: { flex: 1, fontFamily: fontFamily.sansBlack, fontSize: 42, lineHeight: 48 },
+  // minWidth 0 lets the field shrink inside the row (web gives inputs an intrinsic width that spilled past the card).
+  input: { flex: 1, minWidth: 0, fontFamily: fontFamily.sansBlack, fontSize: 42, lineHeight: 48, ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : null) },
   unit:  { fontFamily: fontFamily.sansBold, fontSize: 18 },
   save: {
     borderRadius: radius.lg, paddingVertical: spacing.md,

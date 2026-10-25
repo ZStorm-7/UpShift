@@ -11,8 +11,8 @@
 //
 // The light palette is the same structure inverted, and I chose the
 // specific shades to keep the same text/surface contrast ratios the dark
-// palette already cleared for WCAG AA. The gray for `textMuted` on the
-// lightest raised surface is #6B6B6B at 4.71:1, comfortably above 4.5:1.
+// palette already cleared for WCAG AA. Every text/background pair is checked
+// by tests/contrast.test.ts so the claim can't drift.
 //
 // Any screen that wants the current palette calls useTheme(); it returns
 // the palette OBJECT whose keys are identical to the existing `colors`
@@ -71,6 +71,8 @@ const RH_GREEN_SOFT = 'rgba(0, 200, 5, 0.14)';
 const RH_GREEN_BORDER = 'rgba(0, 200, 5, 0.35)';
 const RH_RED = '#FF4B55';
 const RH_RED_SOFT = 'rgba(255, 75, 85, 0.14)';
+const LIGHT_GREEN = '#007A0A'; // 4.7:1 on the darkest light surface, 5.5:1 under white text
+const LIGHT_RED = '#C9303B';   // 4.5:1 on the darkest light surface
 
 export const darkPalette: Palette = {
   bg: '#0A0A0A',
@@ -119,15 +121,17 @@ export const lightPalette: Palette = {
   surfaceRaised: '#EDEDED',
   surfaceSunken: '#FAFAFA',
 
-  accent: RH_GREEN,
-  accentSoft: RH_GREEN_SOFT,
-  accentBorder: RH_GREEN_BORDER,
+  // Brand green and red are too light to read as text or to carry white text
+  // on a white page (2.3:1 and 3.3:1), so the light theme uses deeper shades.
+  accent: LIGHT_GREEN,
+  accentSoft: 'rgba(0, 122, 10, 0.12)',
+  accentBorder: 'rgba(0, 122, 10, 0.35)',
 
-  loss: RH_RED,
-  lossSoft: RH_RED_SOFT,
+  loss: LIGHT_RED,
+  lossSoft: 'rgba(201, 48, 59, 0.12)',
 
-  xp: '#B37800',      // amber shifted darker so it clears AA on white
-  xpSoft: 'rgba(179, 120, 0, 0.14)',
+  xp: '#8A5A00',      // amber shifted darker so it clears AA (4.5:1) on every light surface
+  xpSoft: 'rgba(138, 90, 0, 0.14)',
 
   textPrimary: '#0A0A0A',
   textSecondary: '#4A4A4A',
@@ -138,17 +142,17 @@ export const lightPalette: Palette = {
   borderStrong: '#C4C4C4',
   divider: '#E4E4E4',
 
-  success: RH_GREEN,
-  successSoft: RH_GREEN_SOFT,
-  danger: RH_RED,
-  dangerSoft: RH_RED_SOFT,
-  warning: '#B37800',
-  warningSoft: 'rgba(179, 120, 0, 0.14)',
+  success: LIGHT_GREEN,
+  successSoft: 'rgba(0, 122, 10, 0.12)',
+  danger: LIGHT_RED,
+  dangerSoft: 'rgba(201, 48, 59, 0.12)',
+  warning: '#8A5A00',
+  warningSoft: 'rgba(138, 90, 0, 0.14)',
   info: '#2C5FCC', // deeper blue on light
   infoSoft: 'rgba(44, 95, 204, 0.14)',
 
   protein: '#2C5FCC',
-  carbs: '#B37800',
+  carbs: '#8A5A00',
   fat: '#7A4EC4',
 
   scrim: 'rgba(0, 0, 0, 0.45)',

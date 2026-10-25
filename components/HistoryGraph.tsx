@@ -196,6 +196,7 @@ function RangeSwitcher({ palette, value, onChange }: { palette: any; value: Rang
           <Pressable
             key={r}
             onPress={() => onChange(r)}
+            hitSlop={{ top: 12, bottom: 12, left: 4, right: 4 }}
             style={[
               styles.rangeBtn,
               active && { backgroundColor: palette.accent },

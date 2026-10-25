@@ -210,6 +210,7 @@ export function QuestRow({ title, xp, completed, autoLabel, onPress }: QuestRowP
       <Pressable
         accessibilityRole="checkbox"
         accessibilityState={{ checked: completed }}
+        aria-checked={completed}
         accessibilityLabel={`${title}, ${xp} XP`}
         disabled={completed}
         onPress={onPress}

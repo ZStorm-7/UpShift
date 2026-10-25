@@ -499,9 +499,9 @@ export default function CoachWidget() {
         </View>
       )}
 
-      <Modal visible={open} animationType="slide" transparent onRequestClose={() => setOpen(false)}>
+      <Modal visible={open} animationType="slide" transparent onRequestClose={() => setOpen(false)} accessibilityLabel="Shift, AI coach">
         <View style={[styles.scrim, { backgroundColor: p.scrim }]}>
-          <Pressable style={{ flex: 1 }} onPress={() => setOpen(false)} accessibilityLabel={t('coachCancel')} />
+          <Pressable style={{ flex: 1 }} onPress={() => setOpen(false)} accessibilityRole="button" accessibilityLabel={t('coachCancel')} />
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
             <View style={[styles.sheet, { backgroundColor: p.surface, borderColor: p.border, paddingBottom: insets.bottom + spacing.sm }]}>
               <View style={styles.header}>
@@ -532,21 +532,25 @@ export default function CoachWidget() {
               {!prefsLoaded ? (
                 <ActivityIndicator color={p.accent} style={{ margin: spacing.xxl }} />
               ) : !agreed ? (
-                <ScrollView style={{ maxHeight: 420 }} contentContainerStyle={styles.consent}>
-                  <Text style={[type.title, { color: p.textPrimary }]}>{t('coachLegalTitle')}</Text>
-                  <Text style={[type.body, { color: p.textSecondary, marginTop: spacing.md }]}>{t('coachLegalBody')}</Text>
-                  <View style={[styles.toggle, { borderColor: p.border }]}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[type.heading, { color: p.textPrimary }]}>{t('coachPersonalize')}</Text>
-                      <Text style={[type.bodySm, { color: p.textMuted }]}>{t('coachPersonalizeHint')}</Text>
+                <>
+                  <ScrollView style={{ maxHeight: 340, flexShrink: 1 }} contentContainerStyle={styles.consent}>
+                    <Text style={[type.title, { color: p.textPrimary }]}>{t('coachLegalTitle')}</Text>
+                    <Text style={[type.body, { color: p.textSecondary, marginTop: spacing.md }]}>{t('coachLegalBody')}</Text>
+                    <View style={[styles.toggle, { borderColor: p.border }]}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[type.heading, { color: p.textPrimary }]}>{t('coachPersonalize')}</Text>
+                        <Text style={[type.bodySm, { color: p.textMuted }]}>{t('coachPersonalizeHint')}</Text>
+                      </View>
+                      <Switch value={useData} onValueChange={v => setPrefsState(x => ({ ...x, useData: v }))} trackColor={{ true: p.accent }} accessibilityLabel={t('coachPersonalize')} />
                     </View>
-                    <Switch value={useData} onValueChange={v => setPrefsState(x => ({ ...x, useData: v }))} trackColor={{ true: p.accent }} />
+                  </ScrollView>
+                  <View style={styles.consentFooter}>
+                    <Pressable accessibilityRole="button" onPress={() => { haptics.selection(); setPrefs({ consented: true, consentVersion: COACH_CONSENT_VERSION }); }}
+                      style={[styles.cta, { backgroundColor: p.accent }]}>
+                      <Text style={[type.button, { color: p.textOnAccent }]}>{t('coachAgree')}</Text>
+                    </Pressable>
                   </View>
-                  <Pressable accessibilityRole="button" onPress={() => { haptics.selection(); setPrefs({ consented: true, consentVersion: COACH_CONSENT_VERSION }); }}
-                    style={[styles.cta, { backgroundColor: p.accent }]}>
-                    <Text style={[type.button, { color: p.textOnAccent }]}>{t('coachAgree')}</Text>
-                  </Pressable>
-                </ScrollView>
+                </>
               ) : (
                 <>
                   {showSettings && (
@@ -562,12 +566,12 @@ export default function CoachWidget() {
                       </View>
                       <View style={styles.setRow}>
                         <Text style={[type.bodySm, { color: p.textPrimary, flex: 1 }]}>{t('coachPersonalizeWeek')}</Text>
-                        <Switch value={useData} onValueChange={v => setPrefs({ useData: v })} trackColor={{ true: p.accent }} />
+                        <Switch value={useData} onValueChange={v => setPrefs({ useData: v })} trackColor={{ true: p.accent }} accessibilityLabel={t('coachPersonalizeWeek')} />
                       </View>
                       {canSpeak() && (
                         <View style={styles.setRow}>
                           <Text style={[type.bodySm, { color: p.textPrimary, flex: 1 }]}>{t('coachReadAloud')}</Text>
-                          <Switch value={speakOn} onValueChange={v => { if (!v) stopSpeaking(); setPrefs({ speak: v }); }} trackColor={{ true: p.accent }} />
+                          <Switch value={speakOn} onValueChange={v => { if (!v) stopSpeaking(); setPrefs({ speak: v }); }} trackColor={{ true: p.accent }} accessibilityLabel={t('coachReadAloud')} />
                         </View>)}
                       <Text style={[type.bodySm, { color: p.textSecondary }]}>{t('coachAllergies')}</Text>
                       <TextInput value={allergyText} onChangeText={setAllergyText} onBlur={saveAllergies} maxLength={200}
@@ -699,7 +703,8 @@ const styles = StyleSheet.create({
   warn: { fontSize: 11, lineHeight: 15, textAlign: 'center', padding: spacing.md, fontFamily: fontFamily.sans },
   consent: { padding: spacing.lg, paddingTop: spacing.sm },
   toggle: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, borderWidth: 1, borderRadius: radius.lg, padding: spacing.md, marginTop: spacing.lg },
-  cta: { marginTop: spacing.lg, height: 48, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
+  consentFooter: { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
+  cta: { marginTop: spacing.md, height: 48, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
   card: { marginTop: spacing.sm, padding: spacing.sm, borderRadius: radius.md, borderWidth: 1, gap: 2 },
   cardBtn: { marginTop: spacing.sm, height: 38, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
   sources: { marginTop: spacing.sm, gap: 2 },

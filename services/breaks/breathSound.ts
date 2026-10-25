@@ -15,8 +15,18 @@ const SOURCES: Record<PatternId, unknown> = {
 type Player = { play: () => void | Promise<void>; pause: () => void; remove: () => void; volume: number; seekTo: (s: number) => Promise<void> | void };
 let player: Player | null = null;
 
+// Browsers refuse audio until the person has touched the page (a break opened by a
+// link, or after a reload, has not), and expo-audio's rejection can't be caught from
+// here. Skipping is the same as the sound being off.
+function mayPlayNow(): boolean {
+  const nav = (globalThis as { navigator?: { userActivation?: { hasBeenActive?: boolean } } }).navigator;
+  const isWeb = typeof document !== 'undefined';
+  return !isWeb || nav?.userActivation?.hasBeenActive !== false;
+}
+
 export function startBreathSound(pattern: PatternId): void {
   stopBreathSound();
+  if (!mayPlayNow()) return;
   try {
     const audio = require('expo-audio') as { createAudioPlayer: (src: unknown) => Player };
     player = audio.createAudioPlayer(SOURCES[pattern]);

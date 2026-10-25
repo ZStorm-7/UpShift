@@ -146,22 +146,23 @@ export default function BreaksSettingsScreen({ navigation }: any) {
         {PATTERN_IDS.map(id => {
           const on = settings.pattern === id;
           return (
-            <Pressable key={id} accessibilityRole="radio" accessibilityState={{ selected: on }}
-              onPress={() => { haptics.selection(); updateSettings({ pattern: id }); }}
-              style={[styles.patternCard, { backgroundColor: palette.surface, borderColor: on ? palette.accent : palette.border }]}>
+            // The Try button sits beside the radio, not inside it: a control can't contain another.
+            <View key={id} style={[styles.patternCard, { backgroundColor: palette.surface, borderColor: on ? palette.accent : palette.border }]}>
               <View style={styles.row}>
-                <View style={{ flex: 1 }}>
+                <Pressable accessibilityRole="radio" accessibilityState={{ selected: on, checked: on }} aria-checked={on}
+                  onPress={() => { haptics.selection(); updateSettings({ pattern: id }); }}
+                  style={{ flex: 1 }}>
                   <Text style={[styles.rowTitle, { color: palette.textPrimary }]}>{t(PATTERN_COPY[id].name)}</Text>
                   <Text style={[styles.rhythm, { color: palette.textMuted }]}>{PATTERNS[id].rhythm}</Text>
-                </View>
+                  <Text style={[styles.note, { color: palette.textSecondary }]}>{t(PATTERN_COPY[id].goodFor)}</Text>
+                </Pressable>
                 <Pressable accessibilityRole="button" hitSlop={8}
                   onPress={() => startBreak({ source: 'in-app', preview: true, pattern: id })}
                   style={[styles.tryBtn, { borderColor: palette.accent }]}>
                   <Text style={[styles.chipText, { color: palette.textPrimary }]}>{t('breaksPatternTry')}</Text>
                 </Pressable>
               </View>
-              <Text style={[styles.note, { color: palette.textSecondary }]}>{t(PATTERN_COPY[id].goodFor)}</Text>
-            </Pressable>
+            </View>
           );
         })}
 
@@ -242,7 +243,7 @@ export default function BreaksSettingsScreen({ navigation }: any) {
             <Text style={[styles.rowTitle, { color: palette.textPrimary, flex: 1 }]}>{t('breaksIncludeUpShift')}</Text>
             <Switch value={settings.includeUpShift}
               onValueChange={v => { haptics.selection(); updateSettings({ includeUpShift: v }); }}
-              trackColor={{ true: palette.accent, false: palette.borderStrong }} />
+              trackColor={{ true: palette.accent, false: palette.borderStrong }} accessibilityLabel={t('breaksIncludeUpShift')} />
           </View>
         </View>
 

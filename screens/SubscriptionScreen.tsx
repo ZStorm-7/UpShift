@@ -213,7 +213,8 @@ function PlanCard({
         },
       ]}
       accessibilityRole="radio"
-      accessibilityState={{ selected }}
+      accessibilityState={{ selected, checked: selected }}
+      aria-checked={selected}
       accessibilityLabel={`${title} plan, ${price} ${per}`}>
       {badge && (
         <View style={[styles.planBadge, { backgroundColor: palette.accent }]}>

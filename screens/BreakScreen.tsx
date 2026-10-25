@@ -309,7 +309,7 @@ export default function BreakScreen({ navigation, route }: any) {
       </View>
 
       {/* The eye: closes first, opens last. */}
-      <View style={styles.eyeWrap} accessible accessibilityLabel={t(PHASE_KEY[phase.id])}>
+      <View style={styles.eyeWrap} accessible accessibilityRole="image" accessibilityLabel={t(PHASE_KEY[phase.id])}>
         <Animated.View style={[styles.eyeGlow, eyeGlow]} pointerEvents="none" />
         <Svg width={smallScreen ? 96 : 132} height={smallScreen ? 64 : 88} viewBox="0 0 120 80">
           <AnimatedPath animatedProps={eyeProps} fill="rgba(242,247,245,0.07)" stroke={TEXT} strokeWidth={3} strokeLinejoin="round" />
@@ -499,7 +499,7 @@ const styles = StyleSheet.create({
   phase: { fontFamily: fontFamily.serif, fontSize: 30, lineHeight: 36, color: TEXT, textAlign: 'center', paddingHorizontal: spacing.lg },
   bottom: { minHeight: 200, alignItems: 'center', justifyContent: 'flex-start', width: '100%' },
   hint: { fontFamily: fontFamily.sans, fontSize: 15, lineHeight: 22, color: MUTED, textAlign: 'center', maxWidth: 300 },
-  count: { fontFamily: fontFamily.sansBlack, fontSize: 44, color: 'rgba(242,247,245,0.20)', marginTop: spacing.md },
+  count: { fontFamily: fontFamily.sansBlack, fontSize: 44, color: 'rgba(242,247,245,0.62)', marginTop: spacing.md },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, width: '100%' },
   gridBtn: { flexGrow: 1, flexBasis: '47%', minHeight: 56, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
   gridText: { fontFamily: fontFamily.sansSemi, fontSize: 14, color: TEXT, textAlign: 'center' },
@@ -523,8 +523,8 @@ const styles = StyleSheet.create({
   },
   passFill: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: 'rgba(242,247,245,0.14)' },
   passText: { fontFamily: fontFamily.sansSemi, fontSize: 13, color: MUTED },
-  passHint: { fontFamily: fontFamily.sans, fontSize: 11, color: 'rgba(242,247,245,0.42)', marginTop: 2 },
-  passNone: { marginTop: spacing.lg, fontFamily: fontFamily.sans, fontSize: 12, color: 'rgba(242,247,245,0.42)', textAlign: 'center' },
+  passHint: { fontFamily: fontFamily.sans, fontSize: 11, color: MUTED, marginTop: 2 },
+  passNone: { marginTop: spacing.lg, fontFamily: fontFamily.sans, fontSize: 12, color: MUTED, textAlign: 'center' },
   strictBody: { alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg },
   lock: { fontSize: 44 },
   strictClock: { fontFamily: fontFamily.sansBlack, fontSize: 56, color: TEXT },

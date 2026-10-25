@@ -268,7 +268,7 @@ export default function LeaderboardScreen({ navigation }: any) {
                           return (
                             <Pressable
                               key={emoji}
-                              hitSlop={6}
+                              hitSlop={10}
                               accessibilityRole="button"
                               accessibilityLabel={`React ${emoji} to ${entry.displayName}`}
                               accessibilityState={{ selected: mine }}
@@ -436,7 +436,7 @@ const styles = StyleSheet.create({
   },
   rankLine: {
     ...type.bodySm,
-    color: colors.textMuted,
+    color: colors.textSecondary,
     marginTop: spacing.xs / 2,
   },
   xp: {

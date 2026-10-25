@@ -375,6 +375,7 @@ export default function OnboardingScreen({ navigation }: any) {
       accessibilityRole="radio"
       accessibilityLabel={label}
       accessibilityState={{ selected, checked: selected }}
+      aria-checked={selected}
       onPress={() => selectOption(onSelect)}
       style={grow ? styles.chipGrowWrap : undefined}>
       <View style={[styles.chip, styles.chipRow, grow && styles.chipGrow, selected && styles.chipSelected]}>
@@ -396,6 +397,7 @@ export default function OnboardingScreen({ navigation }: any) {
       accessibilityRole="radio"
       accessibilityLabel={description ? `${label}. ${description}` : label}
       accessibilityState={{ selected, checked: selected }}
+      aria-checked={selected}
       onPress={() => selectOption(onSelect)}>
       <View style={[styles.chip, styles.optionCard, selected && styles.chipSelected]}>
         <View style={styles.optionText}>
