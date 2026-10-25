@@ -1,7 +1,7 @@
 // Server-side constants. Limits live ONLY here: the app displays whatever the
 // server reports, and nothing the client sends can raise them.
 
-export const MODEL = 'gemini-2.5-flash';
+export const MODEL = 'gemini-3.1-flash-lite';
 // GEMINI_ENDPOINT_OVERRIDE exists only so tests can point at a local fake; it is never set in production.
 export const GEMINI_ENDPOINT = process.env.GEMINI_ENDPOINT_OVERRIDE
   ?? `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
