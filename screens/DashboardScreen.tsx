@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Pressable, Modal, ScrollView, AccessibilityInfo, Alert } from 'react-native';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { getStreakRescueLine } from '../services/coach';
 import { db } from '../firebase/config';
 // Dashboard redesign proof of concept — reads its own light/editorial theme
 // (theme/minimal.ts) rather than the app's shipped dark theme. See that
@@ -894,7 +895,7 @@ export default function DashboardScreen({ navigation }: any) {
       cancelStreakRiskReminder();
       return;
     }
-    scheduleStreakRiskReminder(questsDone < quests_.length, currentStreakDays);
+    scheduleStreakRiskReminder(questsDone < quests_.length, currentStreakDays, 20, getStreakRescueLine());
   }, [profile?.notificationsEnabled, questsDone, quests_.length, currentStreakDays]);
 
   const currentWeight = latestWeight(weightEntries);

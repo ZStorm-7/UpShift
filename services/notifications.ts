@@ -81,7 +81,8 @@ const STREAK_RISK_IDENTIFIER = 'streak-risk-reminder';
 export async function scheduleStreakRiskReminder(
   hasIncompleteQuests: boolean,
   currentStreak: number,
-  hour = 20
+  hour = 20,
+  bodyOverride?: string | null
 ): Promise<void> {
   if (!Notifications) return;
   configureHandler();
@@ -104,7 +105,7 @@ export async function scheduleStreakRiskReminder(
   const secondsUntil = Math.round((target.getTime() - now.getTime()) / 1000);
   if (secondsUntil < 60) return; // too close to fire meaningfully
 
-  const body =
+  const body = bodyOverride ? bodyOverride :
     currentStreak === 1
       ? "You've got quests left today — finish them to keep your streak going."
       : `You've got quests left today — finish them to keep your ${currentStreak}-day streak alive.`;

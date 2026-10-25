@@ -23,6 +23,7 @@ import { useUser } from '../context/UserContext';
 import { useLanguage } from '../i18n/LanguageContext';
 import { awardXP, incrementTodayField } from '../firebase/progress';
 import { loadWorkoutState, saveWorkoutState } from '../firebase/workoutState';
+import { loadPlan, planDayToTemplate } from '../services/coach';
 import {
   pickTodaysWorkout,
   recordCompletedWorkout,
@@ -66,7 +67,8 @@ export default function WorkoutScreen({ navigation }: any) {
         const raw = await loadWorkoutState(authUser.uid);
         const decayed = decayForInactivity(raw, getTodayKey());
         setState(decayed);
-        setWorkout(pickTodaysWorkout(decayed, dayOfYear()));
+        const planned = planDayToTemplate(await loadPlan(authUser.uid).catch(() => null), decayed.tier);
+        setWorkout(planned ?? pickTodaysWorkout(decayed, dayOfYear()));
       } catch {
         setState(EMPTY_PROGRESSION);
         setWorkout(pickTodaysWorkout(EMPTY_PROGRESSION, dayOfYear()));

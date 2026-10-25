@@ -41,10 +41,18 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "UpShift needs access to your photos so you can set a profile picture."
+          "photosPermission": "UpShift needs access to your photos so you can set a profile picture or analyze a meal.",
+          "cameraPermission": "UpShift uses the camera so the AI coach can estimate nutrition from a photo of your meal."
         }
       ],
-      "expo-notifications"
+      "expo-notifications",
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "UpShift uses the microphone so you can talk to your AI coach.",
+          "speechRecognitionPermission": "UpShift uses speech recognition to turn your voice into text for the AI coach."
+        }
+      ]
     ],
     "extra": {
       "eas": {
