@@ -30,6 +30,9 @@ import { spacing, radius } from '../theme/tokens';
 import haptics from '../services/haptics';
 import { stopSpeaking } from '../services/voice';
 import { exitToPreviousApp } from '../services/breaks/native';
+import { clockTimeLabel, clock } from '../services/breaks/format';
+import { reflectionForDay } from '../data/reflections';
+import { MOODS } from '../services/breaks/stats';
 import { startBreathSound, stopBreathSound } from '../services/breaks/breathSound';
 import { PASS_HOLD_MS } from '../services/breaks/passes';
 import { INTENT_IDS, IntentId } from '../services/breaks/stats';
@@ -59,11 +62,6 @@ const INTENT_KEY: Record<IntentId, string> = {
 const fill = (s: string, vars: Record<string, string | number>) =>
   s.replace(/\{(\w+)\}/g, (_, k) => String(vars[k] ?? ''));
 
-const clock = (ms: number) => {
-  const total = Math.max(0, Math.ceil(ms / 1000));
-  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
-};
-
 // Upper and lower lids as one almond path; `open` 1 = wide, 0 = shut.
 function eyePath(open: number): string {
   'worklet';
@@ -72,18 +70,19 @@ function eyePath(open: number): string {
 }
 
 export default function BreakScreen({ navigation, route }: any) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const { profile } = useUser();
-  const { settings, updateSettings, setBreakActive, completeBreak, appReady, passesLeftToday, takeEmergencyPass } = useBreak();
+  const { settings, updateSettings, setBreakActive, completeBreak, appReady, passesLeftToday, takeEmergencyPass, xpNext } = useBreak();
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   const reduced = useReducedMotion();
 
   const params = (route?.params ?? {}) as {
-    mode?: 'breathe' | 'strict'; pkg?: string; label?: string; until?: number; pattern?: string;
+    mode?: 'breathe' | 'strict'; pkg?: string; label?: string; until?: number; pattern?: string; winddown?: string;
     source?: string; preview?: boolean;
   };
   const isStrict = params.mode === 'strict';
+  const isWindDown = isStrict && (params.winddown === '1' || params.winddown === 'true');
   const preview = !!params.preview;
   const appLabel = params.label || '';
   const fromOtherApp = !!appLabel && params.source !== 'in-app';
@@ -96,6 +95,7 @@ export default function BreakScreen({ navigation, route }: any) {
   const [round, setRound] = useState(0); // bumps when the exercise restarts
   const [stage, setStage] = useState<'breathe' | 'intent' | 'choose'>('breathe');
   const [intent, setIntent] = useState<IntentId | undefined>();
+  const [mood, setMood] = useState<number | undefined>();
   const [iosNote, setIosNote] = useState(false);
   const [busy, setBusy] = useState(false);
   const [muted, setMuted] = useState(!settings.sound);
@@ -205,6 +205,11 @@ export default function BreakScreen({ navigation, route }: any) {
     const s = reduced ? 0.9 : SCALE_MIN + (scaleAt(compiled, progress.value) - SCALE_MIN) * 1.28;
     return { transform: [{ scale: s * 1.06 }], opacity: 0.12 + 0.18 * ((s - SCALE_MIN) / (1.28 - SCALE_MIN)) };
   });
+  // Once the breathing is over the orb shrinks to make room for the choices.
+  const compact = useSharedValue(0);
+  useEffect(() => { compact.value = withTiming(stage === 'breathe' ? 0 : 1, { duration: 500 }); }, [stage, compact]);
+  const stageWrap = useAnimatedStyle(() => ({ height: (ORB + 40) * (1 - 0.42 * compact.value) }));
+  const stageInner = useAnimatedStyle(() => ({ transform: [{ scale: 1 - 0.42 * compact.value }] }));
   const ringProps = useAnimatedProps(() => ({ strokeDashoffset: RING_C * (1 - Math.min(1, progress.value / TOTAL_MS)) }));
 
   // ---- leaving ----
@@ -218,7 +223,7 @@ export default function BreakScreen({ navigation, route }: any) {
   async function finish(outcome: 'stay' | 'exit') {
     if (busy) return;
     setBusy(true);
-    if (!preview) await completeBreak(outcome, intent);
+    if (!preview) await completeBreak(outcome, intent, mood);
     if (outcome === 'stay' || preview) { leave(); return; }
     const result = await exitToPreviousApp(params.pkg);
     if (result === 'unsupported') { setIosNote(true); setBusy(false); return; }
@@ -244,7 +249,7 @@ export default function BreakScreen({ navigation, route }: any) {
   }
 
   const secondsLeft = Math.max(0, Math.ceil((TOTAL_MS - elapsed) / 1000));
-  const compact = height < 700;
+  const smallScreen = height < 700;
   const showPass = !preview && stage === 'breathe' && !done;
 
   // ============================ STRICT MODE ============================
@@ -253,22 +258,26 @@ export default function BreakScreen({ navigation, route }: any) {
     const until = Number(params.until) || 0;
     const remaining = until - now;
     const over = remaining <= 0;
-    const endTime = new Date(until).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    const endTime = clockTimeLabel(until, language);
     return (
       <View style={[styles.root, { paddingTop: insets.top + spacing.xl, paddingBottom: insets.bottom + spacing.xl }]} accessibilityViewIsModal>
         <StatusBar style="light" />
         <View style={styles.top}>
-          <Text style={styles.eyebrow}>{t('breakStrictEyebrow')}</Text>
+          <Text style={styles.eyebrow}>{isWindDown ? t('breakWindDownEyebrow') : t('breakStrictEyebrow')}</Text>
         </View>
         <View style={styles.strictBody}>
           <Text style={styles.lock} accessibilityElementsHidden importantForAccessibility="no">🔒</Text>
           <Text style={styles.doneTitle} accessibilityRole="header">
-            {over ? t('breakStrictOver') : fill(t('breakStrictTitle'), { app: appLabel || t('breakThisApp') })}
+            {over ? t('breakStrictOver') : isWindDown ? t('breakWindDownTitle') : fill(t('breakStrictTitle'), { app: appLabel || t('breakThisApp') })}
           </Text>
           {!over && (
             <>
               <Text style={styles.strictClock} accessibilityLiveRegion="polite">{clock(remaining)}</Text>
-              <Text style={styles.doneBody}>{fill(t('breakStrictUntil'), { time: endTime })}</Text>
+              <Text style={styles.doneBody}>
+                {isWindDown
+                  ? fill(t('breakWindDownBody'), { app: appLabel || t('breakThisApp'), time: endTime })
+                  : fill(t('breakStrictUntil'), { time: endTime })}
+              </Text>
             </>
           )}
         </View>
@@ -276,7 +285,7 @@ export default function BreakScreen({ navigation, route }: any) {
           <Pressable accessibilityRole="button" onPress={leave} style={({ pressed }) => [styles.btn, styles.btnPrimary, pressed && styles.pressed]}>
             <Text style={styles.btnPrimaryText}>{over ? t('breakContinue') : t('breakStrictBack')}</Text>
           </Pressable>
-          {!over && <PassHold t={t} left={passesLeftToday} busy={busy} onDone={onPass} />}
+          {!over && settings.passEnabled && <PassHold t={t} left={passesLeftToday} busy={busy} onDone={onPass} />}
         </View>
       </View>
     );
@@ -302,7 +311,7 @@ export default function BreakScreen({ navigation, route }: any) {
       {/* The eye: closes first, opens last. */}
       <View style={styles.eyeWrap} accessible accessibilityLabel={t(PHASE_KEY[phase.id])}>
         <Animated.View style={[styles.eyeGlow, eyeGlow]} pointerEvents="none" />
-        <Svg width={compact ? 96 : 132} height={compact ? 64 : 88} viewBox="0 0 120 80">
+        <Svg width={smallScreen ? 96 : 132} height={smallScreen ? 64 : 88} viewBox="0 0 120 80">
           <AnimatedPath animatedProps={eyeProps} fill="rgba(242,247,245,0.07)" stroke={TEXT} strokeWidth={3} strokeLinejoin="round" />
           <AnimatedCircle cx={60} cy={40} fill={TEAL} animatedProps={irisProps} />
           <AnimatedG animatedProps={lashProps} stroke={TEXT} strokeWidth={3} strokeLinecap="round">
@@ -314,7 +323,8 @@ export default function BreakScreen({ navigation, route }: any) {
       </View>
 
       {/* The breath: an orb that grows as you breathe in and settles as you breathe out. */}
-      <View style={[styles.stage, { width: ORB + 40, height: ORB + 40 }]}>
+      <Animated.View style={[{ width: ORB + 40, alignItems: 'center', justifyContent: 'center' }, stageWrap]}>
+      <Animated.View style={[styles.stage, { width: ORB + 40, height: ORB + 40 }, stageInner]}>
         <Svg width={ORB + 40} height={ORB + 40} style={StyleSheet.absoluteFill}>
           <Circle cx={(ORB + 40) / 2} cy={(ORB + 40) / 2} r={RING_R} stroke="rgba(242,247,245,0.10)" strokeWidth={3} fill="none" />
           <AnimatedCircle
@@ -346,7 +356,8 @@ export default function BreakScreen({ navigation, route }: any) {
             </Animated.Text>
           )}
         </View>
-      </View>
+      </Animated.View>
+      </Animated.View>
 
       {/* Below the orb: a quiet hint while breathing, then the question, then the choices. */}
       <View style={styles.bottom}>
@@ -354,26 +365,44 @@ export default function BreakScreen({ navigation, route }: any) {
           <>
             <Text style={styles.hint}>{t('breakSubtitle')}</Text>
             <Text style={styles.count} accessibilityElementsHidden importantForAccessibility="no">{secondsLeft}</Text>
-            {showPass && <PassHold t={t} left={passesLeftToday} busy={busy} onDone={onPass} />}
+            {showPass && settings.passEnabled && <PassHold t={t} left={passesLeftToday} busy={busy} onDone={onPass} />}
           </>
         )}
 
         {stage === 'intent' && (
           <Animated.View entering={FadeIn.duration(500)} style={styles.doneBlock}>
             <Text style={styles.doneTitle} accessibilityRole="header">{fill(t('breakIntentTitle'), { app: appLabel })}</Text>
-            {INTENT_IDS.map(id => (
-              <Pressable key={id} accessibilityRole="button" onPress={() => { haptics.selection(); setIntent(id); setStage('choose'); }}
-                style={({ pressed }) => [styles.btn, styles.btnGhost, pressed && styles.pressed]}>
-                <Text style={styles.btnGhostText}>{t(INTENT_KEY[id])}</Text>
-              </Pressable>
-            ))}
+            <View style={styles.grid}>
+              {INTENT_IDS.map(id => (
+                <Pressable key={id} accessibilityRole="button" onPress={() => { haptics.selection(); setIntent(id); setStage('choose'); }}
+                  style={({ pressed }) => [styles.gridBtn, styles.btnGhost, pressed && styles.pressed]}>
+                  <Text style={styles.gridText}>{t(INTENT_KEY[id])}</Text>
+                </Pressable>
+              ))}
+            </View>
           </Animated.View>
         )}
 
         {stage === 'choose' && !iosNote && (
           <Animated.View entering={FadeIn.duration(500)} style={styles.doneBlock}>
             <Text style={styles.doneTitle} accessibilityRole="header">{t('breakDoneTitle')}</Text>
-            <Text style={styles.doneBody}>{intent === 'unsure' ? fill(t('breakNudgeUnsure'), { app: appLabel }) : t('breakDoneBody')}</Text>
+            {intent === 'unsure'
+              ? <Text style={styles.doneBody}>{fill(t('breakNudgeUnsure'), { app: appLabel })}</Text>
+              : settings.reflection
+                ? <Text style={styles.reflection}>{reflectionForDay(language)}</Text>
+                : <Text style={styles.doneBody}>{t('breakDoneBody')}</Text>}
+            {/* One tap, optional: how do you feel now? Stored as a count, and read by the coach. */}
+            <View style={styles.moodRow} accessibilityLabel={t('breakMoodQ')}>
+              {MOODS.map(m => (
+                <Pressable key={m} accessibilityRole="button" accessibilityState={{ selected: mood === m }}
+                  accessibilityLabel={`${t('breakMoodQ')} ${m}/5`}
+                  onPress={() => { haptics.selection(); setMood(mood === m ? undefined : m); }}
+                  style={[styles.moodBtn, mood === m && styles.moodOn]}>
+                  <Text style={{ fontSize: 20 }}>{['😞', '🙁', '😐', '🙂', '😄'][m - 1]}</Text>
+                </Pressable>
+              ))}
+            </View>
+            {!preview && xpNext > 0 && <Text style={styles.xp}>{fill(t('breakXpNext'), { n: xpNext })}</Text>}
             <Pressable accessibilityRole="button" disabled={busy} onPress={() => finish('stay')}
               style={({ pressed }) => [styles.btn, styles.btnPrimary, pressed && styles.pressed]}>
               <Text style={styles.btnPrimaryText}>{t('breakStay')}</Text>
@@ -471,6 +500,14 @@ const styles = StyleSheet.create({
   bottom: { minHeight: 200, alignItems: 'center', justifyContent: 'flex-start', width: '100%' },
   hint: { fontFamily: fontFamily.sans, fontSize: 15, lineHeight: 22, color: MUTED, textAlign: 'center', maxWidth: 300 },
   count: { fontFamily: fontFamily.sansBlack, fontSize: 44, color: 'rgba(242,247,245,0.20)', marginTop: spacing.md },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, width: '100%' },
+  gridBtn: { flexGrow: 1, flexBasis: '47%', minHeight: 56, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
+  gridText: { fontFamily: fontFamily.sansSemi, fontSize: 14, color: TEXT, textAlign: 'center' },
+  reflection: { fontFamily: fontFamily.serif, fontSize: 18, lineHeight: 26, color: TEXT, textAlign: 'center', fontStyle: 'italic', marginBottom: spacing.xs },
+  moodRow: { flexDirection: 'row', gap: spacing.sm, justifyContent: 'center' },
+  moodBtn: { width: 46, height: 46, borderRadius: 23, borderWidth: 1, borderColor: 'rgba(242,247,245,0.18)', alignItems: 'center', justifyContent: 'center' },
+  moodOn: { borderColor: ACCENT, backgroundColor: 'rgba(0,200,5,0.16)' },
+  xp: { fontFamily: fontFamily.sansBold, fontSize: 12, letterSpacing: 0.4, color: ACCENT },
   doneBlock: { width: '100%', maxWidth: 360, alignItems: 'center', gap: spacing.md },
   doneTitle: { fontFamily: fontFamily.serif, fontSize: 26, color: TEXT, textAlign: 'center' },
   doneBody: { fontFamily: fontFamily.sans, fontSize: 15, lineHeight: 22, color: MUTED, textAlign: 'center', marginBottom: spacing.sm },

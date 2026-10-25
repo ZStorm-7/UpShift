@@ -30,6 +30,7 @@ holds the API key, checks consent, enforces limits and runs the safety screen.
    ```
    gcloud firestore fields ttls update expireAt --collection-group=coachMessages --enable-ttl
    gcloud firestore fields ttls update expireAt --collection-group=coachFeedback --enable-ttl
+   gcloud firestore fields ttls update expireAt --collection-group=breakDays --enable-ttl
    ```
 4c. In the Cloudinary console, **disable the old unsigned upload preset**
    (`u4zelzyn`). It is in older app builds, and until it is off anyone can still
@@ -67,3 +68,9 @@ npm test            # client helpers + functions (safety, quota, validation)
 * Firebase **App Check** is not enabled: the JavaScript Firebase SDK that this app
   uses has no attestation provider for iOS or Android. Enabling it means moving
   the app to React Native Firebase.
+
+* **Break streak on the leaderboard** (`publishBreakStreak`) only updates an existing row, is
+  rate-limited, and is capped by account age. The score publisher uses `merge`, so
+  republishing a score never erases it.
+* The coach's `get_break_stats` and `suggest_breathing_style` tools read
+  `users/{uid}/breakDays` (counts only) and only when the user left personalization on.

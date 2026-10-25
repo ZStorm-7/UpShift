@@ -171,6 +171,8 @@ export default function BreaksSettingsScreen({ navigation }: any) {
             value={settings.sound} onChange={v => updateSettings({ sound: v })} />
           <ToggleRow palette={palette} title={t('breaksIntentToggle')} hint={t('breaksIntentHint')}
             value={settings.intention} onChange={v => updateSettings({ intention: v })} />
+          <ToggleRow palette={palette} title={t('breaksReflectToggle')} hint={t('breaksReflectHint')}
+            value={settings.reflection} onChange={v => updateSettings({ reflection: v })} />
         </View>
 
         {/* Schedule */}
@@ -275,6 +277,36 @@ export default function BreaksSettingsScreen({ navigation }: any) {
           </View>
         )}
 
+        {/* Bedtime wind-down */}
+        <Text style={[styles.section, { color: palette.textMuted }]}>{t('breaksWindDownTitle').toUpperCase()}</Text>
+        <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+          <ToggleRow palette={palette} title={t('breaksWindDownToggle')} hint={t('breaksWindDownHint')}
+            value={settings.windDown.enabled} onChange={v => updateSettings({ windDown: { ...settings.windDown, enabled: v } })} />
+          {settings.windDown.enabled && (
+            <>
+              <TimeStepper palette={palette} label={t('breaksBedtime')} value={timeLabel(settings.windDown.startMin, language)}
+                onStep={dir => updateSettings({ windDown: { ...settings.windDown, startMin: (settings.windDown.startMin + dir * 30 + 1440) % 1440 } })} />
+              <TimeStepper palette={palette} label={t('breaksWakeTime')} value={timeLabel(settings.windDown.endMin, language)}
+                onStep={dir => updateSettings({ windDown: { ...settings.windDown, endMin: (settings.windDown.endMin + dir * 30 + 1440) % 1440 } })} />
+              {!hasApps && <Text style={[styles.note, { color: palette.textMuted }]}>{t('breaksStrictNeedApps')}</Text>}
+            </>
+          )}
+        </View>
+
+        {/* Never interrupt */}
+        <Text style={[styles.section, { color: palette.textMuted }]}>{t('breaksExceptionsTitle').toUpperCase()}</Text>
+        <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+          <ToggleRow palette={palette} title={t('breaksExCalls')}
+            hint={cap === 'android' ? undefined : t('breaksAndroidOnly')}
+            value={settings.exceptions.calls} onChange={v => updateSettings({ exceptions: { ...settings.exceptions, calls: v } })} />
+          <ToggleRow palette={palette} title={t('breaksExNav')}
+            hint={cap === 'android' ? undefined : t('breaksAndroidOnly')}
+            value={settings.exceptions.navigation} onChange={v => updateSettings({ exceptions: { ...settings.exceptions, navigation: v } })} />
+          <ToggleRow palette={palette} title={t('breaksExWorkout')}
+            value={settings.exceptions.workouts} onChange={v => updateSettings({ exceptions: { ...settings.exceptions, workouts: v } })} />
+          <Text style={[styles.note, { color: palette.textMuted }]}>{t('breaksExHint')}</Text>
+        </View>
+
         {/* Strict mode */}
         <Text style={[styles.section, { color: palette.textMuted }]}>{t('breaksStrictTitle').toUpperCase()}</Text>
         <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.border }]}>
@@ -318,6 +350,8 @@ export default function BreaksSettingsScreen({ navigation }: any) {
           <Text style={[styles.badge, { color: passesLeftToday > 0 ? palette.success : palette.textMuted }]}>
             {fill(t('breaksPassLeftToday'), { n: passesLeftToday })}
           </Text>
+          <ToggleRow palette={palette} title={t('breaksPassToggle')} hint={settings.passEnabled ? undefined : t('breaksPassOffHint')}
+            value={settings.passEnabled} onChange={v => updateSettings({ passEnabled: v })} />
           {settings.pausedUntil > Date.now() && (
             <Text style={[styles.badge, { color: palette.warning }]}>{fill(t('breaksPausedUntil'), { time: clockTimeLabel(settings.pausedUntil, language) })}</Text>
           )}

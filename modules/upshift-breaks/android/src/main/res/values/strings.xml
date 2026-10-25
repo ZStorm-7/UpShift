@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="upshift_widget_title">Next break</string>
+  <string name="upshift_widget_description">Shows how long until your next mindful break.</string>
+  <string name="upshift_widget_minutes">%1$d min</string>
+  <string name="upshift_widget_hours_minutes">%1$d h %2$d min</string>
+  <string name="upshift_widget_soon">Any moment</string>
+  <string name="upshift_widget_strict">Apps closed</string>
+  <string name="upshift_widget_left">%1$d min left</string>
+  <string name="upshift_widget_paused">Paused</string>
+  <string name="upshift_widget_outside">Outside your schedule</string>
+  <string name="upshift_widget_done">Done for today</string>
+  <string name="upshift_widget_off">Breaks are off</string>
+  <string name="upshift_widget_countdown_sub">until your breathing break</string>
+</resources>

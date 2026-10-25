@@ -128,3 +128,32 @@ diff $D/expected.txt $D/kotlin.txt && echo identical
 ```
 It was run before this commit (400/400 identical) and was shown to catch deliberately
 injected bugs. Run it again whenever either side changes.
+
+
+## Features added in the third round
+
+* **Bedtime wind-down**: from bedtime to the morning unlock your chosen apps stay closed
+  (same screen as strict mode, with the time they reopen), and any break uses the long
+  exhale. Daily, overnight windows work. Android and iPhone.
+* **Never interrupt**: a break waits for a phone call, navigation or car mode, and
+  workouts. They beat everything, including strict mode and the wind-down. On Android
+  calls use `AudioManager.mode`, car mode uses `UiModeManager`, and navigation/fitness
+  apps are matched by package name (see `NAVIGATION_APPS` / `WORKOUT_APPS` in
+  `BreakMonitorService.kt`; extend as needed). Inside UpShift, the Workout screen is
+  exempt. iPhone cannot see calls or other apps, so only the in-app workout exception works there.
+* **Emergency pass toggle**: turn it off for a truly strict mode.
+* **Mood after a break**: one optional tap, stored as a count, read by the coach and shown
+  as an average on the insights screen.
+* **Reflection**: one short original line a day (14 per language, `data/reflections.ts`).
+* **Rewards**: 10 XP for each of your first 3 breaks a day (30 max) via the existing XP
+  transaction, and avatar frames at a 3, 7 and 30 day break streak (your longest streak,
+  so a missed day never takes one away). Frames show on your own Dashboard avatar.
+  Themes were not built.
+* **Coach**: "Break insights" reads your tally (including the busiest hour of the day) and can
+  suggest a breathing style; you confirm before it changes.
+* **Friends**: break streaks appear on friend cards, and a challenge can now be "most mindful
+  breaks this week" as well as workouts.
+* **Android home-screen widget** (`BreakWidgetProvider.kt`): time to the next break, or why
+  there isn't one (strict, paused, outside your schedule, done for today, off). Its logic is
+  in the parity check (196,188 samples identical). **There is no iPhone widget**: Expo's
+  `expo-widgets` is iOS-only and needs a Mac build, so it could not be built or tested here.

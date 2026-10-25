@@ -7,7 +7,10 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.app.usage.UsageEvents
+import android.app.UiModeManager
 import android.app.usage.UsageStatsManager
+import android.content.res.Configuration
+import android.media.AudioManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
@@ -39,6 +42,7 @@ class BreakMonitorService : Service() {
   private var lastEventQuery = 0L
   private var lastPersistedAt = 0L
   private var running = false
+  private var lastWidget: WidgetState? = null
 
   private val tick = object : Runnable {
     override fun run() {
@@ -77,6 +81,8 @@ class BreakMonitorService : Service() {
 
     if (!settings.policy.enabled || settings.packages.isEmpty() || !hasUsageAccess(this)) {
       running = false
+      lastWidget = WidgetState(WidgetKind.OFF, 0)
+      BreakWidgetProvider.push(this, WidgetState(WidgetKind.OFF, 0))
       handler.removeCallbacks(tick)
       stopForegroundCompat()
       stopSelf()
@@ -96,6 +102,7 @@ class BreakMonitorService : Service() {
   }
 
   override fun onDestroy() {
+    if (running) BreakWidgetProvider.push(this, WidgetState(WidgetKind.OFF, 0))
     running = false
     handler.removeCallbacks(tick)
     BreakConfig.writeAccumulated(this, tracker.accumulatedMs)
@@ -118,14 +125,24 @@ class BreakMonitorService : Service() {
     while (switchTimes.isNotEmpty() && now - switchTimes.first() > SWITCH_WINDOW_MS) switchTimes.removeFirst()
 
     val action = tracker.decide(
-      now, watched, power.isInteractive, local, switchTimes.size, BreakConfig.completedToday(this), settings.policy,
+      now, watched, power.isInteractive, local, switchTimes.size, BreakConfig.completedToday(this),
+      inCall = isInCall(), navigating = isNavigating(fg), workout = isWorkout(fg), policy = settings.policy,
     )
     if (fg != null) {
       when (action) {
-        Action.BREAK -> launchBreak(fg)
-        Action.STRICT -> launchStrict(fg)
+        Action.BREAK -> launchBreak(fg, local)
+        Action.STRICT -> launchStrict(fg, now, local)
         Action.NONE -> {}
       }
+    }
+
+    // Keep the home-screen widget in step. Only redraws when what it shows has changed.
+    val widget = BreakPolicy.widgetState(
+      now, local, settings.policy, tracker.accumulatedMs, tracker.pending, BreakConfig.completedToday(this), switchTimes.size,
+    )
+    if (widget != lastWidget) {
+      lastWidget = widget
+      BreakWidgetProvider.push(this, widget)
     }
 
     // Persist progress at most once a minute so a reboot doesn't lose it.
@@ -134,6 +151,26 @@ class BreakMonitorService : Service() {
       lastPersistedAt = now
     }
   }
+
+  // ---- Automatic exceptions: a break never interrupts these ----
+
+  /** A phone or VoIP call is active. AudioManager's mode needs no permission. */
+  private fun isInCall(): Boolean {
+    val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    val mode = am.mode
+    return mode == AudioManager.MODE_IN_CALL || mode == AudioManager.MODE_IN_COMMUNICATION ||
+      (Build.VERSION.SDK_INT >= 29 && mode == AudioManager.MODE_CALL_SCREENING)
+  }
+
+  /** A navigation app is in front, or the phone is in car mode (Android Auto, a car dock). */
+  private fun isNavigating(fg: String?): Boolean {
+    if (fg != null && NAVIGATION_APPS.contains(fg)) return true
+    val ui = getSystemService(Context.UI_MODE_SERVICE) as UiModeManager
+    return ui.currentModeType == Configuration.UI_MODE_TYPE_CAR
+  }
+
+  /** A workout or running app is in front. */
+  private fun isWorkout(fg: String?): Boolean = fg != null && WORKOUT_APPS.contains(fg)
 
   /** Replays usage events since the last check to learn which app is in front. */
   @Suppress("DEPRECATION")
@@ -162,18 +199,25 @@ class BreakMonitorService : Service() {
     pkg
   }
 
-  private fun launchBreak(pkg: String) {
+  private fun launchBreak(pkg: String, local: LocalTime) {
     val label = labelFor(pkg)
     BreakConfig.setPending(this, pkg, label)
-    launch("upshift://break?pkg=${Uri.encode(pkg)}&label=${Uri.encode(label)}", label, strict = false)
+    // Inside the nightly wind-down the long exhale is used, whatever style the user picked.
+    val pattern = if (BreakPolicy.inWindDown(settings.policy.windDown, local)) "&pattern=long" else ""
+    launch("upshift://break?pkg=${Uri.encode(pkg)}&label=${Uri.encode(label)}$pattern", label, strict = false)
   }
 
-  // Strict mode: the chosen app is closed until the strict time is up. There is
-  // no "pending" break to finish; the screen just explains and offers the pass.
-  private fun launchStrict(pkg: String) {
+  // Strict mode and the wind-down: the chosen app is closed until the time is up.
+  // There is no "pending" break to finish; the screen just explains and offers the pass.
+  private fun launchStrict(pkg: String, now: Long, local: LocalTime) {
     val label = labelFor(pkg)
-    val until = settings.policy.strictUntil
-    launch("upshift://break?mode=strict&until=$until&pkg=${Uri.encode(pkg)}&label=${Uri.encode(label)}", label, strict = true)
+    val p = settings.policy
+    val windDownActive = BreakPolicy.inWindDown(p.windDown, local)
+    val windDownEnd = if (windDownActive) BreakPolicy.windDownEndsAt(now, local, p.windDown) else 0L
+    // Whichever of the two lasts longer is when the app opens again.
+    val until = maxOf(if (now < p.strictUntil) p.strictUntil else 0L, windDownEnd)
+    val wd = if (windDownActive && windDownEnd >= p.strictUntil) "&winddown=1" else ""
+    launch("upshift://break?mode=strict&until=$until$wd&pkg=${Uri.encode(pkg)}&label=${Uri.encode(label)}", label, strict = true)
   }
 
   private fun launch(url: String, label: String, strict: Boolean) {
@@ -240,6 +284,17 @@ class BreakMonitorService : Service() {
     const val ACTION_BREAK_DONE = "expo.modules.upshiftbreaks.ACTION_BREAK_DONE"
     private const val TICK_MS = 2_000L
     private const val SWITCH_WINDOW_MS = 5 * 60_000L
+
+    // Apps a break must never interrupt. Extend as needed; these are package names, not permissions.
+    private val NAVIGATION_APPS = setOf(
+      "com.google.android.apps.maps", "com.waze", "com.here.app.maps", "com.sygic.aura", "net.osmand",
+      "net.osmand.plus", "app.organicmaps", "com.tomtom.gplay.navapp", "ru.yandex.yandexnavi", "com.mapswithme.maps.pro",
+    )
+    private val WORKOUT_APPS = setOf(
+      "com.strava", "com.nike.plusgps", "com.nike.ntc", "com.google.android.apps.fitness", "com.fitbit.FitbitMobile",
+      "com.garmin.android.apps.connectmobile", "com.runtastic.android", "com.peloton.callisto", "com.sec.android.app.shealth",
+      "com.runkeeper.activity", "cc.pacer.androidapp",
+    )
     private const val CHANNEL_ONGOING = "upshift_breaks_ongoing"
     private const val CHANNEL_ALERT = "upshift_breaks_alert"
     private const val NOTIF_ONGOING = 4101

@@ -5,6 +5,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { PREMIUM_CACHE_MS, REVENUECAT_ENTITLEMENT, type Bucket, type Tier } from './config.ts';
 import { reserve, release, strike, summarize, EMPTY_USAGE, type UsageState, type Decision, type Usage } from './quota.ts';
+import { summarizeBreakDays } from './validate.ts';
 
 if (getApps().length === 0) initializeApp();
 export const db = getFirestore();
@@ -91,6 +92,15 @@ export async function readUsage(uid: string, tier: Tier, now: number): Promise<U
 // client's UTC offset (used only to pick which documents to read, never for quota).
 const dayKey = (d: Date) =>
   `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+
+export async function breakStatsFor(uid: string, days: number, tzOffsetMin: number): Promise<Record<string, unknown>> {
+  const n = Math.min(30, Math.max(1, Math.round(days) || 14));
+  const keys: string[] = [];
+  const localNow = Date.now() - tzOffsetMin * 60_000;
+  for (let i = n - 1; i >= 0; i--) keys.push(dayKey(new Date(localNow - i * 86_400_000)));
+  const snaps = await db.getAll(...keys.map(k => db.doc(`users/${uid}/breakDays/${k}`)));
+  return { ...summarizeBreakDays(snaps.map((s, i) => ({ date: keys[i], data: s.data() }))) };
+}
 
 export async function historyFor(uid: string, days: number, tzOffsetMin: number): Promise<Record<string, unknown>> {
   const n = Math.min(30, Math.max(1, Math.round(days) || 7));

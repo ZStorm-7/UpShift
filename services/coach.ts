@@ -14,6 +14,7 @@ import { getQuestCycleKey } from '../firebase/quests';
 import { emitDayDataChanged } from './dataEvents';
 import type { WorkoutTemplate, WorkoutTier } from '../data/workoutPlans';
 import type { GrocerySection } from './grocery';
+import type { PatternId } from './breaks/timeline';
 
 // Must match CONSENT_VERSION in functions/src/config.ts. Bump both whenever the
 // legal text changes materially so everyone sees and accepts it again.
@@ -34,7 +35,8 @@ export type CoachCard =
   | { kind: 'plan'; days: PlanDay[]; saved?: boolean }
   | { kind: 'mealplan'; days: MealPlanDay[]; allergies?: string[]; calorieNote?: string; saved?: boolean }
   | { kind: 'challenge'; suggestions: ChallengeSuggestion[] }
-  | { kind: 'grocery'; sections: GrocerySection[] };
+  | { kind: 'grocery'; sections: GrocerySection[] }
+  | { kind: 'pattern'; pattern: PatternId; reason: string; applied?: boolean };
 
 export type CoachMessage = {
   id: string;

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="upshift_widget_title">తదుపరి విరామం</string>
+  <string name="upshift_widget_description">మీ తదుపరి మైండ్‌ఫుల్ విరామానికి ఎంత సమయం ఉందో చూపిస్తుంది.</string>
+  <string name="upshift_widget_minutes">%1$d నిమి</string>
+  <string name="upshift_widget_hours_minutes">%1$d గం %2$d నిమి</string>
+  <string name="upshift_widget_soon">ఏ క్షణమైనా</string>
+  <string name="upshift_widget_strict">యాప్‌లు మూసివేయబడ్డాయి</string>
+  <string name="upshift_widget_left">%1$d నిమి మిగిలాయి</string>
+  <string name="upshift_widget_paused">నిలిపివేయబడింది</string>
+  <string name="upshift_widget_outside">మీ షెడ్యూల్ వెలుపల</string>
+  <string name="upshift_widget_done">ఈరోజు పూర్తయింది</string>
+  <string name="upshift_widget_off">విరామాలు ఆఫ్‌లో ఉన్నాయి</string>
+  <string name="upshift_widget_countdown_sub">మీ శ్వాస విరామం వరకు</string>
+</resources>

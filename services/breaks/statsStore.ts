@@ -11,7 +11,7 @@ const DAY_MS = 86_400_000;
 export const STATS_RETENTION_DAYS = 90;
 
 export type BreakEvent =
-  | { kind: 'done'; outcome: 'stay' | 'exit'; intent?: IntentId }
+  | { kind: 'done'; outcome: 'stay' | 'exit'; intent?: IntentId; mood?: number; hour?: number }
   | { kind: 'pass' }
   | { kind: 'strict' };
 
@@ -22,6 +22,9 @@ export async function recordBreakEvent(uid: string, e: BreakEvent, now: Date = n
     body.done = increment(1);
     body[e.outcome] = increment(1);
     if (e.intent) body.intent = { [e.intent]: increment(1) };
+    if (e.mood && e.mood >= 1 && e.mood <= 5) { body.moodSum = increment(Math.round(e.mood)); body.moodN = increment(1); }
+    const hour = e.hour ?? now.getHours();
+    if (hour >= 0 && hour <= 23) body.hours = { [`h${hour}`]: increment(1) };
   } else if (e.kind === 'pass') {
     body.passes = increment(1);
   } else {

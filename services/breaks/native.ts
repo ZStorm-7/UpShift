@@ -10,9 +10,10 @@
 //           Apple counts the usage, and the apps are shielded when N minutes are
 //           up. Needs Apple's Family Controls entitlement and a dev build.
 //           Supported on iOS: interval, schedule windows, strict mode, the
-//           emergency pause. NOT supported: daily cap and adaptive timing (the
-//           Screen Time extension runs without our code, so it can't count
-//           breaks or watch app switching).
+//           bedtime wind-down, the emergency pause. NOT supported: daily cap,
+//           adaptive timing and the call/navigation exceptions (the Screen Time
+//           extension runs without our code, so it can't count breaks, watch app
+//           switching or see a phone call).
 //
 // Both are optional at runtime: in Expo Go, on web, or in a build made before
 // the module existed, `capability()` reports 'none' and the rest is a no-op,
@@ -46,11 +47,12 @@ export function capability(): BreakCapability {
 }
 
 /** What the current platform can enforce, so settings can say so honestly. */
-export function supports(feature: 'dailyCap' | 'adaptive' | 'schedule' | 'strict' | 'pause'): boolean {
+export function supports(feature: 'dailyCap' | 'adaptive' | 'schedule' | 'strict' | 'pause' | 'windDown' | 'exceptions'): boolean {
   const cap = capability();
   if (cap === 'android') return true;
-  if (cap === 'ios') return feature === 'schedule' || feature === 'strict' || feature === 'pause';
-  return feature === 'dailyCap' || feature === 'pause'; // in-app breaks honor these
+  if (cap === 'ios') return feature === 'schedule' || feature === 'strict' || feature === 'pause' || feature === 'windDown';
+  // In-app breaks honor these (and only the workout exception, since calls and navigation can't be seen from inside the app).
+  return feature === 'dailyCap' || feature === 'pause';
 }
 
 // ---- Permissions ----
@@ -200,6 +202,29 @@ async function applyIos(s: BreakSettings, now: number): Promise<void> {
 
     // The emergency pause: nothing is monitored until it is over, then monitoring resumes.
     const resumeFrom = paused ? new Date(s.pausedUntil) : null;
+
+    // Nightly wind-down: block at bedtime, unblock in the morning, every day. Overnight
+    // windows are split at midnight into two (iOS wants a start and end on one day).
+    if (s.windDown.enabled && !paused) {
+      const w = s.windDown;
+      const parts = w.startMin < w.endMin ? [[w.startMin, w.endMin]] : [[w.startMin, 1439], [0, w.endMin]];
+      const nowMin = new Date(now).getHours() * 60 + new Date(now).getMinutes();
+      parts.forEach(([a, b], i) => {
+        if (b - a < 15) return;
+        const name = `${IOS_ACTIVITY}-wd${i}`;
+        ios!.configureActions({
+          activityName: name, callbackName: 'intervalDidStart',
+          actions: [{ type: 'blockSelection', familyActivitySelectionId: IOS_SELECTION_ID, shieldId: 'upshift-break' }],
+        });
+        ios!.configureActions({
+          activityName: name, callbackName: 'intervalDidEnd',
+          actions: [{ type: 'unblockSelection', familyActivitySelectionId: IOS_SELECTION_ID }],
+        });
+        ios!.startMonitoring(name, { intervalStart: hm(a), intervalEnd: hm(b), repeats: true }, []).catch(() => {});
+        // Already inside tonight's window: the start callback won't fire, so block now.
+        if (nowMin >= a && nowMin < b) ios!.blockSelection({ activitySelectionId: IOS_SELECTION_ID });
+      });
+    }
 
     for (const w of iosWindows(s)) {
       ios.configureActions({

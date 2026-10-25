@@ -44,14 +44,27 @@ UpShift is an independent project. Contact: **[YOUR EMAIL]**
 - Photos of meals you choose to analyze
 - If you leave "Personalize" on: your first name, goal, activity level and
   calorie target, and the coach may read your last 7 to 30 days of logged data
-  to answer questions about your progress
+  (including your daily break tally above) to answer questions about your progress
+  and your breaks
 - Thumbs up/down ratings and problem reports you choose to send
 
 **Mindful breaks (only if you turn them on)**
 - On Android, the app uses Usage Access to see which app is in the foreground,
-  and the list of apps you choose to include. On iPhone it uses Apple's Screen
+  and the list of apps you choose to include. It also notices whether a phone call
+  is active, whether a navigation or fitness app is in front, and whether the phone
+  is in car mode, so a break never interrupts them. On iPhone it uses Apple's Screen
   Time APIs, which show the app only a token for the apps you pick, never their
-  names. This information stays **on your device** and is not uploaded.
+  names. All of this stays **on your device** and is not uploaded.
+- Your break settings (how often, schedule, bedtime wind-down, style) are saved to
+  your account so they follow you to a new phone.
+- A small daily tally is saved to your account: how many breaks you finished,
+  whether you then stayed or left, which of four reasons you tapped for opening an
+  app, the mood (1 to 5) you tapped afterwards, which hour of the day each break was
+  in, and how many emergency passes and strict sessions you used. It contains **no
+  app names and no text you typed**. It is kept for 90 days.
+- Your break streak (days in a row with a finished break).
+- The home-screen widget shows the time to your next break. It reads from your
+  device only.
 
 **Technical data**
 - Anonymous step events during onboarding (which step you viewed), tied to your
@@ -102,6 +115,8 @@ leaderboard and to your friends:
 - Your first name and last initial (for example, "Alex M.")
 - Your avatar
 - Your level, rank, total XP, and current streak
+- Your mindful-break streak (a number of days; the server limits it to how old your
+  account is)
 
 The following is **never** visible to other users: your email, age, height,
 weight, gender, anything you have logged, your coach chats, or your sleep and
@@ -140,8 +155,8 @@ contact **[YOUR EMAIL]** and it will be deleted.
 
 ## Data retention
 
-Your data is kept for as long as your account exists. Coach chats are deleted
-after 90 days and coach feedback after 180 days. Deleting your account removes
+Your data is kept for as long as your account exists. Coach chats and the daily
+break tally are deleted after 90 days and coach feedback after 180 days. Deleting your account removes
 everything described above.
 
 ## Security

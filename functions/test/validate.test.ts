@@ -68,3 +68,48 @@ test('friend rows are sanitized and capped', () => {
   assert.equal(f.length, 1);
   assert.equal(cleanFriends(Array.from({ length: 100 }, (_, i) => ({ uid: `u${i}` }))).length, 25);
 });
+
+// ---- break statistics for the coach ----
+import { summarizeBreakDays, cleanStyleSuggestion, BREATHING_STYLES } from '../src/validate.ts';
+
+test('break stats fold the per-day counters into what the coach can say', () => {
+  const s = summarizeBreakDays([
+    { date: '2026-10-23', data: { done: 3, stay: 2, exit: 1, moodSum: 9, moodN: 2, intent: { unwind: 2, unsure: 1 }, hours: { h21: 2, h9: 1 } } },
+    { date: '2026-10-24', data: { done: 2, stay: 0, exit: 2, passes: 1, strict: 1, moodSum: 3, moodN: 1, hours: { h21: 2 } } },
+    { date: '2026-10-25', data: undefined },
+  ]);
+  assert.equal(s.breaksCompleted, 5);
+  assert.equal(s.daysWithData, 2);
+  assert.equal(s.stayedInApp, 2);
+  assert.equal(s.leftApp, 3);
+  assert.equal(s.leftAppPercent, 60);
+  assert.deepEqual(s.whyOpened, { unwind: 2, unsure: 1 });
+  assert.equal(s.averageMoodAfterBreak, 4);
+  assert.deepEqual(s.busiestHours[0], { hour: 21, breaks: 4 });
+  assert.equal(s.busiestHours.length, 2);
+  assert.equal(s.emergencyPassesUsed, 1);
+  assert.equal(s.strictSessions, 1);
+  assert.equal(s.perDay.length, 3);
+});
+
+test('break stats are safe with nothing, and with junk', () => {
+  const empty = summarizeBreakDays([{ date: '2026-10-25', data: undefined }]);
+  assert.equal(empty.breaksCompleted, 0);
+  assert.equal(empty.leftAppPercent, null);
+  assert.equal(empty.averageMoodAfterBreak, null);
+  assert.deepEqual(empty.busiestHours, []);
+  const junk = summarizeBreakDays([{ date: 'x', data: { done: -5, stay: 'a', exit: 1e12, hours: { h99: 4, h3: 'z' }, intent: { evil: 3 } } }]);
+  assert.equal(junk.breaksCompleted, 0);
+  assert.equal(junk.leftApp, 10_000);
+  assert.deepEqual(junk.busiestHours, []);
+  assert.deepEqual(junk.whyOpened, {});
+});
+
+test('the coach can only suggest one of the four real breathing styles', () => {
+  assert.deepEqual(BREATHING_STYLES, ['calm', 'sigh', 'box', 'long']);
+  assert.deepEqual(cleanStyleSuggestion({ pattern: 'Box', reason: 'for focus' }), { pattern: 'box', reason: 'for focus' });
+  assert.equal(cleanStyleSuggestion({ pattern: 'rainbow', reason: 'x' }), null);
+  assert.equal(cleanStyleSuggestion({ reason: 'x' }), null);
+  assert.equal(cleanStyleSuggestion(undefined), null);
+  assert.equal(cleanStyleSuggestion({ pattern: 'calm', reason: 'x'.repeat(999) })!.reason.length, 200);
+});

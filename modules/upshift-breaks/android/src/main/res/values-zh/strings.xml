@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="upshift_widget_title">下次休息</string>
+  <string name="upshift_widget_description">显示距离下次正念休息还有多久。</string>
+  <string name="upshift_widget_minutes">%1$d 分钟</string>
+  <string name="upshift_widget_hours_minutes">%1$d 小时 %2$d 分钟</string>
+  <string name="upshift_widget_soon">随时</string>
+  <string name="upshift_widget_strict">应用已关闭</string>
+  <string name="upshift_widget_left">还剩 %1$d 分钟</string>
+  <string name="upshift_widget_paused">已暂停</string>
+  <string name="upshift_widget_outside">不在你的时间安排内</string>
+  <string name="upshift_widget_done">今天已完成</string>
+  <string name="upshift_widget_off">休息已关闭</string>
+  <string name="upshift_widget_countdown_sub">距离呼吸休息</string>
+</resources>

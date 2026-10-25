@@ -26,6 +26,9 @@ export type LeaderboardEntry = {
   totalXP: number;
   rank: string;
   streak: number;
+  // Days in a row with a finished mindful break. Written only by the server
+  // (publishBreakStreak), so friends can see it but nobody can fake a huge one.
+  breakStreak?: number;
 };
 
 export function leaderboardDocRef(uid: string) {
@@ -72,6 +75,12 @@ export async function fetchTopEntries(max = 50): Promise<LeaderboardEntry[]> {
   const q = query(collection(db, 'leaderboard'), orderBy('totalXP', 'desc'), limit(max));
   const snapshot = await getDocs(q);
   return snapshot.docs.map(d => d.data() as LeaderboardEntry);
+}
+
+// Shares the mindful-break streak on the caller's leaderboard row. Bounded by
+// account age on the server; a failure is harmless (it's decorative).
+export async function publishBreakStreak(breakStreak: number): Promise<void> {
+  await httpsCallable(functions, 'publishBreakStreak')({ breakStreak });
 }
 
 // A small, fixed set rather than a free-text emoji picker — keeps the write

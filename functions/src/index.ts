@@ -15,13 +15,14 @@ import {
 } from './prompts.ts';
 import {
   cleanHistory, clampText, cleanMeal, cleanPlan, cleanMealPlan, cleanAllergies, allergenHits,
-  calorieMisses, cleanFriends, type MealItem,
+  calorieMisses, cleanFriends, cleanStyleSuggestion, type MealItem,
 } from './validate.ts';
 import { generate, textOf, parseJson, sourcesOf, type Content } from './gemini.ts';
 import {
-  loadPrefs, loadProfile, resolveTier, reserveUnit, releaseUnit, addStrike, readUsage, historyFor, db,
+  loadPrefs, loadProfile, resolveTier, reserveUnit, releaseUnit, addStrike, readUsage, historyFor, breakStatsFor, db,
 } from './store.ts';
-import { hit, applyXpBank, isRecentLogin, type XpState } from './ratelimit.ts';
+import { getAuth } from 'firebase-admin/auth';
+import { hit, applyXpBank, isRecentLogin, maxPlausibleStreak, type XpState } from './ratelimit.ts';
 import { cleanScore } from './scores.ts';
 import { signedAvatarParams, CLOUD_NAME } from './cloudinary.ts';
 import { deleteAllUserData } from './account.ts';
@@ -251,6 +252,16 @@ async function chat(c: Ctx, system: string): Promise<Record<string, unknown>> {
         });
         sources.push(...sourcesOf(r));
         response = { answer: textOf(r) };
+      } else if (name === 'get_break_stats') {
+        response = c.personalize
+          ? await breakStatsFor(c.uid, Number(args?.days) || 14, c.tz)
+          : { error: 'The user turned off personalization. Tell them they can enable it in coach settings.' };
+      } else if (name === 'suggest_breathing_style') {
+        const sug = cleanStyleSuggestion(args);
+        if (sug) card = { kind: 'pattern', ...sug };
+        response = sug
+          ? { status: 'shown_to_user_for_confirmation', note: 'Do not claim it is already applied.' }
+          : { error: 'pattern must be calm, sigh, box or long' };
       } else if (name === 'get_history') {
         response = c.personalize
           ? await historyFor(c.uid, Number(args?.days) || 7, c.tz)
@@ -329,7 +340,8 @@ export const publishScore = onCall({ region: 'us-central1' }, async (req: Callab
     if (!limited) return { limited: true as const };
     const prev = lb.exists ? Number(lb.data()?.totalXP) || 0 : null;
     const xp = applyXpBank(prev, rl.data()?.xp as XpState | undefined, entry.totalXP, now);
-    tx.set(lbRef, { uid, ...entry, totalXP: xp.total });
+    // merge: keeps fields other functions own (breakStreak) when the app republishes its score.
+    tx.set(lbRef, { uid, ...entry, totalXP: xp.total }, { merge: true });
     tx.set(rlRef, { publish: limited, xp: xp.state }, { merge: true });
     return { limited: false as const, clamped: xp.clamped };
   });
@@ -338,3 +350,32 @@ export const publishScore = onCall({ region: 'us-central1' }, async (req: Callab
   return { ok: true };
 });
 
+
+
+// ---------------------------------------------------------------------------
+// Mindful-break streak on the leaderboard row, so friends can see it. Only
+// updates an existing row (the score publisher creates it), and is bounded by
+// how old the account is.
+// ---------------------------------------------------------------------------
+export const publishBreakStreak = onCall({ region: 'us-central1' }, async (req: CallableRequest) => {
+  const uid = req.auth?.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'Sign in first.');
+  const asked = Math.max(0, Math.floor(Number(req.data?.breakStreak)) || 0);
+  const now = Date.now();
+  const created = Date.parse((await getAuth().getUser(uid)).metadata.creationTime) || now;
+  const value = Math.min(asked, maxPlausibleStreak(created, now), 10_000);
+
+  const lbRef = db.doc(`leaderboard/${uid}`);
+  const rlRef = db.doc(`rateLimits/${uid}`);
+  const ok = await db.runTransaction(async tx => {
+    const [lb, rl] = await Promise.all([tx.get(lbRef), tx.get(rlRef)]);
+    const limited = hit(rl.data()?.streakPub, now, 30, 60 * 60 * 1000);
+    if (!limited) return 'limited' as const;
+    if (!lb.exists) return 'no-row' as const;
+    tx.set(lbRef, { breakStreak: value }, { merge: true });
+    tx.set(rlRef, { streakPub: limited }, { merge: true });
+    return 'ok' as const;
+  });
+  if (ok === 'limited') throw new HttpsError('resource-exhausted', 'Too many updates.');
+  return { ok: ok === 'ok', breakStreak: value };
+});

@@ -55,15 +55,25 @@ class UsageTracker(
     local: LocalTime,
     switchesLast5Min: Int,
     breaksToday: Int,
+    inCall: Boolean,
+    navigating: Boolean,
+    workout: Boolean,
     policy: Policy,
   ): Action {
     if (!policy.enabled) { idle(now, screenOn); return Action.NONE }
 
+    // 0. Exceptions beat everything, including strict mode and the wind-down.
+    val e = policy.exceptions
+    if ((e.calls && inCall) || (e.navigation && navigating) || (e.workouts && workout)) {
+      idle(now, screenOn)
+      return Action.NONE
+    }
+
     // 1. Emergency pause.
     if (now < policy.pausedUntil) { idle(now, screenOn); return Action.NONE }
 
-    // 2. Strict mode.
-    if (now < policy.strictUntil) {
+    // 2. Strict mode or the nightly wind-down.
+    if (now < policy.strictUntil || BreakPolicy.inWindDown(policy.windDown, local)) {
       val counting = watchedInForeground && screenOn
       val ok = guardOk(now)
       idle(now, screenOn)

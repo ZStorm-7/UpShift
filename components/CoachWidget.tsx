@@ -14,7 +14,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCurrentRouteName } from '../services/navigationRef';
 import { useUser } from '../context/UserContext';
 import { useLanguage } from '../i18n/LanguageContext';
-import { useBreakPause } from '../context/BreakContext';
+import { useBreakPause, useBreak } from '../context/BreakContext';
+import { PATTERN_COPY, PATTERNS } from '../services/breaks/timeline';
 import { usePalette } from '../theme/themedColors';
 import { spacing, radius, type } from '../theme/tokens';
 import { fontFamily } from '../theme/fonts';
@@ -91,6 +92,7 @@ export default function CoachWidget() {
 
   const uid = authUser?.uid;
   const audioPaused = useBreakPause('audio');
+  const { updateSettings: updateBreakSettings } = useBreak();
   const { consented, useData, tone, speak: speakOn } = prefs;
   const agreed = hasConsent(prefs);
 
@@ -240,6 +242,7 @@ export default function CoachWidget() {
   const toolRecap = () => { if (!needData()) send('Give me my weekly recap from my last 7 days: wins, one thing to improve, and one goal for next week. Under 120 words.'); };
   const toolRecovery = () => { if (!needData()) send('Based on my last 7 days of workouts, sleep, soreness and mood, should I train hard, go light or rest today? Give a short recovery recommendation.'); };
   const toolForm = () => setInput('Form tips for ');
+  const toolBreaks = () => { if (!needData()) send('Look at my last two weeks of mindful breaks and tell me what you notice: when I take them, what I say I am opening apps for, and how I feel afterwards. If one of the breathing styles would suit me, suggest it.'); };
   const toolPlan = () => {
     push(mk('user', t('coachToolPlan')));
     run(() => requestWorkoutPlan(profile ? `My goal is ${profile.goal}; activity level ${profile.activityLevel}.` : ''));
@@ -328,6 +331,15 @@ export default function CoachWidget() {
     } catch { haptics.error(); }
   };
 
+  const applyPattern = async (m: CoachMessage) => {
+    if (m.card?.kind !== 'pattern' || m.card.applied) return;
+    try {
+      await updateBreakSettings({ pattern: m.card.pattern });
+      haptics.setComplete();
+      patchMsg(m.id, { card: { ...m.card, applied: true } });
+    } catch { haptics.error(); }
+  };
+
   const rate = async (m: CoachMessage, rating: 'up' | 'down', reason?: string) => {
     if (!uid) return;
     patchMsg(m.id, { feedback: rating });
@@ -407,6 +419,12 @@ export default function CoachWidget() {
             <Text style={[type.button, { color: p.textOnAccent }]}>{t('coachShareList')}</Text>
           </Pressable>
         </View>);
+      case 'pattern': return (
+        <View style={box}>
+          <Text style={[type.heading, { color: p.textPrimary }]}>{t(PATTERN_COPY[c.pattern].name)} · {PATTERNS[c.pattern].rhythm}</Text>
+          {!!c.reason && <Text style={[type.bodySm, { color: p.textSecondary }]}>{c.reason}</Text>}
+          {btn(!!c.applied, t('coachUseStyle'), t('coachStyleApplied'), () => applyPattern(m))}
+        </View>);
       case 'challenge': return (
         <View style={box}>
           {c.suggestions.length === 0 && <Text style={[type.bodySm, { color: p.textMuted }]}>{t('coachNoFriends')}</Text>}
@@ -463,7 +481,7 @@ export default function CoachWidget() {
   const tools: [string, () => void, boolean][] = [
     [t('coachToolPhoto'), toolPhoto, true], [t('coachToolPlan'), toolPlan, true], [t('coachToolMealPlan'), toolMealPlan, true],
     [t('coachToolChallenge'), toolChallenge, true], [t('coachToolRecap'), toolRecap, false],
-    [t('coachToolForm'), toolForm, false], [t('coachToolRecovery'), toolRecovery, false],
+    [t('coachToolForm'), toolForm, false], [t('coachToolRecovery'), toolRecovery, false], [t('coachToolBreaks'), toolBreaks, false],
   ];
 
   return (

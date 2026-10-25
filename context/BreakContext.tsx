@@ -14,10 +14,15 @@ import { useUser } from './UserContext';
 import { navigationRef, currentRouteName } from '../services/navigationRef';
 import { BreakSettings, DEFAULT_BREAK_SETTINGS, normalizeSettings } from '../services/breaks/settings';
 import { loadBreakSettings, saveBreakSettings } from '../services/breaks/settingsStore';
-import { decide, localTime, toPolicy, INITIAL_TRACKER, complete } from '../services/breaks/policy';
+import { decide, localTime, toPolicy, patternFor, INITIAL_TRACKER, complete } from '../services/breaks/policy';
 import type { TrackerState } from '../services/breaks/usageTracker';
 import { PASSES_PER_DAY, passesLeft, usePass, PASS_PAUSE_MS } from '../services/breaks/passes';
-import { IntentId } from '../services/breaks/stats';
+import { IntentId, dayKey } from '../services/breaks/stats';
+import { awardXP } from '../firebase/progress';
+import { emitDayDataChanged } from '../services/dataEvents';
+import { breakXp, advanceBreakStreak, liveBreakStreak, bestFrame, EMPTY_BREAK_STREAK, BreakStreakState } from '../services/breaks/rewards';
+import { loadBreakStreak, saveBreakStreak } from '../services/breaks/streakStore';
+import { publishBreakStreak } from '../firebase/leaderboard';
 import { loadToday, recordBreakEvent } from '../services/breaks/statsStore';
 import type { PatternId } from '../services/breaks/timeline';
 import {
@@ -56,10 +61,18 @@ type BreakContextType = {
   /** Opens the Break screen (no-op if already open). */
   startBreak: (params: BreakParams) => void;
   /** Called when the exercise finishes: records it, lifts native blocks and restarts the interval. */
-  completeBreak: (outcome: FinishOutcome, intent?: IntentId) => Promise<void>;
+  completeBreak: (outcome: FinishOutcome, intent?: IntentId, mood?: number) => Promise<{ xp: number; streak: number }>;
   /** Strict mode: close the chosen apps for `minutes`. */
   startStrict: (minutes: number) => Promise<void>;
   endStrict: () => Promise<void>;
+  /** XP the next finished break will earn today (0 once the daily cap is reached). */
+  xpNext: number;
+  /** Days in a row with a finished break (0 if the streak has lapsed). */
+  breakStreak: number;
+  /** The longest run of days with a break, ever. Frames unlock from this. */
+  longestBreakStreak: number;
+  /** The best frame colour earned so far, shown around your avatar. */
+  frameColor: string | null;
   /** Emergency passes left today. */
   passesLeftToday: number;
   /** Uses one pass: pauses breaks and strict mode for 10 minutes. Resolves false if none are left. */
@@ -72,7 +85,8 @@ const noop = async () => {};
 const BreakContext = createContext<BreakContextType>({
   settings: DEFAULT_BREAK_SETTINGS, settingsLoaded: false, updateSettings: noop,
   androidPackages: [], setAndroidPackages: noop, appReady: true, isBreakActive: false, setBreakActive: () => {},
-  startBreak: () => {}, completeBreak: noop, startStrict: noop, endStrict: noop,
+  startBreak: () => {}, completeBreak: async () => ({ xp: 0, streak: 0 }), startStrict: noop, endStrict: noop,
+  breakStreak: 0, longestBreakStreak: 0, frameColor: null, xpNext: 0,
   passesLeftToday: PASSES_PER_DAY, takeEmergencyPass: async () => false, disableAll: noop,
 });
 
@@ -87,6 +101,10 @@ export function BreakProvider({ children, ready = true }: { children: ReactNode;
   const [androidPackages, setPackagesState] = useState<string[]>(() => getAndroidWatchedPackages());
   const [isBreakActive, setBreakActiveState] = useState(false);
   const [passesUsed, setPassesUsed] = useState(0);
+  const [doneToday, setDoneToday] = useState(0);
+  const [streakState, setStreakState] = useState<BreakStreakState>(EMPTY_BREAK_STREAK);
+  const streakRef = useRef(streakState);
+  streakRef.current = streakState;
   const activeRef = useRef(false);
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
@@ -115,11 +133,14 @@ export function BreakProvider({ children, ready = true }: { children: ReactNode;
   useEffect(() => {
     if (!uid) { setSettings(DEFAULT_BREAK_SETTINGS); setSettingsLoaded(false); return; }
     let cancelled = false;
-    Promise.all([loadBreakSettings(uid), loadToday(uid).catch(() => null)])
-      .then(([s, today]) => {
+    Promise.all([loadBreakSettings(uid), loadToday(uid).catch(() => null), loadBreakStreak(uid).catch(() => EMPTY_BREAK_STREAK)])
+      .then(([s, today, streak]) => {
         if (cancelled) return;
         setSettings(s);
-        if (today) { setPassesUsed(today.passes); breaksTodayRef.current = today.done; }
+        setStreakState(streak);
+        // Let friends see where the streak stands (the server bounds it; failure is harmless).
+        publishBreakStreak(liveBreakStreak(streak, dayKey(new Date()))).catch(() => {});
+        if (today) { setPassesUsed(today.passes); breaksTodayRef.current = today.done; setDoneToday(today.done); }
         applySettings(s, getAndroidWatchedPackages()).catch(() => {});
       })
       .catch(() => {})
@@ -158,6 +179,7 @@ export function BreakProvider({ children, ready = true }: { children: ReactNode;
 
   // ---- emergency pass ----
   const takeEmergencyPass = useCallback(async (opts?: { abandonPending?: boolean }) => {
+    if (!settingsRef.current.passEnabled) return false;
     const r = usePass(Date.now(), passesUsed);
     if (!r.ok) return false;
     setPassesUsed(r.usedToday);
@@ -171,11 +193,25 @@ export function BreakProvider({ children, ready = true }: { children: ReactNode;
     return true;
   }, [passesUsed, push, uid]);
 
-  const completeBreak = useCallback(async (outcome: FinishOutcome, intent?: IntentId) => {
+  const completeBreak = useCallback(async (outcome: FinishOutcome, intent?: IntentId, mood?: number) => {
     trackerRef.current = complete(trackerRef.current);
+    const before = breaksTodayRef.current;
     breaksTodayRef.current += 1;
-    if (uid) recordBreakEvent(uid, { kind: 'done', outcome, intent }).catch(() => {});
+    setDoneToday(breaksTodayRef.current);
+    const today = dayKey(new Date());
+    const nextStreak = advanceBreakStreak(streakRef.current, today);
+    setStreakState(nextStreak);
+    let xp = 0;
+    if (uid) {
+      recordBreakEvent(uid, { kind: 'done', outcome, intent, mood, hour: new Date().getHours() }).catch(() => {});
+      saveBreakStreak(uid, nextStreak).catch(() => {});
+      publishBreakStreak(nextStreak.current).catch(() => {});
+      // Capped: only the first few breaks a day pay out (see services/breaks/rewards.ts).
+      xp = breakXp(before);
+      if (xp > 0) awardXP(uid, xp).then(() => emitDayDataChanged()).catch(() => { xp = 0; });
+    }
     await markBreakDone(settingsRef.current);
+    return { xp, streak: nextStreak.current };
   }, [uid]);
 
   // ---- in-app timer: time spent inside UpShift itself ----
@@ -191,9 +227,13 @@ export function BreakProvider({ children, ready = true }: { children: ReactNode;
       const r = decide(trackerRef.current, {
         now, watchedInForeground: active, screenOn: true, local: localTime(now),
         switchesLast5Min: 0, breaksToday: Math.max(breaksTodayRef.current, capability() === 'android' ? getNativeCompletedToday() : 0),
-      }, { ...toPolicy(s), strictUntil: 0 });
+        // Calls and navigation can't be seen from inside the app; a workout can.
+        inCall: false, navigating: false, workout: currentRouteName() === 'Workout',
+        // UpShift itself is never wind-down-blocked, so it can't lock the person out of their own app.
+      }, { ...toPolicy(s), strictUntil: 0, windDown: { ...s.windDown, enabled: false } });
       trackerRef.current = r.state;
-      if (r.action === 'break') startBreak({ source: 'in-app' });
+      // Inside the wind-down window the long exhale is used instead of the chosen style.
+      if (r.action === 'break') startBreak({ source: 'in-app', pattern: patternFor(s.pattern, s.windDown, localTime(now)) });
     }, 2000);
     return () => clearInterval(id);
   }, [uid, settings.enabled, settings.includeUpShift, startBreak]);
@@ -235,7 +275,8 @@ export function BreakProvider({ children, ready = true }: { children: ReactNode;
     settings, settingsLoaded, updateSettings, androidPackages, setAndroidPackages,
     appReady: ready, isBreakActive, setBreakActive, startBreak, completeBreak,
     startStrict, endStrict, passesLeftToday: passesLeft(passesUsed), takeEmergencyPass, disableAll,
-  }), [settings, settingsLoaded, updateSettings, androidPackages, setAndroidPackages, ready, isBreakActive,
+    xpNext: breakXp(doneToday), longestBreakStreak: streakState.longest, breakStreak: liveBreakStreak(streakState, dayKey(new Date())), frameColor: bestFrame(streakState.longest)?.color ?? null,
+  }), [doneToday, streakState, settings, settingsLoaded, updateSettings, androidPackages, setAndroidPackages, ready, isBreakActive,
     setBreakActive, startBreak, completeBreak, startStrict, endStrict, passesUsed, takeEmergencyPass, disableAll]);
 
   return <BreakContext.Provider value={value}>{children}</BreakContext.Provider>;

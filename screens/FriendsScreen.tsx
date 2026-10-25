@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, Share, AccessibilityInfo, ActivityIndicator, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Share, AccessibilityInfo, ActivityIndicator, Pressable, Alert } from 'react-native';
 import { colors } from '../theme/colors';
 import { spacing, radius, type, layout } from '../theme/tokens';
 import { fontFamily } from '../theme/fonts';
@@ -25,6 +25,8 @@ import {
 import { createChallenge, hasActiveChallengeWith } from '../firebase/challenges';
 
 const AVATAR_SIZE = 44;
+
+const fillName = (s: string, name: string) => s.replace('{name}', name);
 
 export default function FriendsScreen({ navigation }: any) {
   const { authUser, profile } = useUser();
@@ -169,7 +171,19 @@ export default function FriendsScreen({ navigation }: any) {
         navigation.navigate('Challenges');
         return;
       }
-      await createChallenge(authUser.uid, friend.uid, t('challengeWorkoutsGoal'));
+      // Which kind of challenge? Asked here so both friends compete on the same thing.
+      const goalType = await new Promise<'workouts' | 'breaks' | null>(resolve => {
+        Alert.alert(fillName(t('challengeChoose'), friend.displayName), undefined, [
+          { text: t('challengeTypeWorkouts'), onPress: () => resolve('workouts') },
+          { text: t('challengeTypeBreaks'), onPress: () => resolve('breaks') },
+          { text: t('coachCancel'), style: 'cancel', onPress: () => resolve(null) },
+        ], { cancelable: true, onDismiss: () => resolve(null) });
+      });
+      if (!goalType) return;
+      await createChallenge(
+        authUser.uid, friend.uid,
+        goalType === 'breaks' ? t('challengeBreaksGoal') : t('challengeWorkoutsGoal'), 7, goalType,
+      );
       haptics.setComplete();
       AccessibilityInfo.announceForAccessibility(t('challengeSent'));
       navigation.navigate('Challenges');
@@ -296,6 +310,7 @@ export default function FriendsScreen({ navigation }: any) {
                     </Text>
                     <Text style={styles.friendMeta}>
                       {t('level')} {friend.level} · 🔥 {friend.streak}
+                      {(friend.breakStreak ?? 0) > 0 ? ` · 🌬️ ${friend.breakStreak}` : ''}
                     </Text>
                   </View>
                   {busyUid === friend.uid ? (

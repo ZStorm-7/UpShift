@@ -28,6 +28,14 @@
         android:value="Checks which app is in the foreground so a short breathing break can start after the user's chosen time in apps they selected" />
     </service>
 
+    <!-- Home-screen widget: time until the next break. -->
+    <receiver android:name=".BreakWidgetProvider" android:exported="true" android:label="@string/upshift_widget_title">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+      </intent-filter>
+      <meta-data android:name="android.appwidget.provider" android:resource="@xml/upshift_break_widget_info" />
+    </receiver>
+
     <receiver android:name=".BootReceiver" android:exported="true">
       <intent-filter>
         <action android:name="android.intent.action.BOOT_COMPLETED" />

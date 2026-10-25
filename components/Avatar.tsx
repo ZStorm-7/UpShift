@@ -38,6 +38,8 @@ type AvatarProps = {
   /** Diameter in px. Font size and border scale off this, so every call site
    *  gets a proportionally correct avatar rather than tuning text size by hand. */
   size: number;
+  /** A colour ring drawn just outside the circle (an unlocked frame). */
+  frame?: string | null;
 };
 
 function isRealPhoto(url?: string): url is string {
@@ -51,7 +53,26 @@ export default function Avatar({
   firstName,
   lastInitial,
   size,
+  frame,
 }: AvatarProps) {
+  const base = AvatarBase({ photoUrl, color, uid, firstName, lastInitial, size });
+  if (!frame) return base;
+  const gap = Math.max(2, Math.round(size * 0.05));
+  return (
+    <View style={{ width: size, height: size }}>
+      <View
+        pointerEvents="none"
+        style={{
+          position: 'absolute', top: -(gap + 2), left: -(gap + 2), width: size + 2 * (gap + 2), height: size + 2 * (gap + 2),
+          borderRadius: (size + 2 * (gap + 2)) / 2, borderWidth: 2, borderColor: frame,
+        }}
+      />
+      {base}
+    </View>
+  );
+}
+
+function AvatarBase({ photoUrl, color, uid, firstName, lastInitial, size }: Omit<AvatarProps, 'frame'>) {
   const dimension = { width: size, height: size, borderRadius: size / 2 };
 
   if (isRealPhoto(photoUrl)) {

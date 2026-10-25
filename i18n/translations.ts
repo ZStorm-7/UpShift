@@ -419,7 +419,44 @@ type TranslationKey =
   | 'insViewTable'
   | 'insDayCol'
   | 'insBreaksCol'
-  | 'insToday';
+  | 'insToday'
+  | 'breakWindDownEyebrow'
+  | 'breakWindDownTitle'
+  | 'breakWindDownBody'
+  | 'breaksWindDownTitle'
+  | 'breaksWindDownToggle'
+  | 'breaksWindDownHint'
+  | 'breaksBedtime'
+  | 'breaksWakeTime'
+  | 'breaksExceptionsTitle'
+  | 'breaksExCalls'
+  | 'breaksExNav'
+  | 'breaksExWorkout'
+  | 'breaksExHint'
+  | 'breaksPassToggle'
+  | 'breaksPassOffHint'
+  | 'breaksReflectToggle'
+  | 'breaksReflectHint'
+  | 'breakMoodQ'
+  | 'breakXpNext'
+  | 'frameDawn'
+  | 'frameAurora'
+  | 'frameZen'
+  | 'rewardsTitle'
+  | 'rewardsXpNote'
+  | 'rewardsFramesNote'
+  | 'rewardsDaysLeft'
+  | 'rewardsUnlocked'
+  | 'rewardsAllUnlocked'
+  | 'insMood'
+  | 'insPeakHour'
+  | 'challengeChoose'
+  | 'challengeTypeWorkouts'
+  | 'challengeTypeBreaks'
+  | 'challengeBreaksGoal'
+  | 'coachToolBreaks'
+  | 'coachUseStyle'
+  | 'coachStyleApplied';
 
 export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, string>>> = {
   en: {
@@ -820,6 +857,43 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     insDayCol: "Day",
     insBreaksCol: "Breaks",
     insToday: "Today",
+    breakWindDownEyebrow: "WIND-DOWN",
+    breakWindDownTitle: "Time to wind down",
+    breakWindDownBody: "{app} stays closed until {time}. Sleep well.",
+    breaksWindDownTitle: "Bedtime wind-down",
+    breaksWindDownToggle: "Close my apps at night",
+    breaksWindDownHint: "From bedtime until morning your chosen apps stay closed, and any break uses the long-exhale breath. They open again by themselves in the morning.",
+    breaksBedtime: "Bedtime",
+    breaksWakeTime: "Morning unlock",
+    breaksExceptionsTitle: "Never interrupt",
+    breaksExCalls: "Phone calls",
+    breaksExNav: "Navigation and car mode",
+    breaksExWorkout: "Workouts",
+    breaksExHint: "A break waits until these are over, even in strict mode and the wind-down.",
+    breaksPassToggle: "Allow the emergency pass",
+    breaksPassOffHint: "Turn this off for no way out at all: strict mode is then truly strict.",
+    breaksReflectToggle: "Show a short reflection",
+    breaksReflectHint: "One calm line after the breathing, different each day.",
+    breakMoodQ: "How do you feel now?",
+    breakXpNext: "+{n} XP for finishing this break",
+    frameDawn: "Dawn frame",
+    frameAurora: "Aurora frame",
+    frameZen: "Zen frame",
+    rewardsTitle: "Rewards",
+    rewardsXpNote: "10 XP for each of your first 3 breaks a day. More breaks are always fine; they just do not earn more.",
+    rewardsFramesNote: "Frames unlock with your longest streak of days with a break.",
+    rewardsDaysLeft: "{n} more days to unlock the {name}",
+    rewardsUnlocked: "Unlocked",
+    rewardsAllUnlocked: "Every frame unlocked",
+    insMood: "average mood after a break",
+    insPeakHour: "Most breaks around {time}",
+    challengeChoose: "Challenge {name} to…",
+    challengeTypeWorkouts: "Most workouts this week",
+    challengeTypeBreaks: "Most mindful breaks this week",
+    challengeBreaksGoal: "Most mindful breaks this week",
+    coachToolBreaks: "🌬️ Break insights",
+    coachUseStyle: "Use this style",
+    coachStyleApplied: "✓ Now your breathing style",
   },
   es: {
     goodMorning: 'Buenos días',
@@ -1219,6 +1293,43 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     insDayCol: "Día",
     insBreaksCol: "Pausas",
     insToday: "Hoy",
+    breakWindDownEyebrow: "DESCONEXIÓN NOCTURNA",
+    breakWindDownTitle: "Hora de desconectar",
+    breakWindDownBody: "{app} seguirá cerrada hasta las {time}. Que descanses.",
+    breaksWindDownTitle: "Desconexión nocturna",
+    breaksWindDownToggle: "Cerrar mis apps por la noche",
+    breaksWindDownHint: "Desde la hora de dormir hasta la mañana tus apps elegidas permanecen cerradas y cualquier pausa usa la exhalación larga. Se abren solas por la mañana.",
+    breaksBedtime: "Hora de dormir",
+    breaksWakeTime: "Desbloqueo por la mañana",
+    breaksExceptionsTitle: "No interrumpir nunca",
+    breaksExCalls: "Llamadas",
+    breaksExNav: "Navegación y modo coche",
+    breaksExWorkout: "Entrenamientos",
+    breaksExHint: "Una pausa espera a que terminen, incluso en modo estricto y en la desconexión nocturna.",
+    breaksPassToggle: "Permitir el pase de emergencia",
+    breaksPassOffHint: "Desactívalo para no tener ninguna salida: el modo estricto será realmente estricto.",
+    breaksReflectToggle: "Mostrar una breve reflexión",
+    breaksReflectHint: "Una frase tranquila tras la respiración, distinta cada día.",
+    breakMoodQ: "¿Cómo te sientes ahora?",
+    breakXpNext: "+{n} XP por terminar esta pausa",
+    frameDawn: "Marco Amanecer",
+    frameAurora: "Marco Aurora",
+    frameZen: "Marco Zen",
+    rewardsTitle: "Recompensas",
+    rewardsXpNote: "10 XP por cada una de tus 3 primeras pausas del día. Hacer más está bien, solo que no suman más.",
+    rewardsFramesNote: "Los marcos se desbloquean con tu racha más larga de días con una pausa.",
+    rewardsDaysLeft: "{n} días más para desbloquear el {name}",
+    rewardsUnlocked: "Desbloqueado",
+    rewardsAllUnlocked: "Todos los marcos desbloqueados",
+    insMood: "estado de ánimo medio tras una pausa",
+    insPeakHour: "Más pausas hacia las {time}",
+    challengeChoose: "Retar a {name} a…",
+    challengeTypeWorkouts: "Más entrenamientos esta semana",
+    challengeTypeBreaks: "Más pausas conscientes esta semana",
+    challengeBreaksGoal: "Más pausas conscientes esta semana",
+    coachToolBreaks: "🌬️ Análisis de pausas",
+    coachUseStyle: "Usar este estilo",
+    coachStyleApplied: "✓ Ya es tu estilo de respiración",
   },
   fr: {
     goodMorning: 'Bonjour',
@@ -1618,6 +1729,43 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     insDayCol: "Jour",
     insBreaksCol: "Pauses",
     insToday: "Aujourd'hui",
+    breakWindDownEyebrow: "DÉCONNEXION DU SOIR",
+    breakWindDownTitle: "C'est l'heure de décompresser",
+    breakWindDownBody: "{app} reste fermée jusqu'à {time}. Dors bien.",
+    breaksWindDownTitle: "Déconnexion du soir",
+    breaksWindDownToggle: "Fermer mes applis la nuit",
+    breaksWindDownHint: "De l'heure du coucher jusqu'au matin, les applis choisies restent fermées et toute pause utilise la longue expiration. Elles rouvrent toutes seules le matin.",
+    breaksBedtime: "Coucher",
+    breaksWakeTime: "Déblocage du matin",
+    breaksExceptionsTitle: "Ne jamais interrompre",
+    breaksExCalls: "Appels téléphoniques",
+    breaksExNav: "Navigation et mode voiture",
+    breaksExWorkout: "Séances de sport",
+    breaksExHint: "Une pause attend qu'ils soient terminés, même en mode strict et pendant la déconnexion du soir.",
+    breaksPassToggle: "Autoriser le pass d'urgence",
+    breaksPassOffHint: "Désactive-le pour n'avoir aucune échappatoire : le mode strict est alors vraiment strict.",
+    breaksReflectToggle: "Afficher une courte réflexion",
+    breaksReflectHint: "Une phrase apaisante après la respiration, différente chaque jour.",
+    breakMoodQ: "Comment te sens-tu maintenant ?",
+    breakXpNext: "+{n} XP pour avoir terminé cette pause",
+    frameDawn: "Cadre Aube",
+    frameAurora: "Cadre Aurore",
+    frameZen: "Cadre Zen",
+    rewardsTitle: "Récompenses",
+    rewardsXpNote: "10 XP pour chacune de tes 3 premières pauses du jour. En faire plus est très bien, mais ça ne rapporte pas davantage.",
+    rewardsFramesNote: "Les cadres se débloquent avec ta plus longue série de jours avec une pause.",
+    rewardsDaysLeft: "Encore {n} jours pour débloquer le {name}",
+    rewardsUnlocked: "Débloqué",
+    rewardsAllUnlocked: "Tous les cadres sont débloqués",
+    insMood: "humeur moyenne après une pause",
+    insPeakHour: "Le plus de pauses vers {time}",
+    challengeChoose: "Défier {name} :",
+    challengeTypeWorkouts: "Le plus de séances cette semaine",
+    challengeTypeBreaks: "Le plus de pauses pleine conscience cette semaine",
+    challengeBreaksGoal: "Le plus de pauses pleine conscience cette semaine",
+    coachToolBreaks: "🌬️ Analyse des pauses",
+    coachUseStyle: "Utiliser ce style",
+    coachStyleApplied: "✓ C'est maintenant ton style",
   },
   zh: {
     goodMorning: '早上好',
@@ -2017,6 +2165,43 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     insDayCol: "日期",
     insBreaksCol: "休息",
     insToday: "今天",
+    breakWindDownEyebrow: "睡前放松",
+    breakWindDownTitle: "该放松了",
+    breakWindDownBody: "{app} 将保持关闭，直到 {time}。晚安。",
+    breaksWindDownTitle: "睡前放松",
+    breaksWindDownToggle: "夜间关闭我的应用",
+    breaksWindDownHint: "从睡觉时间到早晨，你选择的应用保持关闭，任何休息都使用长呼气。早晨会自动重新开放。",
+    breaksBedtime: "就寝时间",
+    breaksWakeTime: "早晨解锁",
+    breaksExceptionsTitle: "永不打断",
+    breaksExCalls: "电话",
+    breaksExNav: "导航和车载模式",
+    breaksExWorkout: "锻炼",
+    breaksExHint: "休息会等这些结束后再出现，严格模式和睡前放松期间也一样。",
+    breaksPassToggle: "允许使用紧急通行证",
+    breaksPassOffHint: "关闭后将没有任何出口：严格模式就真正严格了。",
+    breaksReflectToggle: "显示一句简短的感悟",
+    breaksReflectHint: "呼吸结束后一句平静的话，每天不同。",
+    breakMoodQ: "你现在感觉如何？",
+    breakXpNext: "完成这次休息可得 +{n} 经验值",
+    frameDawn: "黎明头像框",
+    frameAurora: "极光头像框",
+    frameZen: "禅意头像框",
+    rewardsTitle: "奖励",
+    rewardsXpNote: "每天前3次休息各得10经验值。可以休息更多，只是不再加分。",
+    rewardsFramesNote: "头像框会随你连续休息的最长天数解锁。",
+    rewardsDaysLeft: "再坚持 {n} 天即可解锁{name}",
+    rewardsUnlocked: "已解锁",
+    rewardsAllUnlocked: "所有头像框均已解锁",
+    insMood: "休息后的平均心情",
+    insPeakHour: "休息最多的时间在 {time} 左右",
+    challengeChoose: "向 {name} 发起挑战：",
+    challengeTypeWorkouts: "本周锻炼次数最多",
+    challengeTypeBreaks: "本周正念休息次数最多",
+    challengeBreaksGoal: "本周正念休息次数最多",
+    coachToolBreaks: "🌬️ 休息洞察",
+    coachUseStyle: "使用这种方式",
+    coachStyleApplied: "✓ 已设为你的呼吸方式",
   },
   te: {
     goodMorning: 'శుభోదయం',
@@ -2416,5 +2601,42 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     insDayCol: "రోజు",
     insBreaksCol: "విరామాలు",
     insToday: "ఈరోజు",
+    breakWindDownEyebrow: "రాత్రి విశ్రాంతి",
+    breakWindDownTitle: "విశ్రాంతి తీసుకునే సమయం",
+    breakWindDownBody: "{app} {time} వరకు మూసివేయబడి ఉంటుంది. హాయిగా నిద్రపోండి.",
+    breaksWindDownTitle: "రాత్రి విశ్రాంతి",
+    breaksWindDownToggle: "రాత్రి నా యాప్‌లను మూసివేయండి",
+    breaksWindDownHint: "నిద్ర సమయం నుండి ఉదయం వరకు మీరు ఎంచుకున్న యాప్‌లు మూసివేయబడి ఉంటాయి, ఏ విరామమైనా పొడవైన నిశ్వాసాన్ని వాడుతుంది. ఉదయం అవి వాటంతట అవే తెరుచుకుంటాయి.",
+    breaksBedtime: "నిద్ర సమయం",
+    breaksWakeTime: "ఉదయం అన్‌లాక్",
+    breaksExceptionsTitle: "ఎప్పుడూ అంతరాయం కలిగించవద్దు",
+    breaksExCalls: "ఫోన్ కాల్స్",
+    breaksExNav: "నావిగేషన్ మరియు కార్ మోడ్",
+    breaksExWorkout: "వర్కౌట్‌లు",
+    breaksExHint: "ఇవి ముగిసే వరకు విరామం వేచి ఉంటుంది, కఠిన మోడ్ మరియు విశ్రాంతి సమయంలో కూడా.",
+    breaksPassToggle: "అత్యవసర పాస్‌ను అనుమతించండి",
+    breaksPassOffHint: "దీన్ని ఆపివేస్తే తప్పించుకునే మార్గం ఉండదు: కఠిన మోడ్ నిజంగా కఠినంగా ఉంటుంది.",
+    breaksReflectToggle: "చిన్న ఆలోచనను చూపించు",
+    breaksReflectHint: "శ్వాస తర్వాత ఒక ప్రశాంతమైన వాక్యం, రోజూ వేరేది.",
+    breakMoodQ: "ఇప్పుడు మీకు ఎలా అనిపిస్తోంది?",
+    breakXpNext: "ఈ విరామం పూర్తి చేస్తే +{n} XP",
+    frameDawn: "డాన్ ఫ్రేమ్",
+    frameAurora: "అరోరా ఫ్రేమ్",
+    frameZen: "జెన్ ఫ్రేమ్",
+    rewardsTitle: "రివార్డులు",
+    rewardsXpNote: "రోజులో మొదటి 3 విరామాలకు ఒక్కొక్కదానికి 10 XP. ఎక్కువ తీసుకోవచ్చు, కానీ ఎక్కువ XP రాదు.",
+    rewardsFramesNote: "విరామంతో ఉన్న రోజుల మీ పొడవైన స్ట్రీక్‌తో ఫ్రేమ్‌లు అన్‌లాక్ అవుతాయి.",
+    rewardsDaysLeft: "{name} అన్‌లాక్ చేయడానికి ఇంకా {n} రోజులు",
+    rewardsUnlocked: "అన్‌లాక్ అయింది",
+    rewardsAllUnlocked: "అన్ని ఫ్రేమ్‌లు అన్‌లాక్ అయ్యాయి",
+    insMood: "విరామం తర్వాత సగటు మూడ్",
+    insPeakHour: "ఎక్కువ విరామాలు సుమారు {time} కి",
+    challengeChoose: "{name} ని సవాలు చేయండి:",
+    challengeTypeWorkouts: "ఈ వారం అత్యధిక వర్కవుట్‌లు",
+    challengeTypeBreaks: "ఈ వారం అత్యధిక మైండ్‌ఫుల్ విరామాలు",
+    challengeBreaksGoal: "ఈ వారం అత్యధిక మైండ్‌ఫుల్ విరామాలు",
+    coachToolBreaks: "🌬️ విరామ అంతర్దృష్టులు",
+    coachUseStyle: "ఈ శైలిని ఉపయోగించండి",
+    coachStyleApplied: "✓ ఇప్పుడు మీ శ్వాస శైలి",
   },
 };

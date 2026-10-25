@@ -16,7 +16,9 @@ import { useLanguage } from '../i18n/LanguageContext';
 import { useUser } from '../context/UserContext';
 import { loadWeek } from '../services/breaks/statsStore';
 import { INTENT_IDS, IntentId, WeekSummary } from '../services/breaks/stats';
-import { weekdayLabel, percentLabel } from '../services/breaks/format';
+import { weekdayLabel, percentLabel, timeLabel } from '../services/breaks/format';
+import { useBreak } from '../context/BreakContext';
+import { FRAMES, unlockedFrames, nextFrame } from '../services/breaks/rewards';
 
 const CHART_H = 148;
 const BAR_MAX_W = 24;
@@ -38,6 +40,7 @@ export default function BreaksInsightsScreen({ navigation }: any) {
   const p = usePalette();
   const { t, language } = useLanguage();
   const { authUser } = useUser();
+  const { longestBreakStreak } = useBreak();
   const [week, setWeek] = useState<WeekSummary | null>(null);
   const [failed, setFailed] = useState(false);
   const [view, setView] = useState<'chart' | 'table'>('chart');
@@ -91,6 +94,7 @@ export default function BreaksInsightsScreen({ navigation }: any) {
                 {week.exitRate !== null && tile(percentLabel(week.exitRate), t('insExitRate'))}
                 {week.passes > 0 && tile(String(week.passes), t('insPasses'))}
                 {week.strict > 0 && tile(String(week.strict), t('insStrict'))}
+                {week.moodAvg !== null && tile(`${['😞', '🙁', '😐', '🙂', '😄'][Math.min(4, Math.max(0, Math.round(week.moodAvg) - 1))]} ${week.moodAvg.toFixed(1)}`, t('insMood'))}
               </View>
             )}
 
@@ -188,6 +192,37 @@ export default function BreaksInsightsScreen({ navigation }: any) {
               </>
             )}
 
+            {week.peakHour !== null && (
+              <Text style={[styles.note, { color: p.textMuted }]}>
+                {fill(t('insPeakHour'), { time: timeLabel(week.peakHour * 60, language) })}
+              </Text>
+            )}
+
+            {/* Rewards: capped XP, and frames that unlock with your longest streak. */}
+            <Text style={[styles.section, { color: p.textMuted }]}>{t('rewardsTitle').toUpperCase()}</Text>
+            <View style={[styles.card, { backgroundColor: p.surface, borderColor: p.border, gap: spacing.sm }]}>
+              <Text style={[styles.note, { color: p.textSecondary }]}>{t('rewardsXpNote')}</Text>
+              {FRAMES.map(f => {
+                const got = unlockedFrames(longestBreakStreak).some(x => x.id === f.id);
+                return (
+                  <View key={f.id} style={styles.frameRow} accessible accessibilityLabel={`${t(f.nameKey)}: ${got ? t('rewardsUnlocked') : `${f.days}`}`}>
+                    <View style={[styles.frameDot, { borderColor: f.color, opacity: got ? 1 : 0.35 }]} />
+                    <Text style={[styles.frameName, { color: got ? p.textPrimary : p.textMuted }]}>{t(f.nameKey)}</Text>
+                    <Text style={[styles.note, { color: got ? p.success : p.textMuted }]}>{got ? `✓ ${t('rewardsUnlocked')}` : `${f.days} ${t('insStreak')}`}</Text>
+                  </View>
+                );
+              })}
+              {(() => {
+                const next = nextFrame(longestBreakStreak);
+                return (
+                  <Text style={[styles.note, { color: p.textMuted }]}>
+                    {next ? fill(t('rewardsDaysLeft'), { n: next.daysLeft, name: t(next.nameKey) }) : t('rewardsAllUnlocked')}
+                  </Text>
+                );
+              })()}
+              <Text style={[styles.note, { color: p.textMuted }]}>{t('rewardsFramesNote')}</Text>
+            </View>
+
             {week.busiest && (
               <Text style={[styles.note, { color: p.textMuted }]}>
                 {t('insBusiest')}: {weekdayLabel(week.days.find(d => d.key === week.busiest!.key)!.weekday, language, 'long')} · {week.busiest.done}
@@ -235,5 +270,8 @@ const styles = StyleSheet.create({
   intentLabel: { fontFamily: fontFamily.sans, fontSize: 13, marginBottom: 4 },
   hRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   hValue: { fontFamily: fontFamily.sansBold, fontSize: 13 },
+  frameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  frameDot: { width: 22, height: 22, borderRadius: 11, borderWidth: 2 },
+  frameName: { fontFamily: fontFamily.sansSemi, fontSize: 14, flex: 1 },
   note: { fontFamily: fontFamily.sans, fontSize: 12.5, lineHeight: 18 },
 });

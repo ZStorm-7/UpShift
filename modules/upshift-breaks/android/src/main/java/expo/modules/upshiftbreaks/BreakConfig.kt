@@ -19,6 +19,8 @@ object BreakConfig {
   private const val K_PENDING_PKG = "pendingPkg"
   private const val K_PENDING_LABEL = "pendingLabel"
   private const val K_ACCUMULATED = "accumulatedMs"
+  private const val K_WIDGET_KIND = "widgetKind"
+  private const val K_WIDGET_MIN = "widgetMinutes"
   private const val K_DONE_DAY = "doneDay"
   private const val K_DONE_COUNT = "doneCount"
 
@@ -29,7 +31,10 @@ object BreakConfig {
   val DISABLED = Policy(
     enabled = false, intervalMin = DEFAULT_INTERVAL_MIN,
     schedule = Schedule(false, setOf(1, 2, 3, 4, 5), 9 * 60, 17 * 60),
-    dailyCap = 0, adaptive = false, pausedUntil = 0L, strictUntil = 0L,
+    dailyCap = 0, adaptive = false,
+    windDown = WindDown(false, 22 * 60, 6 * 60),
+    exceptions = Exceptions(calls = true, navigation = true, workouts = true),
+    pausedUntil = 0L, strictUntil = 0L,
   )
 
   private fun prefs(ctx: Context) = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -41,6 +46,8 @@ object BreakConfig {
   fun parsePolicy(json: String): Policy {
     val o = JSONObject(json)
     val s = o.optJSONObject("schedule")
+    val w = o.optJSONObject("windDown")
+    val x = o.optJSONObject("exceptions")
     val days = mutableSetOf<Int>()
     s?.optJSONArray("days")?.let { arr -> for (i in 0 until arr.length()) days.add(arr.getInt(i)) }
     return Policy(
@@ -54,6 +61,16 @@ object BreakConfig {
       ),
       dailyCap = o.optInt("dailyCap", 0).coerceAtLeast(0),
       adaptive = o.optBoolean("adaptive", false),
+      windDown = WindDown(
+        enabled = w?.optBoolean("enabled", false) ?: false,
+        startMin = w?.optInt("startMin", 22 * 60) ?: 22 * 60,
+        endMin = w?.optInt("endMin", 6 * 60) ?: 6 * 60,
+      ),
+      exceptions = Exceptions(
+        calls = x?.optBoolean("calls", true) ?: true,
+        navigation = x?.optBoolean("navigation", true) ?: true,
+        workouts = x?.optBoolean("workouts", true) ?: true,
+      ),
       pausedUntil = o.optLong("pausedUntil", 0L),
       strictUntil = o.optLong("strictUntil", 0L),
     )
@@ -117,5 +134,16 @@ object BreakConfig {
   fun incrementCompleted(ctx: Context) {
     val n = completedToday(ctx) + 1
     prefs(ctx).edit().putString(K_DONE_DAY, todayKey()).putInt(K_DONE_COUNT, n).apply()
+  }
+
+  // The last state shown on the home-screen widget.
+  fun writeWidget(ctx: Context, s: WidgetState) {
+    prefs(ctx).edit().putString(K_WIDGET_KIND, s.kind.name).putInt(K_WIDGET_MIN, s.minutes).apply()
+  }
+
+  fun readWidget(ctx: Context): WidgetState {
+    val p = prefs(ctx)
+    val kind = try { WidgetKind.valueOf(p.getString(K_WIDGET_KIND, WidgetKind.OFF.name) ?: WidgetKind.OFF.name) } catch (e: Exception) { WidgetKind.OFF }
+    return WidgetState(kind, p.getInt(K_WIDGET_MIN, 0))
   }
 }

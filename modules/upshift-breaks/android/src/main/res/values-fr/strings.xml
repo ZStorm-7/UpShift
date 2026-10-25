@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="upshift_widget_title">Prochaine pause</string>
+  <string name="upshift_widget_description">Affiche le temps restant avant ta prochaine pause pleine conscience.</string>
+  <string name="upshift_widget_minutes">%1$d min</string>
+  <string name="upshift_widget_hours_minutes">%1$d h %2$d min</string>
+  <string name="upshift_widget_soon">D'un instant à l'autre</string>
+  <string name="upshift_widget_strict">Applis fermées</string>
+  <string name="upshift_widget_left">%1$d min restantes</string>
+  <string name="upshift_widget_paused">En pause</string>
+  <string name="upshift_widget_outside">Hors de ton horaire</string>
+  <string name="upshift_widget_done">Terminé pour aujourd'hui</string>
+  <string name="upshift_widget_off">Les pauses sont désactivées</string>
+  <string name="upshift_widget_countdown_sub">avant ta pause respiration</string>
+</resources>

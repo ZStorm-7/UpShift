@@ -64,7 +64,7 @@ test('every t("key") literal in the app exists in the dictionary', () => {
 test('keys named in lookup tables exist too (patterns, phases, intents, tones)', () => {
   const PREFIX = /^(break|breaks|coach|pattern|intent|ins)[A-Z][A-Za-z0-9]*$/;
   // Firestore collection and document names that merely share a prefix.
-  const NOT_KEYS = new Set(['breakDays', 'coachMessages', 'coachPlan', 'coachFeedback', 'coachUsage']);
+  const NOT_KEYS = new Set(['breakDays', 'breakStreak', 'coachMessages', 'coachPlan', 'coachFeedback', 'coachUsage']);
   const missing = new Set<string>();
   for (const f of files) {
     const text = readFileSync(f, 'utf8');

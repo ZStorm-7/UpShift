@@ -132,3 +132,51 @@ export function cleanFriends(raw: unknown): FriendRow[] {
     level: num(f.level, 1000), totalXP: num(f.totalXP, 10_000_000), streak: num(f.streak, 10_000),
   }));
 }
+
+// ---- Mindful-break statistics (for the coach) ----
+export const BREATHING_STYLES = ['calm', 'sigh', 'box', 'long'] as const;
+export type BreathingStyle = typeof BREATHING_STYLES[number];
+
+export function cleanStyleSuggestion(args: any): { pattern: BreathingStyle; reason: string } | null {
+  const pattern = String(args?.pattern ?? '').toLowerCase() as BreathingStyle;
+  if (!BREATHING_STYLES.includes(pattern)) return null;
+  return { pattern, reason: str(args?.reason, 200) };
+}
+
+const count = (v: unknown) => Math.max(0, Math.min(10_000, Math.floor(Number(v)) || 0));
+
+export type BreakSummary = {
+  daysWithData: number; breaksCompleted: number; perDay: { date: string; breaks: number }[];
+  stayedInApp: number; leftApp: number; leftAppPercent: number | null;
+  whyOpened: Record<string, number>; averageMoodAfterBreak: number | null;
+  busiestHours: { hour: number; breaks: number }[]; emergencyPassesUsed: number; strictSessions: number;
+};
+
+// Folds the per-day counters (users/{uid}/breakDays) into what the coach can talk about.
+// Counts only: the app never stores app names or free text for breaks.
+export function summarizeBreakDays(rows: { date: string; data: any }[]): BreakSummary {
+  let done = 0, stay = 0, exit = 0, passes = 0, strict = 0, moodSum = 0, moodN = 0, withData = 0;
+  const intents: Record<string, number> = {};
+  const hours = Array.from({ length: 24 }, () => 0);
+  const perDay = rows.map(r => {
+    const d = r.data ?? {};
+    const n = count(d.done);
+    if (n > 0 || count(d.passes) > 0 || count(d.strict) > 0) withData++;
+    done += n; stay += count(d.stay); exit += count(d.exit); passes += count(d.passes); strict += count(d.strict);
+    moodSum += count(d.moodSum); moodN += count(d.moodN);
+    for (const id of ['specific', 'connect', 'unwind', 'unsure']) {
+      const v = count(d.intent?.[id]);
+      if (v) intents[id] = (intents[id] ?? 0) + v;
+    }
+    for (let h = 0; h < 24; h++) hours[h] += count(d.hours?.[`h${h}`]);
+    return { date: r.date, breaks: n };
+  });
+  const busiest = hours.map((breaks, hour) => ({ hour, breaks })).filter(h => h.breaks > 0)
+    .sort((a, b) => b.breaks - a.breaks || a.hour - b.hour).slice(0, 3);
+  return {
+    daysWithData: withData, breaksCompleted: done, perDay, stayedInApp: stay, leftApp: exit,
+    leftAppPercent: stay + exit > 0 ? Math.round((exit / (stay + exit)) * 100) : null,
+    whyOpened: intents, averageMoodAfterBreak: moodN > 0 ? Math.round((moodSum / moodN) * 10) / 10 : null,
+    busiestHours: busiest, emergencyPassesUsed: passes, strictSessions: strict,
+  };
+}

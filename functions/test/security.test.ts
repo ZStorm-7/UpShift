@@ -112,3 +112,12 @@ test('signed avatar params are pinned to this user and constrained', () => {
   assert.notEqual(r.signature, signedAvatarParams('user456', 'KEY', 'SECRET', T0).signature);
   assert.equal(JSON.stringify(r).includes('SECRET'), false);
 });
+
+import { maxPlausibleStreak } from '../src/ratelimit.ts';
+test('a streak cannot be longer than the account has existed', () => {
+  const now = T0;
+  assert.equal(maxPlausibleStreak(now, now), 1);
+  assert.equal(maxPlausibleStreak(now - 6 * DAY, now), 7);
+  assert.equal(maxPlausibleStreak(now - 400 * DAY, now), 401);
+  assert.equal(maxPlausibleStreak(now + 5 * DAY, now), 1, 'a creation time in the future cannot raise it');
+});

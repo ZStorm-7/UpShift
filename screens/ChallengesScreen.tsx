@@ -14,7 +14,7 @@ import { leaderboardDocRef, LeaderboardEntry, parseDisplayName } from '../fireba
 import {
   Challenge,
   getMyChallenges,
-  countWorkoutsInRange,
+  countForChallenge,
   reportChallengeScore,
   finalizeChallengeIfDue,
 } from '../firebase/challenges';
@@ -49,7 +49,7 @@ export default function ChallengesScreen({ navigation }: any) {
       mine = await Promise.all(
         mine.map(async (c) => {
           if (c.status !== 'active') return c;
-          const myCount = await countWorkoutsInRange(uid, c.startDate, c.endDate);
+          const myCount = await countForChallenge(uid, c);
           let updated = c;
           if (myCount !== (c.scores[uid] ?? 0)) {
             await reportChallengeScore(c.id, uid, c.scores, myCount);

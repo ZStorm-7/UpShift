@@ -22,3 +22,12 @@ export function clockTimeLabel(epochMs: number, lang: string): string {
 }
 
 export const percentLabel = (fraction: number) => `${Math.round(Math.min(1, Math.max(0, fraction)) * 100)}%`;
+
+// m:ss under an hour, h:mm:ss from an hour up (a wind-down can be 8 hours long).
+export const clock = (ms: number) => {
+  const total = Math.max(0, Math.ceil(ms / 1000));
+  const h = Math.floor(total / 3600), m = Math.floor((total % 3600) / 60), sec = total % 60;
+  const two = (n: number) => String(n).padStart(2, '0');
+  return h > 0 ? `${h}:${two(m)}:${two(sec)}` : `${m}:${two(sec)}`;
+};
+

@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, Pressable, Modal, ScrollView, AccessibilityInfo
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { getStreakRescueLine } from '../services/coach';
 import { onDayDataChanged } from '../services/dataEvents';
-import { useBreakPause } from '../context/BreakContext';
+import { useBreakPause, useBreak } from '../context/BreakContext';
 import { db } from '../firebase/config';
 // Dashboard redesign proof of concept — reads its own light/editorial theme
 // (theme/minimal.ts) rather than the app's shipped dark theme. See that
@@ -90,6 +90,7 @@ export default function DashboardScreen({ navigation }: any) {
   // hold off the midnight/noon reload checks until it ends. This is display
   // only: the underlying day and quest cycle are wall-clock based, so a break
   // can never change a streak, and the checks simply catch up afterwards.
+  const { frameColor } = useBreak();
   const questClockPaused = useBreakPause('questClock');
   const questClockPausedRef = useRef(false);
   questClockPausedRef.current = questClockPaused;
@@ -1035,6 +1036,7 @@ export default function DashboardScreen({ navigation }: any) {
               firstName={profile?.firstName}
               lastInitial={profile?.lastInitial}
               size={AVATAR_SIZE}
+              frame={frameColor}
             />
           </Pressable>
           {profile && (

@@ -1,4 +1,5 @@
 import {
+  documentId,
   doc,
   addDoc,
   updateDoc,
@@ -14,7 +15,7 @@ import { db } from './config';
 // challenge window. The type is still a union (not a literal) so adding a
 // second goal later (e.g. 'streak', 'xp') is additive everywhere this type
 // is used, not a breaking change.
-export type ChallengeGoalType = 'workouts';
+export type ChallengeGoalType = 'workouts' | 'breaks';
 
 export type Challenge = {
   id: string;
@@ -66,14 +67,15 @@ export async function createChallenge(
   createdBy: string,
   friendUid: string,
   goalLabel: string,
-  days = 7
+  days = 7,
+  goalType: ChallengeGoalType = 'workouts'
 ): Promise<string> {
   const startDate = todayIso();
   const endDate = addDaysIso(startDate, days - 1);
   const ref = await addDoc(collection(db, 'challenges'), {
     createdBy,
     participants: [createdBy, friendUid],
-    goalType: 'workouts' as ChallengeGoalType,
+    goalType,
     goalLabel,
     startDate,
     endDate,
@@ -104,6 +106,25 @@ export async function countWorkoutsInRange(uid: string, startDate: string, endDa
     total += docSnap.data().workoutsCompleted || 0;
   });
   return total;
+}
+
+// Counts finished mindful breaks in [startDate, endDate] from the caller's OWN
+// per-day counters (users/{uid}/breakDays). Self-reported, like workouts.
+export async function countBreaksInRange(uid: string, startDate: string, endDate: string): Promise<number> {
+  const snapshot = await getDocs(query(
+    collection(db, 'users', uid, 'breakDays'),
+    where(documentId(), '>=', startDate), where(documentId(), '<=', endDate),
+  ));
+  let total = 0;
+  snapshot.forEach(d => { total += Math.max(0, Math.floor(Number(d.data().done)) || 0); });
+  return total;
+}
+
+// The score for whatever this challenge is about.
+export function countForChallenge(uid: string, c: Pick<Challenge, 'goalType' | 'startDate' | 'endDate'>): Promise<number> {
+  return c.goalType === 'breaks'
+    ? countBreaksInRange(uid, c.startDate, c.endDate)
+    : countWorkoutsInRange(uid, c.startDate, c.endDate);
 }
 
 export async function getMyChallenges(uid: string): Promise<Challenge[]> {

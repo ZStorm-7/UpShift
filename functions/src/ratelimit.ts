@@ -51,3 +51,10 @@ export function applyXpBank(
 export const RECENT_LOGIN_SECONDS = 5 * 60;
 export const isRecentLogin = (authTimeSeconds: number | undefined, nowMs: number) =>
   typeof authTimeSeconds === 'number' && nowMs / 1000 - authTimeSeconds <= RECENT_LOGIN_SECONDS;
+
+// A break streak can't be longer than the account has existed (plus today).
+// Bounds a tampered client without needing to see the individual days.
+export function maxPlausibleStreak(accountCreatedMs: number, nowMs: number): number {
+  const days = Math.floor(Math.max(0, nowMs - accountCreatedMs) / 86_400_000);
+  return days + 1;
+}

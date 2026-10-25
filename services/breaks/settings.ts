@@ -23,6 +23,14 @@ export type Schedule = {
   endMin: number;
 };
 
+// A nightly quiet period: your chosen apps stay closed from bedtime until the
+// morning, and breaks inside it use the long-exhale breath. Daily; an end earlier
+// than the start means it runs overnight (the normal case).
+export type WindDown = { enabled: boolean; startMin: number; endMin: number };
+
+// Moments when a break would be rude or unsafe, so it waits.
+export type Exceptions = { calls: boolean; navigation: boolean; workouts: boolean };
+
 export type BreakSettings = {
   enabled: boolean;
   // Minutes of active use in watched apps between breaks.
@@ -45,6 +53,14 @@ export type BreakSettings = {
   dailyCap: number;
   // Shorten the gap late at night or when you keep switching apps.
   adaptive: boolean;
+  // Bedtime wind-down (apps closed overnight, longer exhale).
+  windDown: WindDown;
+  // Automatic exceptions.
+  exceptions: Exceptions;
+  // Allow the emergency pass at all. Off = truly strict.
+  passEnabled: boolean;
+  // Show a short reflection after the breathing.
+  reflection: boolean;
   // Runtime values (epoch ms, 0 = not active). Kept with the settings so they
   // survive a restart and are visible to the background service.
   pausedUntil: number;
@@ -52,6 +68,9 @@ export type BreakSettings = {
 };
 
 export const DEFAULT_SCHEDULE: Schedule = { enabled: false, days: [1, 2, 3, 4, 5], startMin: 9 * 60, endMin: 17 * 60 };
+
+export const DEFAULT_WIND_DOWN: WindDown = { enabled: false, startMin: 22 * 60, endMin: 6 * 60 };
+export const DEFAULT_EXCEPTIONS: Exceptions = { calls: true, navigation: true, workouts: true };
 
 export const DEFAULT_BREAK_SETTINGS: BreakSettings = {
   enabled: false,
@@ -66,6 +85,10 @@ export const DEFAULT_BREAK_SETTINGS: BreakSettings = {
   schedule: DEFAULT_SCHEDULE,
   dailyCap: 0,
   adaptive: false,
+  windDown: DEFAULT_WIND_DOWN,
+  exceptions: DEFAULT_EXCEPTIONS,
+  passEnabled: true,
+  reflection: true,
   pausedUntil: 0,
   strictUntil: 0,
 };
@@ -92,6 +115,21 @@ export function normalizeSchedule(raw: Partial<Schedule> | undefined | null): Sc
     startMin: minuteOfDay(raw?.startMin, d.startMin),
     endMin: minuteOfDay(raw?.endMin, d.endMin),
   };
+}
+
+export function normalizeWindDown(raw: Partial<WindDown> | undefined | null): WindDown {
+  const d = DEFAULT_WIND_DOWN;
+  return {
+    enabled: typeof raw?.enabled === 'boolean' ? raw.enabled : d.enabled,
+    startMin: minuteOfDay(raw?.startMin, d.startMin),
+    endMin: minuteOfDay(raw?.endMin, d.endMin),
+  };
+}
+
+export function normalizeExceptions(raw: Partial<Exceptions> | undefined | null): Exceptions {
+  const d = DEFAULT_EXCEPTIONS;
+  const b = (v: unknown, f: boolean) => (typeof v === 'boolean' ? v : f);
+  return { calls: b(raw?.calls, d.calls), navigation: b(raw?.navigation, d.navigation), workouts: b(raw?.workouts, d.workouts) };
 }
 
 export function normalizeCap(v: unknown): number {
@@ -122,6 +160,10 @@ export function normalizeSettings(raw: Partial<BreakSettings> | undefined | null
     schedule: normalizeSchedule(raw?.schedule),
     dailyCap: normalizeCap(raw?.dailyCap),
     adaptive: b(raw?.adaptive, d.adaptive),
+    windDown: normalizeWindDown(raw?.windDown),
+    exceptions: normalizeExceptions(raw?.exceptions),
+    passEnabled: b(raw?.passEnabled, d.passEnabled),
+    reflection: b(raw?.reflection, d.reflection),
     pausedUntil: until(raw?.pausedUntil, now),
     strictUntil: until(raw?.strictUntil, now),
   };
