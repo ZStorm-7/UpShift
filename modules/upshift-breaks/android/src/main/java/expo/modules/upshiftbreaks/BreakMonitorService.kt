@@ -20,6 +20,7 @@ import android.os.PowerManager
 import android.os.Process
 import android.provider.Settings
 import android.util.Log
+import java.util.Calendar
 
 /**
  * Foreground service that notices which app is in front and, after the user's
@@ -30,8 +31,10 @@ import android.util.Log
  */
 class BreakMonitorService : Service() {
   private val handler = Handler(Looper.getMainLooper())
-  private var settings: BreakSettings = BreakSettings(false, BreakConfig.DEFAULT_INTERVAL_MIN, emptySet())
-  private var tracker: UsageTracker = UsageTracker(BreakConfig.DEFAULT_INTERVAL_MIN * 60_000L)
+  private var settings: BreakSettings = BreakSettings(BreakConfig.DISABLED, emptySet())
+  private var tracker: UsageTracker = UsageTracker()
+  // When a watched app was opened, newest last. Used by adaptive timing.
+  private val switchTimes = ArrayDeque<Long>()
   private var foregroundPackage: String? = null
   private var lastEventQuery = 0L
   private var lastPersistedAt = 0L
@@ -72,7 +75,7 @@ class BreakMonitorService : Service() {
       startForeground(NOTIF_ONGOING, notification)
     }
 
-    if (!settings.enabled || settings.packages.isEmpty() || !hasUsageAccess(this)) {
+    if (!settings.policy.enabled || settings.packages.isEmpty() || !hasUsageAccess(this)) {
       running = false
       handler.removeCallbacks(tick)
       stopForegroundCompat()
@@ -83,7 +86,6 @@ class BreakMonitorService : Service() {
     // Rebuild the tracker, keeping any progress and any unfinished break.
     val previous = tracker
     tracker = UsageTracker(
-      settings.intervalMinutes * 60_000L,
       accumulatedMs = if (previous.accumulatedMs > 0) previous.accumulatedMs else BreakConfig.readAccumulated(this),
       pending = BreakConfig.pending(this) != null,
     )
@@ -111,8 +113,19 @@ class BreakMonitorService : Service() {
     // Keep the tracker in step with what the app tells us through shared prefs.
     if (tracker.pending && BreakConfig.pending(this) == null) tracker.complete()
 
-    if (tracker.step(now, watched, power.isInteractive) && fg != null) {
-      launchBreak(fg)
+    val cal = Calendar.getInstance()
+    val local = LocalTime(cal.get(Calendar.DAY_OF_WEEK) - 1, cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE))
+    while (switchTimes.isNotEmpty() && now - switchTimes.first() > SWITCH_WINDOW_MS) switchTimes.removeFirst()
+
+    val action = tracker.decide(
+      now, watched, power.isInteractive, local, switchTimes.size, BreakConfig.completedToday(this), settings.policy,
+    )
+    if (fg != null) {
+      when (action) {
+        Action.BREAK -> launchBreak(fg)
+        Action.STRICT -> launchStrict(fg)
+        Action.NONE -> {}
+      }
     }
 
     // Persist progress at most once a minute so a reboot doesn't lose it.
@@ -132,7 +145,10 @@ class BreakMonitorService : Service() {
     while (events.hasNextEvent()) {
       events.getNextEvent(e)
       when (e.eventType) {
-        UsageEvents.Event.MOVE_TO_FOREGROUND -> foregroundPackage = e.packageName
+        UsageEvents.Event.MOVE_TO_FOREGROUND -> {
+          foregroundPackage = e.packageName
+          if (settings.packages.contains(e.packageName)) switchTimes.addLast(e.timeStamp)
+        }
         UsageEvents.Event.MOVE_TO_BACKGROUND -> if (e.packageName == foregroundPackage) foregroundPackage = null
       }
     }
@@ -149,8 +165,19 @@ class BreakMonitorService : Service() {
   private fun launchBreak(pkg: String) {
     val label = labelFor(pkg)
     BreakConfig.setPending(this, pkg, label)
-    val uri = Uri.parse("upshift://break?pkg=${Uri.encode(pkg)}&label=${Uri.encode(label)}")
-    val intent = Intent(Intent.ACTION_VIEW, uri).apply {
+    launch("upshift://break?pkg=${Uri.encode(pkg)}&label=${Uri.encode(label)}", label, strict = false)
+  }
+
+  // Strict mode: the chosen app is closed until the strict time is up. There is
+  // no "pending" break to finish; the screen just explains and offers the pass.
+  private fun launchStrict(pkg: String) {
+    val label = labelFor(pkg)
+    val until = settings.policy.strictUntil
+    launch("upshift://break?mode=strict&until=$until&pkg=${Uri.encode(pkg)}&label=${Uri.encode(label)}", label, strict = true)
+  }
+
+  private fun launch(url: String, label: String, strict: Boolean) {
+    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
       setPackage(packageName)
       addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
     }
@@ -165,14 +192,14 @@ class BreakMonitorService : Service() {
         Log.w(TAG, "direct launch failed, falling back to notification", t)
       }
     }
-    postBreakNotification(intent, label)
+    postBreakNotification(intent, label, strict)
   }
 
-  private fun postBreakNotification(intent: Intent, label: String) {
+  private fun postBreakNotification(intent: Intent, label: String, strict: Boolean) {
     val pi = PendingIntent.getActivity(this, 1, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
     val n = notificationBuilder(CHANNEL_ALERT)
-      .setContentTitle("Time for a 15-second breathing break")
-      .setContentText("You've been in $label for a while. Tap to start.")
+      .setContentTitle(if (strict) "Strict mode is on" else "Time for a 15-second breathing break")
+      .setContentText(if (strict) "$label is closed for now. Tap to see how long." else "You've been in $label for a while. Tap to start.")
       .setSmallIcon(android.R.drawable.ic_dialog_info)
       .setContentIntent(pi)
       .setFullScreenIntent(pi, true)
@@ -185,7 +212,7 @@ class BreakMonitorService : Service() {
   private fun buildOngoingNotification(): Notification =
     notificationBuilder(CHANNEL_ONGOING)
       .setContentTitle("Mindful breaks are on")
-      .setContentText("UpShift will remind you to breathe after ${settings.intervalMinutes} minutes in your chosen apps.")
+      .setContentText("UpShift will remind you to breathe after ${settings.policy.intervalMin} minutes in your chosen apps.")
       .setSmallIcon(android.R.drawable.ic_dialog_info)
       .setOngoing(true)
       .setPriority(Notification.PRIORITY_LOW)
@@ -212,6 +239,7 @@ class BreakMonitorService : Service() {
     private const val TAG = "UpShiftBreaks"
     const val ACTION_BREAK_DONE = "expo.modules.upshiftbreaks.ACTION_BREAK_DONE"
     private const val TICK_MS = 2_000L
+    private const val SWITCH_WINDOW_MS = 5 * 60_000L
     private const val CHANNEL_ONGOING = "upshift_breaks_ongoing"
     private const val CHANNEL_ALERT = "upshift_breaks_alert"
     private const val NOTIF_ONGOING = 4101
@@ -239,7 +267,7 @@ class BreakMonitorService : Service() {
     }
 
     fun notifyBreakDone(ctx: Context) {
-      if (!BreakConfig.read(ctx).enabled) return
+      if (!BreakConfig.read(ctx).policy.enabled) return
       try {
         ctx.startService(Intent(ctx, BreakMonitorService::class.java).setAction(ACTION_BREAK_DONE))
       } catch (t: Throwable) {

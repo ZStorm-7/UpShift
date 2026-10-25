@@ -52,9 +52,11 @@ class UpShiftBreaksModule : Module() {
         .map { mapOf("packageName" to it.first, "label" to it.second) }
     }
 
-    Function("setConfig") { enabled: Boolean, intervalMinutes: Int, packages: List<String> ->
-      BreakConfig.write(context, enabled, intervalMinutes, packages)
-      if (enabled && packages.isNotEmpty() && BreakMonitorService.hasUsageAccess(context)) {
+    // The whole policy as JSON (see services/breaks/native.ts), plus the apps to watch.
+    Function("setPolicy") { policyJson: String, packages: List<String> ->
+      BreakConfig.write(context, policyJson, packages)
+      val s = BreakConfig.read(context)
+      if (s.policy.enabled && packages.isNotEmpty() && BreakMonitorService.hasUsageAccess(context)) {
         BreakMonitorService.start(context)
       } else {
         BreakMonitorService.stop(context)
@@ -63,11 +65,8 @@ class UpShiftBreaksModule : Module() {
 
     Function("getConfig") {
       val s = BreakConfig.read(context)
-      mapOf(
-        "enabled" to s.enabled,
-        "intervalMinutes" to s.intervalMinutes,
-        "packages" to s.packages.toList(),
-        "running" to (s.enabled && s.packages.isNotEmpty() && BreakMonitorService.hasUsageAccess(context)),
+      BreakConfig.toMap(context) + mapOf(
+        "running" to (s.policy.enabled && s.packages.isNotEmpty() && BreakMonitorService.hasUsageAccess(context)),
       )
     }
 
@@ -78,6 +77,13 @@ class UpShiftBreaksModule : Module() {
 
     // The exercise is done: clear the block and start a fresh interval.
     Function("markBreakDone") {
+      BreakConfig.clearPending(context)
+      BreakConfig.incrementCompleted(context)
+      BreakMonitorService.notifyBreakDone(context)
+    }
+
+    // The break was cut short by an emergency pass: lift it WITHOUT counting it as a finished break.
+    Function("abandonBreak") {
       BreakConfig.clearPending(context)
       BreakMonitorService.notifyBreakDone(context)
     }

@@ -14,6 +14,11 @@ Inspired by ClearSpace, which gates apps behind a notification and a breathing s
 | Break over **other** apps | yes, UpShift jumps to the front | yes, Apple shields the apps and sends a notification | no |
 | "Exit" returns to the other app | yes (resumes where they were) | **no**: iOS cannot switch apps, so the user is told to switch back | n/a |
 | Choose apps | by name, in UpShift | Apple's own picker (UpShift never learns the names) | n/a |
+| Schedule (days and hours, overnight ok) | yes | yes (split into per-day windows) | in-app only |
+| Strict mode (close apps for 15/30/60 min) | yes | yes (Apple blocks them, lifts at the end) | n/a |
+| Emergency pass (2 a day, 10 min pause) | yes | yes (breaks resume after the pause) | yes |
+| Daily limit | yes | **no** (Apple's extension runs without our code, so it can't count breaks) | in-app only |
+| Smart timing (night, rapid switching) | yes | **no** (same reason) | night only |
 | Needs | Usage access + Display over other apps | Screen Time authorization + Apple's Family Controls entitlement | nothing |
 
 Other-app breaks need a **development or production build**, not Expo Go.
@@ -88,3 +93,38 @@ The local module in `modules/` is autolinked. On the phone:
   nothing to pause yet. When a timer is added, gate it with `useBreakPause('workout')`.
 * The Android and iOS native code has been type-checked but **not run on a device**.
   Test on at least one Pixel, one Samsung and one iPhone before releasing.
+
+
+## Features added in the second round
+
+* **Breathing styles** (all exactly 15 s, never longer): calm 5-1-6, physiological sigh,
+  box 3-3-3-3, long exhale. Each has a "good for" line in settings and a **Try it** button.
+  Defined as data in `services/breaks/timeline.ts`; tests assert each sums to 15,000 ms,
+  opens and closes with the eye, and never jumps.
+* **Soft sound** that swells with the breath. Generated from the same timeline by
+  `npm run make:breath-sounds` (plain sine partials, no licensed audio). Off = haptics only.
+  It follows the phone's silent switch.
+* **Intention step**: after the breathing, "What brings you to {app}?" with four answers.
+  Only counts are stored (`users/{uid}/breakDays`), never words.
+* **Emergency pass**: press and hold 3 s, 2 a day, pauses breaks and strict mode for 10 min.
+  Screen-reader users get a plain "activate" action instead of a hold.
+* **Weekly insights** screen: hero number, streak, exit rate, a 7-day bar chart with a
+  table view, and why you opened apps.
+* **Policy engine** (`services/breaks/policy.ts`, mirrored in `BreakPolicy.kt`/`UsageTracker.kt`).
+
+## Keeping Kotlin and TypeScript identical
+
+The background service can't run JavaScript, so the rules exist twice. The parity tool runs
+400 randomized scenarios through both and the outputs must match exactly:
+
+```
+D=$(mktemp -d)
+node --import ./tests/register.mjs modules/upshift-breaks/parity/ts-run.ts $D 400
+kotlinc -cp kotlin-stdlib.jar -d $D/out \
+  modules/upshift-breaks/android/src/main/java/expo/modules/upshiftbreaks/{UsageTracker,BreakPolicy}.kt \
+  modules/upshift-breaks/parity/Main.kt
+java -cp $D/out:kotlin-stdlib.jar MainKt $D/scenarios.txt $D/kotlin.txt
+diff $D/expected.txt $D/kotlin.txt && echo identical
+```
+It was run before this commit (400/400 identical) and was shown to catch deliberately
+injected bugs. Run it again whenever either side changes.

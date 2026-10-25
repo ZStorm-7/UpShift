@@ -5,7 +5,7 @@
 import { requireOptionalNativeModule } from 'expo';
 
 export type InstalledApp = { packageName: string; label: string };
-export type NativeBreakConfig = { enabled: boolean; intervalMinutes: number; packages: string[]; running: boolean };
+export type NativeBreakConfig = { enabled: boolean; intervalMinutes: number; packages: string[]; completedToday: number; running: boolean };
 export type PendingBreak = { pkg: string; label: string };
 
 type NativeApi = {
@@ -16,10 +16,12 @@ type NativeApi = {
   openOverlaySettings(): void;
   openBatterySettings(): void;
   getInstalledApps(): Promise<InstalledApp[]>;
-  setConfig(enabled: boolean, intervalMinutes: number, packages: string[]): void;
+  // `policyJson` is services/breaks/policy.ts's Policy, serialized.
+  setPolicy(policyJson: string, packages: string[]): void;
   getConfig(): NativeBreakConfig;
   getPendingBreak(): PendingBreak | null;
   markBreakDone(): void;
+  abandonBreak(): void;
   returnToApp(pkg: string): boolean;
   moveToBack(): Promise<void>;
 };

@@ -1,70 +1,131 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  PHASES, TOTAL_MS, phaseAt, scaleAt, eyeOpenAt, SCALE_MIN, SCALE_MAX,
+  PATTERNS, PATTERN_IDS, PATTERN_COPY, PHASE_KEY, PHASE_HAPTIC, TOTAL_MS, SCALE_MIN, SCALE_MAX,
+  patternTotalMs, phaseAt, scaleAt, eyeOpenAt, compile, asPatternId, DEFAULT_PATTERN, type PatternId,
 } from '../services/breaks/timeline.ts';
 import { step, complete, INITIAL_TRACKER, MAX_GAP_MS, REPEAT_GUARD_MS, type TrackerState } from '../services/breaks/usageTracker.ts';
 import { normalizeSettings, normalizeInterval, DEFAULT_INTERVAL_MIN, MIN_INTERVAL_MIN, MAX_INTERVAL_MIN } from '../services/breaks/settings.ts';
 
-// ---- timeline ----
-test('the exercise is exactly 15 seconds', () => assert.equal(TOTAL_MS, 15_000));
+// ---- timeline: properties every pattern must satisfy ----
+test('the exercise is exactly 15 seconds, for every pattern', () => {
+  assert.equal(TOTAL_MS, 15_000);
+  for (const id of PATTERN_IDS) assert.equal(patternTotalMs(PATTERNS[id]), 15_000, id);
+});
 
-test('phases run close, in, hold, out, open, then done', () => {
-  assert.deepEqual(PHASES.map(p => p.id), ['close', 'in', 'hold', 'out', 'open']);
-  const at = (ms: number) => phaseAt(ms).id;
-  assert.equal(at(0), 'close');
-  assert.equal(at(1999), 'close');
-  assert.equal(at(2000), 'in');
-  assert.equal(at(6999), 'in');
-  assert.equal(at(7000), 'hold');
-  assert.equal(at(8000), 'out');
-  assert.equal(at(13999), 'out');
-  assert.equal(at(14000), 'open');
-  assert.equal(at(14999), 'open');
-  assert.equal(at(15000), 'done');
-  assert.equal(at(99999), 'done');
-  assert.equal(at(-5), 'close');
+test('there are exactly four patterns and the default is the calm one', () => {
+  assert.deepEqual([...PATTERN_IDS].sort(), ['box', 'calm', 'long', 'sigh']);
+  assert.equal(DEFAULT_PATTERN, 'calm');
+  assert.equal(asPatternId('nope'), 'calm');
+  assert.equal(asPatternId('box'), 'box');
+  assert.equal(asPatternId(undefined), 'calm');
+});
+
+test('every pattern opens with closing the eyes and ends with opening them', () => {
+  for (const id of PATTERN_IDS) {
+    const ph = PATTERNS[id].phases;
+    assert.equal(ph[0].id, 'close', id);
+    assert.equal(ph[ph.length - 1].id, 'open', id);
+    assert.ok(ph[0].ms >= 1000 && ph[0].ms <= 2500, `${id} close length`);
+    assert.ok(ph[ph.length - 1].ms >= 1000 && ph[ph.length - 1].ms <= 2500, `${id} open length`);
+  }
+});
+
+test('every pattern has a name, a "good for" line and a label for each phase it uses', () => {
+  for (const id of PATTERN_IDS) {
+    assert.ok(PATTERN_COPY[id].name && PATTERN_COPY[id].goodFor, id);
+    for (const ph of PATTERNS[id].phases) {
+      assert.ok(PHASE_KEY[ph.id], `${id}/${ph.id} label`);
+      assert.ok(PHASE_HAPTIC[ph.id], `${id}/${ph.id} haptic`);
+    }
+  }
+});
+
+test('phases run in order and finish with done', () => {
+  const at = (id: PatternId, ms: number) => phaseAt(id, ms).id;
+  assert.deepEqual(PATTERNS.calm.phases.map(p => p.id), ['close', 'in', 'hold', 'out', 'open']);
+  assert.equal(at('calm', 0), 'close');
+  assert.equal(at('calm', 1999), 'close');
+  assert.equal(at('calm', 2000), 'in');
+  assert.equal(at('calm', 7000), 'hold');
+  assert.equal(at('calm', 8000), 'out');
+  assert.equal(at('calm', 14000), 'open');
+  assert.equal(at('calm', 15000), 'done');
+  assert.equal(at('calm', -5), 'close');
+  for (const id of PATTERN_IDS) { assert.equal(at(id, 14999) === 'open', true, id); assert.equal(at(id, 15000), 'done'); }
 });
 
 test('phase progress goes 0 to 1 inside a phase', () => {
-  assert.equal(phaseAt(2000).progress, 0);
-  assert.ok(Math.abs(phaseAt(4500).progress - 0.5) < 1e-9);
+  assert.equal(phaseAt('calm', 2000).progress, 0);
+  assert.ok(Math.abs(phaseAt('calm', 4500).progress - 0.5) < 1e-9);
 });
 
-test('orb stays within bounds, rests at both ends and peaks during the hold', () => {
-  for (let t = -100; t <= 16000; t += 25) {
-    const s = scaleAt(t);
-    assert.ok(s >= SCALE_MIN - 1e-9 && s <= SCALE_MAX + 1e-9, `t=${t} s=${s}`);
+test('orb stays within bounds for every pattern at every moment', () => {
+  for (const id of PATTERN_IDS) {
+    const c = compile(id);
+    for (let t = -100; t <= 16000; t += 25) {
+      const s = scaleAt(c, t);
+      assert.ok(s >= SCALE_MIN - 1e-9 && s <= SCALE_MAX + 1e-9, `${id} t=${t} s=${s}`);
+    }
+    assert.equal(scaleAt(c, 0), SCALE_MIN, id);
+    assert.equal(scaleAt(c, 15000), SCALE_MIN, id);
   }
-  assert.equal(scaleAt(0), SCALE_MIN);
-  assert.equal(scaleAt(2000), SCALE_MIN);
-  assert.equal(scaleAt(7000), SCALE_MAX);
-  assert.equal(scaleAt(7500), SCALE_MAX);
-  assert.equal(scaleAt(14000), SCALE_MIN);
-  assert.equal(scaleAt(15000), SCALE_MIN);
 });
 
-test('orb grows monotonically on the in-breath and shrinks on the out-breath', () => {
-  let prev = scaleAt(2000);
-  for (let t = 2100; t <= 7000; t += 100) { const s = scaleAt(t); assert.ok(s >= prev - 1e-9); prev = s; }
-  prev = scaleAt(8000);
-  for (let t = 8100; t <= 14000; t += 100) { const s = scaleAt(t); assert.ok(s <= prev + 1e-9); prev = s; }
+test('the orb is continuous: no jumps between frames', () => {
+  for (const id of PATTERN_IDS) {
+    const c = compile(id);
+    let prev = scaleAt(c, 0);
+    for (let t = 10; t <= 15000; t += 10) {
+      const s = scaleAt(c, t);
+      assert.ok(Math.abs(s - prev) < 0.02, `${id} jump at ${t}: ${prev} -> ${s}`);
+      prev = s;
+    }
+  }
 });
 
-test('breathing out takes longer than breathing in', () => {
-  const inMs = PHASES.find(p => p.id === 'in')!.ms;
-  const outMs = PHASES.find(p => p.id === 'out')!.ms;
-  assert.ok(outMs > inMs);
+test('calm: grows monotonically on the in-breath and shrinks on the out-breath', () => {
+  const c = compile('calm');
+  let prev = scaleAt(c, 2000);
+  for (let t = 2100; t <= 7000; t += 100) { const s = scaleAt(c, t); assert.ok(s >= prev - 1e-9); prev = s; }
+  assert.equal(scaleAt(c, 7500), SCALE_MAX);
+  prev = scaleAt(c, 8000);
+  for (let t = 8100; t <= 14000; t += 100) { const s = scaleAt(c, t); assert.ok(s <= prev + 1e-9); prev = s; }
 });
 
-test('eye is open at the start, closed during breathing, open again at the end', () => {
-  assert.equal(eyeOpenAt(0), 1);
-  assert.equal(eyeOpenAt(2000), 0);
-  assert.equal(eyeOpenAt(8000), 0);
-  assert.equal(eyeOpenAt(13999), 0);
-  assert.equal(eyeOpenAt(15000), 1);
-  assert.ok(eyeOpenAt(1000) > 0 && eyeOpenAt(1000) < 1);
-  assert.ok(eyeOpenAt(14500) > 0 && eyeOpenAt(14500) < 1);
+test('exhales are longer than inhales in every pattern except box (which is equal by design)', () => {
+  for (const id of PATTERN_IDS) {
+    const inMs = PATTERNS[id].phases.filter(p => p.id === 'in' || p.id === 'sip').reduce((n, p) => n + p.ms, 0);
+    const outMs = PATTERNS[id].phases.filter(p => p.id === 'out').reduce((n, p) => n + p.ms, 0);
+    if (id === 'box') assert.equal(inMs, outMs, id); else assert.ok(outMs > inMs, `${id}: out ${outMs} vs in ${inMs}`);
+  }
+});
+
+test('sigh: two double-inhales, each followed by a long exhale', () => {
+  const ids = PATTERNS.sigh.phases.map(p => p.id);
+  assert.deepEqual(ids, ['close', 'in', 'sip', 'out', 'rest', 'in', 'sip', 'out', 'open']);
+  const c = compile('sigh');
+  // peak of each sigh reaches full size
+  assert.equal(scaleAt(c, 1500 + 1500 + 700), SCALE_MAX);
+  assert.equal(scaleAt(c, 7500 + 1500 + 700), SCALE_MAX);
+});
+
+test('box: four equal sides', () => {
+  const sides = PATTERNS.box.phases.slice(1, -1).map(p => p.ms);
+  assert.deepEqual(sides, [3000, 3000, 3000, 3000]);
+});
+
+test('eye is open at the start, closed during breathing, open again at the end (every pattern)', () => {
+  for (const id of PATTERN_IDS) {
+    const c = compile(id);
+    assert.equal(eyeOpenAt(c, 0), 1, id);
+    assert.equal(eyeOpenAt(c, c.closeMs), 0, id);
+    assert.equal(eyeOpenAt(c, 7500), 0, id);
+    assert.equal(eyeOpenAt(c, c.openStartMs - 1), 0, id);
+    assert.equal(eyeOpenAt(c, 15000), 1, id);
+    assert.ok(eyeOpenAt(c, c.closeMs / 2) > 0 && eyeOpenAt(c, c.closeMs / 2) < 1, id);
+    assert.ok(eyeOpenAt(c, (c.openStartMs + 15000) / 2) > 0 && eyeOpenAt(c, (c.openStartMs + 15000) / 2) < 1, id);
+  }
 });
 
 // ---- usage tracker ----
@@ -167,10 +228,31 @@ test('settings normalize to safe defaults, break features are off until enabled'
   assert.equal(s.enabled, false);
   assert.equal(s.intervalMin, 30);
   assert.equal(s.pauseWorkout, true);
+  assert.equal(s.pattern, 'calm');
+  assert.equal(s.adaptive, false);
+  assert.equal(s.dailyCap, 0);
+  assert.equal(s.schedule.enabled, false);
+  assert.equal(s.strictUntil, 0);
   const t = normalizeSettings({ enabled: true, intervalMin: 20, pauseAudio: false, bogus: 1 } as any);
   assert.equal(t.enabled, true);
   assert.equal(t.intervalMin, 20);
   assert.equal(t.pauseAudio, false);
   assert.equal('bogus' in t, false);
   assert.equal(normalizeSettings({ enabled: 'yes' } as any).enabled, false);
+});
+
+test('new settings are validated', () => {
+  const now = 1_000_000;
+  const s = normalizeSettings({
+    pattern: 'nonsense', dailyCap: -4, schedule: { enabled: true, days: [1, 1, 9, -1, 3, 'x'], startMin: 5000, endMin: 600 },
+    pausedUntil: now - 1, strictUntil: now + 60_000,
+  } as any, now);
+  assert.equal(s.pattern, 'calm');
+  assert.equal(s.dailyCap, 0);
+  assert.deepEqual(s.schedule.days, [1, 3]);
+  assert.equal(s.schedule.startMin, 9 * 60); // out of range falls back to the default
+  assert.equal(s.schedule.endMin, 600);
+  assert.equal(s.pausedUntil, 0);            // already over
+  assert.equal(s.strictUntil, now + 60_000); // still running
+  assert.equal(normalizeSettings({ pattern: 'box' } as any).pattern, 'box');
 });

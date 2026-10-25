@@ -30,6 +30,7 @@ import FriendsScreen from './screens/FriendsScreen';
 import ChallengesScreen from './screens/ChallengesScreen';
 import BreakScreen from './screens/BreakScreen';
 import BreaksSettingsScreen from './screens/BreaksSettingsScreen';
+import BreaksInsightsScreen from './screens/BreaksInsightsScreen';
 import CoachWidget from './components/CoachWidget';
 
 const Stack = createNativeStackNavigator();
@@ -93,6 +94,7 @@ function RootNavigator() {
       <Stack.Screen name="Friends" component={FriendsScreen} />
       <Stack.Screen name="Challenges" component={ChallengesScreen} />
       <Stack.Screen name="BreaksSettings" component={BreaksSettingsScreen} />
+      <Stack.Screen name="BreaksInsights" component={BreaksInsightsScreen} />
       {/* The break is mandatory: no swipe-back, and the screen itself blocks the back button. */}
       <Stack.Screen
         name="Break"

@@ -4,10 +4,12 @@
     "strict": true
   },
   "exclude": [
-    "node_modules",
     "functions",
-    "tests",
     "modules/**/android",
-    "modules/**/ios"
+    "modules/**/ios",
+    "modules/upshift-breaks/parity",
+    "node_modules",
+    "scripts",
+    "tests"
   ]
 }

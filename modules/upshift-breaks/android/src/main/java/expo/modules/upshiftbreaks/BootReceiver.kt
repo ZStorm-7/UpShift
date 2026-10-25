@@ -10,7 +10,7 @@ class BootReceiver : BroadcastReceiver() {
   override fun onReceive(context: Context, intent: Intent) {
     if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
     val settings = BreakConfig.read(context)
-    if (!settings.enabled || settings.packages.isEmpty()) return
+    if (!settings.policy.enabled || settings.packages.isEmpty()) return
     try {
       BreakMonitorService.start(context)
     } catch (t: Throwable) {

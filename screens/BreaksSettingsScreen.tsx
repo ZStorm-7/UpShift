@@ -13,10 +13,13 @@ import { useLanguage } from '../i18n/LanguageContext';
 import { useBreak } from '../context/BreakContext';
 import haptics from '../services/haptics';
 import {
-  INTERVAL_CHOICES, DEFAULT_INTERVAL_MIN, MIN_INTERVAL_MIN, MAX_INTERVAL_MIN,
+  INTERVAL_CHOICES, STRICT_CHOICES, DAILY_CAP_CHOICES, DEFAULT_INTERVAL_MIN, MIN_INTERVAL_MIN, MAX_INTERVAL_MIN,
 } from '../services/breaks/settings';
+import { PATTERN_IDS, PATTERN_COPY, PATTERNS } from '../services/breaks/timeline';
+import { PASSES_PER_DAY } from '../services/breaks/passes';
+import { weekdayLabel, timeLabel, clockTimeLabel } from '../services/breaks/format';
 import {
-  capability, getPermissions, getInstalledApps, requestScreenTimeAccess, openUsageAccessSettings,
+  capability, supports, getPermissions, getInstalledApps, requestScreenTimeAccess, openUsageAccessSettings,
   openOverlaySettings, openBatterySettings, getIosPickerComponent, iosHasSelection, IOS_SELECTION_ID, InstalledApp,
 } from '../services/breaks/native';
 
@@ -25,8 +28,8 @@ const fill = (s: string, vars: Record<string, string | number>) =>
 
 export default function BreaksSettingsScreen({ navigation }: any) {
   const palette = usePalette();
-  const { t } = useLanguage();
-  const { settings, updateSettings, androidPackages, setAndroidPackages, startBreak } = useBreak();
+  const { t, language } = useLanguage();
+  const { settings, updateSettings, androidPackages, setAndroidPackages, startBreak, startStrict, passesLeftToday } = useBreak();
   const cap = capability();
 
   const [perms, setPerms] = useState(getPermissions());
@@ -101,6 +104,12 @@ export default function BreaksSettingsScreen({ navigation }: any) {
           </View>
         </View>
 
+        <Pressable accessibilityRole="button" onPress={() => navigation.navigate('BreaksInsights')}
+          style={[styles.card, styles.row, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+          <Text style={[styles.rowTitle, { color: palette.textPrimary, flex: 1 }]}>{t('breaksInsightsLink')}</Text>
+          <Text style={{ color: palette.textMuted, fontSize: 22 }}>›</Text>
+        </Pressable>
+
         {cap === 'none' && (
           <Text style={[styles.note, { color: palette.textMuted }]}>{t('breaksUnavailable')}</Text>
         )}
@@ -129,6 +138,98 @@ export default function BreaksSettingsScreen({ navigation }: any) {
           <Pressable accessibilityRole="button" accessibilityLabel="+5" onPress={() => step(5)} style={styles.stepBtn}>
             <Text style={[styles.stepGlyph, { color: palette.textPrimary }]}>+</Text>
           </Pressable>
+        </View>
+
+        {/* Breathing style */}
+        <Text style={[styles.section, { color: palette.textMuted }]}>{t('breaksPatternTitle').toUpperCase()}</Text>
+        <Text style={[styles.note, { color: palette.textMuted }]}>{t('breaksPatternHint')}</Text>
+        {PATTERN_IDS.map(id => {
+          const on = settings.pattern === id;
+          return (
+            <Pressable key={id} accessibilityRole="radio" accessibilityState={{ selected: on }}
+              onPress={() => { haptics.selection(); updateSettings({ pattern: id }); }}
+              style={[styles.patternCard, { backgroundColor: palette.surface, borderColor: on ? palette.accent : palette.border }]}>
+              <View style={styles.row}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.rowTitle, { color: palette.textPrimary }]}>{t(PATTERN_COPY[id].name)}</Text>
+                  <Text style={[styles.rhythm, { color: palette.textMuted }]}>{PATTERNS[id].rhythm}</Text>
+                </View>
+                <Pressable accessibilityRole="button" hitSlop={8}
+                  onPress={() => startBreak({ source: 'in-app', preview: true, pattern: id })}
+                  style={[styles.tryBtn, { borderColor: palette.accent }]}>
+                  <Text style={[styles.chipText, { color: palette.textPrimary }]}>{t('breaksPatternTry')}</Text>
+                </Pressable>
+              </View>
+              <Text style={[styles.note, { color: palette.textSecondary }]}>{t(PATTERN_COPY[id].goodFor)}</Text>
+            </Pressable>
+          );
+        })}
+
+        {/* During the break */}
+        <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+          <ToggleRow palette={palette} title={t('breaksSoundToggle')} hint={t('breaksSoundHint')}
+            value={settings.sound} onChange={v => updateSettings({ sound: v })} />
+          <ToggleRow palette={palette} title={t('breaksIntentToggle')} hint={t('breaksIntentHint')}
+            value={settings.intention} onChange={v => updateSettings({ intention: v })} />
+        </View>
+
+        {/* Schedule */}
+        <Text style={[styles.section, { color: palette.textMuted }]}>{t('breaksScheduleTitle').toUpperCase()}</Text>
+        <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+          <ToggleRow palette={palette} title={t('breaksScheduleToggle')} hint={t('breaksScheduleHint')}
+            value={settings.schedule.enabled} onChange={v => updateSettings({ schedule: { ...settings.schedule, enabled: v } })} />
+          {settings.schedule.enabled && (
+            <>
+              <View style={styles.chips}>
+                {[1, 2, 3, 4, 5, 6, 0].map(d => {
+                  const on = settings.schedule.days.includes(d);
+                  return (
+                    <Pressable key={d} accessibilityRole="button" accessibilityState={{ selected: on }}
+                      accessibilityLabel={weekdayLabel(d, language, 'long')}
+                      onPress={() => {
+                        haptics.selection();
+                        const days = on ? settings.schedule.days.filter(x => x !== d) : [...settings.schedule.days, d];
+                        updateSettings({ schedule: { ...settings.schedule, days } });
+                      }}
+                      style={[styles.dayChip, { borderColor: on ? palette.accent : palette.border, backgroundColor: on ? palette.accentSoft : 'transparent' }]}>
+                      <Text style={[styles.chipText, { color: palette.textPrimary }]}>{weekdayLabel(d, language, 'short')}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              {settings.schedule.days.length === 0 && <Text style={[styles.note, { color: palette.warning }]}>{t('breaksScheduleNoDays')}</Text>}
+              <TimeStepper palette={palette} label={t('breaksFrom')} value={timeLabel(settings.schedule.startMin, language)}
+                onStep={dir => updateSettings({ schedule: { ...settings.schedule, startMin: (settings.schedule.startMin + dir * 30 + 1440) % 1440 } })} />
+              <TimeStepper palette={palette} label={t('breaksTo')} value={timeLabel(settings.schedule.endMin, language)}
+                onStep={dir => updateSettings({ schedule: { ...settings.schedule, endMin: (settings.schedule.endMin + dir * 30 + 1440) % 1440 } })} />
+              {settings.schedule.endMin < settings.schedule.startMin && (
+                <Text style={[styles.note, { color: palette.textMuted }]}>{t('breaksOvernight')}</Text>
+              )}
+            </>
+          )}
+        </View>
+
+        {/* Daily limit and smart timing */}
+        <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+          <Text style={[styles.rowTitle, { color: palette.textPrimary }]}>{t('breaksCapTitle')}</Text>
+          <View style={styles.chips}>
+            {DAILY_CAP_CHOICES.map(n => {
+              const on = settings.dailyCap === n;
+              return (
+                <Pressable key={n} accessibilityRole="button" accessibilityState={{ selected: on }}
+                  onPress={() => { haptics.selection(); updateSettings({ dailyCap: n }); }}
+                  style={[styles.chip, { borderColor: on ? palette.accent : palette.border, backgroundColor: on ? palette.accentSoft : 'transparent' }]}>
+                  <Text style={[styles.chipText, { color: palette.textPrimary }]}>{n === 0 ? t('breaksCapOff') : fill(t('breaksCapN'), { n })}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          <Text style={[styles.note, { color: palette.textMuted }]}>
+            {t('breaksCapHint')}{!supports('dailyCap') ? ` ${t('breaksAndroidOnly')}.` : ''}
+          </Text>
+          <ToggleRow palette={palette} title={t('breaksAdaptiveToggle')}
+            hint={`${t('breaksAdaptiveHint')}${!supports('adaptive') ? ` ${t('breaksAndroidOnly')}.` : ''}`}
+            value={settings.adaptive} onChange={v => updateSettings({ adaptive: v })} />
         </View>
 
         {/* Apps */}
@@ -174,6 +275,28 @@ export default function BreaksSettingsScreen({ navigation }: any) {
           </View>
         )}
 
+        {/* Strict mode */}
+        <Text style={[styles.section, { color: palette.textMuted }]}>{t('breaksStrictTitle').toUpperCase()}</Text>
+        <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+          <Text style={[styles.note, { color: palette.textSecondary }]}>{t('breaksStrictHint')}</Text>
+          {settings.strictUntil > Date.now() ? (
+            <Text style={[styles.badge, { color: palette.warning }]}>{fill(t('breaksStrictActive'), { time: clockTimeLabel(settings.strictUntil, language) })}</Text>
+          ) : (
+            <>
+              <View style={styles.chips}>
+                {STRICT_CHOICES.map(n => (
+                  <Pressable key={n} accessibilityRole="button" disabled={!hasApps}
+                    onPress={() => { haptics.setComplete(); startStrict(n); }}
+                    style={[styles.chip, { borderColor: palette.accent, opacity: hasApps ? 1 : 0.4 }]}>
+                    <Text style={[styles.chipText, { color: palette.textPrimary }]}>{fill(t('breaksStrictStart'), { n })}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              {!hasApps && <Text style={[styles.note, { color: palette.textMuted }]}>{t('breaksStrictNeedApps')}</Text>}
+            </>
+          )}
+        </View>
+
         {/* What a break pauses */}
         <Text style={[styles.section, { color: palette.textMuted }]}>{t('breaksPauses').toUpperCase()}</Text>
         <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.border }]}>
@@ -186,6 +309,18 @@ export default function BreaksSettingsScreen({ navigation }: any) {
                 trackColor={{ true: palette.accent, false: palette.borderStrong }} accessibilityLabel={t(label)} />
             </View>))}
           <Text style={[styles.note, { color: palette.textMuted, marginTop: spacing.xs }]}>{t('breaksPauseQuestHint')}</Text>
+        </View>
+
+        {/* Emergency pass */}
+        <Text style={[styles.section, { color: palette.textMuted }]}>{t('breaksPassTitle').toUpperCase()}</Text>
+        <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+          <Text style={[styles.note, { color: palette.textSecondary }]}>{fill(t('breaksPassBody'), { n: PASSES_PER_DAY })}</Text>
+          <Text style={[styles.badge, { color: passesLeftToday > 0 ? palette.success : palette.textMuted }]}>
+            {fill(t('breaksPassLeftToday'), { n: passesLeftToday })}
+          </Text>
+          {settings.pausedUntil > Date.now() && (
+            <Text style={[styles.badge, { color: palette.warning }]}>{fill(t('breaksPausedUntil'), { time: clockTimeLabel(settings.pausedUntil, language) })}</Text>
+          )}
         </View>
 
         {/* Permissions */}
@@ -257,6 +392,38 @@ export default function BreaksSettingsScreen({ navigation }: any) {
   );
 }
 
+function ToggleRow({ palette, title, hint, value, onChange }: {
+  palette: any; title: string; hint?: string; value: boolean; onChange: (v: boolean) => void;
+}) {
+  return (
+    <View style={styles.toggleRow}>
+      <View style={{ flex: 1 }}>
+        <Text style={[styles.rowTitle, { color: palette.textPrimary }]}>{title}</Text>
+        {!!hint && <Text style={[styles.note, { color: palette.textMuted }]}>{hint}</Text>}
+      </View>
+      <Switch value={value} onValueChange={v => { haptics.selection(); onChange(v); }}
+        trackColor={{ true: palette.accent, false: palette.borderStrong }} accessibilityLabel={title} />
+    </View>
+  );
+}
+
+function TimeStepper({ palette, label, value, onStep }: {
+  palette: any; label: string; value: string; onStep: (dir: 1 | -1) => void;
+}) {
+  return (
+    <View style={styles.timeRow}>
+      <Text style={[styles.rowTitle, { color: palette.textPrimary, flex: 1 }]}>{label}</Text>
+      <Pressable accessibilityRole="button" accessibilityLabel={`${label} -30`} hitSlop={8} onPress={() => { haptics.selection(); onStep(-1); }} style={styles.stepBtn}>
+        <Text style={[styles.stepGlyph, { color: palette.textPrimary }]}>−</Text>
+      </Pressable>
+      <Text style={[styles.timeValue, { color: palette.textPrimary }]}>{value}</Text>
+      <Pressable accessibilityRole="button" accessibilityLabel={`${label} +30`} hitSlop={8} onPress={() => { haptics.selection(); onStep(1); }} style={styles.stepBtn}>
+        <Text style={[styles.stepGlyph, { color: palette.textPrimary }]}>+</Text>
+      </Pressable>
+    </View>
+  );
+}
+
 function PermRow({ palette, t, title, why, granted, onGrant, optional }: any) {
   return (
     <View style={styles.permRow}>
@@ -276,6 +443,13 @@ function PermRow({ palette, t, title, why, granted, onGrant, optional }: any) {
 }
 
 const styles = StyleSheet.create({
+  patternCard: { borderWidth: 1.5, borderRadius: radius.lg, padding: spacing.lg, gap: spacing.xs },
+  rhythm: { fontFamily: fontFamily.sansBold, fontSize: 12, letterSpacing: 0.6, marginTop: 2 },
+  tryBtn: { borderWidth: 1, borderRadius: radius.pill, paddingVertical: 6, paddingHorizontal: spacing.md },
+  dayChip: { minWidth: 44, paddingVertical: spacing.sm, paddingHorizontal: spacing.sm, borderRadius: radius.pill, borderWidth: 1, alignItems: 'center' },
+  toggleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.xs },
+  timeRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 44 },
+  timeValue: { fontFamily: fontFamily.sansBold, fontSize: 15, minWidth: 84, textAlign: 'center' },
   content: { padding: layout.screenPadding, paddingBottom: 56, gap: spacing.md },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   back: { fontSize: 34, lineHeight: 36, width: 24 },
