@@ -116,6 +116,10 @@ leaderboard and to your friends:
 - Your mindful-break streak (a number of days; the server limits it to how old your
   account is) and the avatar frame you earned from it (a coloured ring)
 
+- **Cheers:** if you send a friend a cheer (a 🔥, 👏 or 💪), they receive your first name,
+  last initial and the date. Only friends can send them, each kind once a day per friend.
+  A cheer you sent stays with the friend who received it, even if you later delete your account.
+
 The following is **never** visible to other users: your email, age, height,
 weight, gender, anything you have logged, your coach chats, or your sleep and
 workout details.
@@ -143,6 +147,9 @@ workout details.
   your sign-in. This cannot be undone. An active subscription is not cancelled
   automatically; cancel it in your app store settings. You can also email
   **Ridu.1029384756@gmail.com**.
+- **Export:** go to **Settings → Your data** to download everything you have logged as a
+  JSON file, or your daily totals as a CSV file. The file is created on your device and
+  not sent anywhere else.
 - **Coach:** clear chats and turn off personalization any time.
 - **Mindful breaks:** turn off anytime in Settings; revoke Usage Access or
   Screen Time permission in your device settings.

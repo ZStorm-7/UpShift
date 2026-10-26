@@ -18,6 +18,26 @@ service cloud.firestore {
       }
     }
 
+    // ---- Cheers ----
+    // A friend can leave a cheer (an emoji tap) in your cheers collection. The id is
+    // <sender>_<day>_<kind>, so each kind can be sent once a day per friend, and the
+    // rule only allows create: no edits, no deletes except by the owner (the wildcard above).
+    // Friendship is checked against YOUR friend list, which you only change by accepting.
+    match /users/{userId}/cheers/{cheerId} {
+      allow create: if request.auth != null
+        && request.auth.uid != userId
+        && request.resource.data.keys().hasOnly(['fromUid', 'fromName', 'kind', 'day', 'ts'])
+        && request.resource.data.fromUid == request.auth.uid
+        && request.resource.data.kind in ['fire', 'clap', 'muscle']
+        && request.resource.data.fromName is string
+        && request.resource.data.fromName.size() <= 40
+        && request.resource.data.day is string
+        && request.resource.data.day.size() == 10
+        && request.resource.data.ts == request.time
+        && cheerId == request.auth.uid + '_' + request.resource.data.day + '_' + request.resource.data.kind
+        && request.auth.uid in get(/databases/$(database)/documents/users/$(userId)/meta/social).data.friendUids;
+    }
+
     // ---- Public leaderboard ----
     // A leaderboard fundamentally requires reading other people's rows, so
     // this collection is readable by any signed-in user. It is a SEPARATE

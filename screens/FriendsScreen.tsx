@@ -23,6 +23,9 @@ import {
   getFriends,
   removeFriend,
 } from '../firebase/friends';
+import { getQuestCycleKey } from '../firebase/quests';
+import { sendCheer, loadCheers, loadSentToday } from '../firebase/cheers';
+import { CHEER_KINDS, CHEER_EMOJI, summarizeCheers, sentKinds, type CheerKind, type CheerSummary } from '../services/social/cheers';
 import { createChallenge, hasActiveChallengeWith } from '../firebase/challenges';
 import { usePalette, useThemedStyles, Palette } from '../theme/themedColors';
 
@@ -44,6 +47,10 @@ export default function FriendsScreen({ navigation }: any) {
   const [sending, setSending] = useState(false);
   const [status, setStatus] = useState('');
   const [busyUid, setBusyUid] = useState<string | null>(null);
+  const [cheers, setCheers] = useState<CheerSummary | null>(null);
+  const [sentCheers, setSentCheers] = useState<string[]>([]);
+  const [cheerNote, setCheerNote] = useState('');
+  const day = getQuestCycleKey();
 
   const load = useCallback(async () => {
     if (!authUser) return;
@@ -57,6 +64,9 @@ export default function FriendsScreen({ navigation }: any) {
       setFriendCode(code);
       setIncoming(requests);
       setFriends(friendList);
+      const [mine, sent] = await Promise.all([loadCheers(authUser.uid, day).catch(() => []), loadSentToday(authUser.uid, day)]);
+      setCheers(summarizeCheers(mine, day));
+      setSentCheers(sent);
     } catch {
       // Offline or a transient read failure — the screen just stays on its
       // last-known (or skeleton) state rather than showing a hard error for
@@ -161,6 +171,15 @@ export default function FriendsScreen({ navigation }: any) {
     }
   };
 
+  const handleCheer = async (friend: LeaderboardEntry, kind: CheerKind) => {
+    if (!authUser || !profile) return;
+    const result = await sendCheer(authUser.uid, `${profile.firstName} ${profile.lastInitial}.`, friend.uid, kind, day, sentCheers);
+    const msg = result === 'sent' ? t('cheerSent') : result === 'already_sent' ? t('cheerAlready') : t('cheerFailed');
+    if (result === 'sent') { haptics.setComplete(); setSentCheers(prev => [...prev, `${friend.uid}:${authUser.uid}_${day}_${kind}`]); } else haptics.error();
+    setCheerNote(msg);
+    AccessibilityInfo.announceForAccessibility(msg);
+  };
+
   const handleChallenge = async (friend: LeaderboardEntry) => {
     if (!authUser) return;
     setBusyUid(friend.uid);
@@ -228,6 +247,19 @@ export default function FriendsScreen({ navigation }: any) {
       />
 
       <Enter index={0}>
+        <SectionTitle>{t('cheerTitle')}</SectionTitle>
+        <Card>
+          {cheers && cheers.total > 0 ? (
+            <>
+              <Text style={styles.friendName}>
+                {CHEER_KINDS.filter(k => cheers.byKind[k] > 0).map(k => `${CHEER_EMOJI[k]} ${cheers.byKind[k]}`).join('   ')}
+              </Text>
+              <Text style={styles.friendMeta}>{t('cheerFrom').replace('{names}', cheers.senders.slice(0, 3).join(', '))}</Text>
+            </>
+          ) : (
+            <Text style={styles.friendMeta}>{t('cheerNone')}</Text>
+          )}
+        </Card>
         <SectionTitle>{t('yourFriendCode')}</SectionTitle>
         <Card style={styles.codeCard}>
           <Text style={styles.codeText}>{friendCode}</Text>
@@ -327,11 +359,32 @@ export default function FriendsScreen({ navigation }: any) {
                     </View>
                   )}
                 </View>
+                <View style={styles.cheerRow}>
+                  {CHEER_KINDS.map(kind => {
+                    const done = authUser ? sentKinds(sentCheers, friend.uid, authUser.uid, day).has(kind) : false;
+                    const label = fillName(t(kind === 'fire' ? 'cheerFire' : kind === 'clap' ? 'cheerClap' : 'cheerMuscle'), friend.displayName);
+                    return (
+                      <Pressable
+                        key={kind}
+                        onPress={() => handleCheer(friend, kind)}
+                        disabled={done}
+                        hitSlop={4}
+                        accessibilityRole="button"
+                        accessibilityLabel={label}
+                        accessibilityState={{ disabled: done }}
+                        aria-disabled={done}
+                        style={[styles.cheerBtn, done && { opacity: 0.4 }]}>
+                        <Text style={styles.cheerEmoji}>{CHEER_EMOJI[kind]}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
               </View>
               );
             })}
           </Card>
         )}
+        {!!cheerNote && <Text style={styles.statusText} accessibilityLiveRegion="polite">{cheerNote}</Text>}
       </Enter>
     </Screen>
   );
@@ -425,6 +478,9 @@ const makeStyles = (colors: Palette) => StyleSheet.create({
     ...type.bodySm,
     color: colors.textMuted,
   },
+  cheerRow: { flexDirection: 'row', gap: spacing.sm, paddingBottom: spacing.sm, paddingLeft: AVATAR_SIZE + spacing.md },
+  cheerBtn: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border },
+  cheerEmoji: { fontSize: 20 },
   friendActions: {
     flexDirection: 'row',
     gap: spacing.xs + 2,

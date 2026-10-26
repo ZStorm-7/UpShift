@@ -18,7 +18,7 @@
 // drifted is just a pile again. One timeline cannot drift.
 
 import { ReactNode, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, AccessibilityInfo } from 'react-native';
+import { View, Text, StyleSheet, AccessibilityInfo, Share } from 'react-native';
 import Animated, {
   SharedValue,
   useSharedValue,
@@ -43,6 +43,7 @@ import haptics from '../services/haptics';
 import sound from '../services/sound';
 import { useLanguage } from '../i18n/LanguageContext';
 import type { PersonalRecord } from '../services/training/progression';
+import { fillCard, topRecord, recordCardVars } from '../services/share/cards';
 import { usePalette, useThemedStyles, Palette } from '../theme/themedColors';
 
 type SummaryParams = {
@@ -300,6 +301,14 @@ export default function WorkoutSummaryScreen({ navigation, route }: any) {
                 .replace('{name}', pr.name).replace('{v}', String(Math.round(pr.value))).replace('{p}', String(Math.round(pr.previous)))}
             </Text>
           ))}
+          {prs.length > 0 && (
+            <PressableScale
+              accessibilityRole="button"
+              accessibilityLabel={t('shRecordButton')}
+              onPress={() => { const top = topRecord(prs); if (top) Share.share({ message: fillCard(t('shRecord'), recordCardVars(top)) }).catch(() => {}); }}>
+              <Text style={styles.prShare}>{t('shRecordButton')}</Text>
+            </PressableScale>
+          )}
           {volume > 0 && <Text style={styles.prVolume}>{t('wkTotalLifted').replace('{v}', Math.round(volume).toLocaleString())}</Text>}
         </Card>
       )}
@@ -441,6 +450,8 @@ const makeStyles = (colors: Palette) => StyleSheet.create({
   prHead: { fontFamily: fontFamily.sansBold, fontSize: 15, color: colors.textPrimary },
   prLine: { fontFamily: fontFamily.sans, fontSize: 14, color: colors.textSecondary },
   prVolume: { fontFamily: fontFamily.sansBold, fontSize: 13, color: colors.textMuted, marginTop: spacing.xs },
+  prShare: { fontFamily: fontFamily.sansBold, fontSize: 14, color: colors.accent, minHeight: 44, textAlignVertical: 'center', paddingVertical: spacing.sm },
+
   statCard: {
     alignItems: 'center',
     gap: spacing.xs,

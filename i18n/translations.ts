@@ -660,7 +660,45 @@ type TranslationKey =
   | 'ciNext'
   | 'ciNotifTitle'
   | 'ciNotifBody'
-  | 'ciAction';
+  | 'ciAction'
+  | 'cheerTitle'
+  | 'cheerNone'
+  | 'cheerFrom'
+  | 'cheerFire'
+  | 'cheerClap'
+  | 'cheerMuscle'
+  | 'cheerSent'
+  | 'cheerAlready'
+  | 'cheerFailed'
+  | 'trTitle'
+  | 'trSettingsRow'
+  | 'trIntro'
+  | 'trNone'
+  | 'trGoodSleepWater'
+  | 'trGoodSleepWorkoutRate'
+  | 'trGoodSleepCalories'
+  | 'trWorkoutWater'
+  | 'trWorkoutSleep'
+  | 'trWorkoutCalories'
+  | 'trTrendUp'
+  | 'trTrendDown'
+  | 'trMetricWater'
+  | 'trMetricSleep'
+  | 'trMetricCalories'
+  | 'trMetricWorkouts'
+  | 'trBasedOn'
+  | 'shWeek'
+  | 'shRecord'
+  | 'shButton'
+  | 'shWeekButton'
+  | 'shRecordButton'
+  | 'exJson'
+  | 'exCsv'
+  | 'exWorking'
+  | 'exSaved'
+  | 'exShared'
+  | 'exTooBig'
+  | 'exFailed';
 
 export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, string>>> = {
   en: {
@@ -1302,6 +1340,44 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     ciNotifTitle: "How's your day going?",
     ciNotifBody: "Tap the button to log a glass of water, or open UpShift to check in.",
     ciAction: "+250 ml water",
+    cheerTitle: "Cheers for you today",
+    cheerNone: "No cheers yet today",
+    cheerFrom: "{names} cheered you on",
+    cheerFire: "Send a fire cheer to {name}",
+    cheerClap: "Send applause to {name}",
+    cheerMuscle: "Send a strong cheer to {name}",
+    cheerSent: "Cheer sent",
+    cheerAlready: "Already sent today",
+    cheerFailed: "Could not send. Your friend may need to open Friends first.",
+    trTitle: "Trends",
+    trSettingsRow: "Trends that explain",
+    trIntro: "Patterns from your last 4 weeks. They show what tends to go together, not what causes what.",
+    trNone: "Not enough days logged yet. Keep logging and patterns will show up here.",
+    trGoodSleepWater: "On days you slept 7+ hours you drank {a} ml of water, vs {b} ml otherwise.",
+    trGoodSleepWorkoutRate: "You worked out on {a}% of days when you slept 7+ hours, vs {b}% otherwise.",
+    trGoodSleepCalories: "On days you slept 7+ hours you ate about {a} kcal, vs {b} kcal otherwise.",
+    trWorkoutWater: "On workout days you drank {a} ml of water, vs {b} ml on other days.",
+    trWorkoutSleep: "On workout days you slept {a} h, vs {b} h on other days.",
+    trWorkoutCalories: "On workout days you ate about {a} kcal, vs {b} kcal on other days.",
+    trTrendUp: "Your {metric} is up {pct}%: {from} to {to} a day.",
+    trTrendDown: "Your {metric} is down {pct}%: {from} to {to} a day.",
+    trMetricWater: "water",
+    trMetricSleep: "sleep",
+    trMetricCalories: "calories",
+    trMetricWorkouts: "workouts",
+    trBasedOn: "{n1} days vs {n2} days",
+    shWeek: "My UpShift week: {workouts} workouts, water goal hit {waterDays} days, {sleep} h average sleep, {streak}-day streak.",
+    shRecord: "New personal record on UpShift: {name}, {v} (was {p}).",
+    shButton: "Share",
+    shWeekButton: "Share my week",
+    shRecordButton: "Share my record",
+    exJson: "Download all my data (JSON)",
+    exCsv: "Download daily summary (CSV)",
+    exWorking: "Preparing your file…",
+    exSaved: "Saved to your downloads: {name}",
+    exShared: "Sent to the share sheet.",
+    exTooBig: "This file is too big to share from your phone. Use the daily summary (CSV) instead.",
+    exFailed: "Could not export your data. Check your connection and try again.",
   },
   es: {
     goodMorning: 'Buenos días',
@@ -1942,6 +2018,44 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     ciNotifTitle: "¿Cómo va tu día?",
     ciNotifBody: "Toca el botón para registrar un vaso de agua o abre UpShift para hacer tu chequeo.",
     ciAction: "+250 ml de agua",
+    cheerTitle: "Ánimos para ti hoy",
+    cheerNone: "Aún no hay ánimos hoy",
+    cheerFrom: "{names} te animó",
+    cheerFire: "Enviar ánimo de fuego a {name}",
+    cheerClap: "Enviar aplausos a {name}",
+    cheerMuscle: "Enviar ánimo de fuerza a {name}",
+    cheerSent: "Ánimo enviado",
+    cheerAlready: "Ya enviado hoy",
+    cheerFailed: "No se pudo enviar. Tu amigo quizá deba abrir Amigos primero.",
+    trTitle: "Tendencias",
+    trSettingsRow: "Tendencias que explican",
+    trIntro: "Patrones de tus últimas 4 semanas. Muestran qué suele ir junto, no qué causa qué.",
+    trNone: "Aún no hay suficientes días registrados. Sigue registrando y los patrones aparecerán aquí.",
+    trGoodSleepWater: "Los días que dormiste 7+ horas bebiste {a} ml de agua, frente a {b} ml en los demás.",
+    trGoodSleepWorkoutRate: "Entrenaste en el {a}% de los días que dormiste 7+ horas, frente al {b}% en los demás.",
+    trGoodSleepCalories: "Los días que dormiste 7+ horas comiste unas {a} kcal, frente a {b} kcal en los demás.",
+    trWorkoutWater: "Los días que entrenaste bebiste {a} ml de agua, frente a {b} ml en los demás.",
+    trWorkoutSleep: "Los días que entrenaste dormiste {a} h, frente a {b} h en los demás.",
+    trWorkoutCalories: "Los días que entrenaste comiste unas {a} kcal, frente a {b} kcal en los demás.",
+    trTrendUp: "Tu {metric} subió {pct}%: de {from} a {to} al día.",
+    trTrendDown: "Tu {metric} bajó {pct}%: de {from} a {to} al día.",
+    trMetricWater: "agua",
+    trMetricSleep: "sueño",
+    trMetricCalories: "calorías",
+    trMetricWorkouts: "entrenamientos",
+    trBasedOn: "{n1} días frente a {n2} días",
+    shWeek: "Mi semana en UpShift: {workouts} entrenamientos, meta de agua cumplida {waterDays} días, {sleep} h de sueño en promedio, racha de {streak} días.",
+    shRecord: "Nuevo récord personal en UpShift: {name}, {v} (antes {p}).",
+    shButton: "Compartir",
+    shWeekButton: "Compartir mi semana",
+    shRecordButton: "Compartir mi récord",
+    exJson: "Descargar todos mis datos (JSON)",
+    exCsv: "Descargar resumen diario (CSV)",
+    exWorking: "Preparando tu archivo…",
+    exSaved: "Guardado en tus descargas: {name}",
+    exShared: "Enviado a la hoja de compartir.",
+    exTooBig: "Este archivo es demasiado grande para compartirlo desde el teléfono. Usa el resumen diario (CSV).",
+    exFailed: "No se pudieron exportar tus datos. Revisa tu conexión e inténtalo de nuevo.",
   },
   fr: {
     goodMorning: 'Bonjour',
@@ -2582,6 +2696,44 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     ciNotifTitle: "Comment se passe ta journée ?",
     ciNotifBody: "Touche le bouton pour noter un verre d’eau, ou ouvre UpShift pour faire le point.",
     ciAction: "+250 ml d’eau",
+    cheerTitle: "Encouragements pour toi aujourd’hui",
+    cheerNone: "Pas encore d’encouragements aujourd’hui",
+    cheerFrom: "{names} t’a encouragé",
+    cheerFire: "Envoyer un encouragement feu à {name}",
+    cheerClap: "Envoyer des applaudissements à {name}",
+    cheerMuscle: "Envoyer un encouragement musclé à {name}",
+    cheerSent: "Encouragement envoyé",
+    cheerAlready: "Déjà envoyé aujourd’hui",
+    cheerFailed: "Envoi impossible. Ton ami doit peut-être ouvrir Amis d’abord.",
+    trTitle: "Tendances",
+    trSettingsRow: "Tendances qui expliquent",
+    trIntro: "Tendances de tes 4 dernières semaines. Elles montrent ce qui va souvent ensemble, pas ce qui cause quoi.",
+    trNone: "Pas encore assez de jours enregistrés. Continue et les tendances apparaîtront ici.",
+    trGoodSleepWater: "Les jours où tu as dormi 7 h ou plus, tu as bu {a} ml d’eau, contre {b} ml sinon.",
+    trGoodSleepWorkoutRate: "Tu t’es entraîné {a} % des jours où tu as dormi 7 h ou plus, contre {b} % sinon.",
+    trGoodSleepCalories: "Les jours où tu as dormi 7 h ou plus, tu as mangé environ {a} kcal, contre {b} kcal sinon.",
+    trWorkoutWater: "Les jours d’entraînement, tu as bu {a} ml d’eau, contre {b} ml les autres jours.",
+    trWorkoutSleep: "Les jours d’entraînement, tu as dormi {a} h, contre {b} h les autres jours.",
+    trWorkoutCalories: "Les jours d’entraînement, tu as mangé environ {a} kcal, contre {b} kcal les autres jours.",
+    trTrendUp: "Ton {metric} a augmenté de {pct} % : de {from} à {to} par jour.",
+    trTrendDown: "Ton {metric} a baissé de {pct} % : de {from} à {to} par jour.",
+    trMetricWater: "eau",
+    trMetricSleep: "sommeil",
+    trMetricCalories: "calories",
+    trMetricWorkouts: "entraînements",
+    trBasedOn: "{n1} jours contre {n2} jours",
+    shWeek: "Ma semaine sur UpShift : {workouts} entraînements, objectif d’eau atteint {waterDays} jours, {sleep} h de sommeil en moyenne, série de {streak} jours.",
+    shRecord: "Nouveau record personnel sur UpShift : {name}, {v} (avant {p}).",
+    shButton: "Partager",
+    shWeekButton: "Partager ma semaine",
+    shRecordButton: "Partager mon record",
+    exJson: "Télécharger toutes mes données (JSON)",
+    exCsv: "Télécharger le résumé quotidien (CSV)",
+    exWorking: "Préparation de ton fichier…",
+    exSaved: "Enregistré dans tes téléchargements : {name}",
+    exShared: "Envoyé à la fenêtre de partage.",
+    exTooBig: "Ce fichier est trop volumineux pour être partagé depuis ton téléphone. Utilise le résumé quotidien (CSV).",
+    exFailed: "Impossible d’exporter tes données. Vérifie ta connexion et réessaie.",
   },
   zh: {
     goodMorning: '早上好',
@@ -3222,6 +3374,44 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     ciNotifTitle: "今天过得怎么样？",
     ciNotifBody: "点按按钮记录一杯水，或打开 UpShift 打卡。",
     ciAction: "+250 毫升水",
+    cheerTitle: "今天给你的鼓励",
+    cheerNone: "今天还没有鼓励",
+    cheerFrom: "{names} 为你加油",
+    cheerFire: "给 {name} 送火焰鼓励",
+    cheerClap: "给 {name} 送掌声",
+    cheerMuscle: "给 {name} 送力量鼓励",
+    cheerSent: "鼓励已发送",
+    cheerAlready: "今天已发送",
+    cheerFailed: "发送失败。你的好友可能需要先打开“好友”页面。",
+    trTitle: "趋势",
+    trSettingsRow: "解读趋势",
+    trIntro: "你最近 4 周的规律。它们显示哪些事常常同时出现，而不是因果关系。",
+    trNone: "记录的天数还不够。继续记录，规律就会出现在这里。",
+    trGoodSleepWater: "睡够 7 小时以上的日子你喝了 {a} 毫升水，其他日子是 {b} 毫升。",
+    trGoodSleepWorkoutRate: "睡够 7 小时以上的日子里有 {a}% 的天数你锻炼了，其他日子是 {b}%。",
+    trGoodSleepCalories: "睡够 7 小时以上的日子你大约摄入 {a} 千卡，其他日子是 {b} 千卡。",
+    trWorkoutWater: "锻炼日你喝了 {a} 毫升水，其他日子是 {b} 毫升。",
+    trWorkoutSleep: "锻炼日你睡了 {a} 小时，其他日子是 {b} 小时。",
+    trWorkoutCalories: "锻炼日你大约摄入 {a} 千卡，其他日子是 {b} 千卡。",
+    trTrendUp: "你的{metric}上升了 {pct}%：每天从 {from} 到 {to}。",
+    trTrendDown: "你的{metric}下降了 {pct}%：每天从 {from} 到 {to}。",
+    trMetricWater: "饮水",
+    trMetricSleep: "睡眠",
+    trMetricCalories: "热量",
+    trMetricWorkouts: "锻炼",
+    trBasedOn: "{n1} 天对比 {n2} 天",
+    shWeek: "我的 UpShift 一周：锻炼 {workouts} 次，{waterDays} 天达成饮水目标，平均睡眠 {sleep} 小时，连续 {streak} 天。",
+    shRecord: "UpShift 新个人纪录：{name}，{v}（之前 {p}）。",
+    shButton: "分享",
+    shWeekButton: "分享我的一周",
+    shRecordButton: "分享我的纪录",
+    exJson: "下载我的全部数据 (JSON)",
+    exCsv: "下载每日摘要 (CSV)",
+    exWorking: "正在准备文件…",
+    exSaved: "已保存到下载：{name}",
+    exShared: "已发送到分享面板。",
+    exTooBig: "此文件太大，无法从手机分享。请改用每日摘要 (CSV)。",
+    exFailed: "无法导出你的数据。请检查网络后重试。",
   },
   te: {
     goodMorning: 'శుభోదయం',
@@ -3862,5 +4052,43 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     ciNotifTitle: "మీ రోజు ఎలా సాగుతోంది?",
     ciNotifBody: "ఒక గ్లాసు నీరు నమోదు చేయడానికి బటన్ నొక్కండి, లేదా చెక్-ఇన్ కోసం UpShift తెరవండి.",
     ciAction: "+250 మి.లీ నీరు",
+    cheerTitle: "ఈ రోజు మీకు ప్రోత్సాహాలు",
+    cheerNone: "ఈ రోజు ఇంకా ప్రోత్సాహాలు లేవు",
+    cheerFrom: "{names} మిమ్మల్ని ప్రోత్సహించారు",
+    cheerFire: "{name}కు అగ్ని ప్రోత్సాహం పంపండి",
+    cheerClap: "{name}కు చప్పట్లు పంపండి",
+    cheerMuscle: "{name}కు బల ప్రోత్సాహం పంపండి",
+    cheerSent: "ప్రోత్సాహం పంపబడింది",
+    cheerAlready: "ఈ రోజు ఇప్పటికే పంపబడింది",
+    cheerFailed: "పంపలేకపోయాం. మీ స్నేహితుడు మొదట స్నేహితులను తెరవాల్సి ఉండవచ్చు.",
+    trTitle: "ధోరణులు",
+    trSettingsRow: "వివరించే ధోరణులు",
+    trIntro: "మీ గత 4 వారాల నమూనాలు. ఇవి దేనితో ఏది కలిసి వస్తుందో చూపిస్తాయి, కారణాన్ని కాదు.",
+    trNone: "ఇంకా తగినన్ని రోజులు నమోదు కాలేదు. నమోదు కొనసాగించండి, నమూనాలు ఇక్కడ కనిపిస్తాయి.",
+    trGoodSleepWater: "7+ గంటలు నిద్రపోయిన రోజుల్లో మీరు {a} మి.లీ నీరు తాగారు, లేనప్పుడు {b} మి.లీ.",
+    trGoodSleepWorkoutRate: "7+ గంటలు నిద్రపోయిన రోజుల్లో {a}% రోజులు వ్యాయామం చేశారు, లేనప్పుడు {b}%.",
+    trGoodSleepCalories: "7+ గంటలు నిద్రపోయిన రోజుల్లో సుమారు {a} కిలోకేలరీలు తిన్నారు, లేనప్పుడు {b}.",
+    trWorkoutWater: "వ్యాయామ రోజుల్లో {a} మి.లీ నీరు తాగారు, ఇతర రోజుల్లో {b} మి.లీ.",
+    trWorkoutSleep: "వ్యాయామ రోజుల్లో {a} గంటలు నిద్రపోయారు, ఇతర రోజుల్లో {b} గంటలు.",
+    trWorkoutCalories: "వ్యాయామ రోజుల్లో సుమారు {a} కిలోకేలరీలు తిన్నారు, ఇతర రోజుల్లో {b}.",
+    trTrendUp: "మీ {metric} {pct}% పెరిగింది: రోజుకు {from} నుండి {to}.",
+    trTrendDown: "మీ {metric} {pct}% తగ్గింది: రోజుకు {from} నుండి {to}.",
+    trMetricWater: "నీరు",
+    trMetricSleep: "నిద్ర",
+    trMetricCalories: "కేలరీలు",
+    trMetricWorkouts: "వ్యాయామాలు",
+    trBasedOn: "{n1} రోజులు vs {n2} రోజులు",
+    shWeek: "నా UpShift వారం: {workouts} వ్యాయామాలు, {waterDays} రోజులు నీటి లక్ష్యం, సగటు నిద్ర {sleep} గంటలు, {streak} రోజుల స్ట్రీక్.",
+    shRecord: "UpShiftలో కొత్త వ్యక్తిగత రికార్డు: {name}, {v} (ముందు {p}).",
+    shButton: "షేర్ చేయండి",
+    shWeekButton: "నా వారాన్ని షేర్ చేయండి",
+    shRecordButton: "నా రికార్డును షేర్ చేయండి",
+    exJson: "నా మొత్తం డేటాను డౌన్‌లోడ్ చేయండి (JSON)",
+    exCsv: "రోజువారీ సారాంశాన్ని డౌన్‌లోడ్ చేయండి (CSV)",
+    exWorking: "మీ ఫైల్ సిద్ధం చేస్తున్నాం…",
+    exSaved: "డౌన్‌లోడ్‌లలో సేవ్ చేయబడింది: {name}",
+    exShared: "షేర్ షీట్‌కు పంపబడింది.",
+    exTooBig: "ఈ ఫైల్ ఫోన్ నుండి షేర్ చేయడానికి చాలా పెద్దది. బదులుగా రోజువారీ సారాంశం (CSV) వాడండి.",
+    exFailed: "మీ డేటాను ఎగుమతి చేయలేకపోయాం. కనెక్షన్ తనిఖీ చేసి మళ్లీ ప్రయత్నించండి.",
   },
 };

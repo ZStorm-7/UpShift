@@ -1,7 +1,7 @@
 // Your week in review: numbers, what went well, one thing to work on, and a goal for next week.
 
 import { useEffect, useMemo, useState } from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Share } from 'react-native';
 import { Screen, AppBar, Button, Card } from '../components/ui';
 import { spacing, radius, layout } from '../theme/tokens';
 import { fontFamily } from '../theme/fonts';
@@ -15,6 +15,7 @@ import { streakDocRef, cleanStreak, liveStreak } from '../firebase/streaks';
 import { getDoc } from 'firebase/firestore';
 import { calculateWaterGoal } from '../context/UserContext';
 import haptics from '../services/haptics';
+import { fillCard, weekCardVars } from '../services/share/cards';
 
 const fmt = (s: string, vars: Record<string, string | number>) => Object.entries(vars).reduce((a, [k, v]) => a.split(`{${k}}`).join(String(v)), s);
 const WIN_KEY: Record<Win['key'], string> = { workouts: 'wrWinWorkouts', water: 'wrWinWater', sleep: 'wrWinSleep', logging: 'wrWinLogging', calories: 'wrWinCalories', breaks: 'wrWinBreaks', streak: 'wrWinStreak', showedUp: 'wrWinShowedUp' };
@@ -29,6 +30,7 @@ export default function WeeklyReviewScreen({ navigation }: any) {
   const [weekOf, setWeekOf] = useState('');
   const [range, setRange] = useState<[string, string]>(['', '']);
   const [picked, setPicked] = useState<string | null>(null);
+  const [streakNow, setStreakNow] = useState(0);
 
   useEffect(() => {
     if (!authUser) return;
@@ -39,6 +41,7 @@ export default function WeeklyReviewScreen({ navigation }: any) {
       let streak = 0;
       try { streak = liveStreak(cleanStreak((await getDoc(streakDocRef(authUser.uid))).data()), getQuestCycleKey()); } catch { /* no streak */ }
       const goals = { calories: profile?.calorieGoal || 2000, water: profile?.waterGoalMl || calculateWaterGoal(profile?.age ?? 30), sleep: 8 };
+      setStreakNow(streak);
       setReview(buildWeeklyReview(days, goals, streak));
       saveReviewSeen(authUser.uid, wk).catch(() => {});
     })();
@@ -51,6 +54,12 @@ export default function WeeklyReviewScreen({ navigation }: any) {
     if (!authUser) return;
     setPicked(g.id); haptics.setComplete();
     await saveWeeklyGoal(authUser.uid, nextWeekKey(weekOf), g).catch(() => {});
+  }
+
+  async function shareWeek() {
+    if (!review) return;
+    haptics.selection();
+    try { await Share.share({ message: fillCard(t('shWeek'), weekCardVars(review, streakNow)) }); } catch { /* dismissed */ }
   }
 
   const stats = review?.stats;
@@ -101,7 +110,8 @@ export default function WeeklyReviewScreen({ navigation }: any) {
             })}
             {picked && <Text style={[styles.body, { color: palette.textSecondary }]} accessibilityLiveRegion="polite">{t('wrGoalSet')}</Text>}
           </Card>
-          <Button label={t('back')} variant="secondary" onPress={() => navigation.goBack()} />
+          <Button label={t('shWeekButton')} variant="secondary" onPress={shareWeek} />
+          <Button label={t('back')} variant="ghost" onPress={() => navigation.goBack()} />
         </>
       )}
     </Screen>

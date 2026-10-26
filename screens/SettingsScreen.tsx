@@ -17,6 +17,9 @@ import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { requestNotificationPermission, hasNotificationPermission, cancelAllReminders, scheduleDailyCheckin, cancelDailyCheckin } from '../services/notifications';
 import { loadCheckin, saveCheckin } from '../firebase/checkin';
+import { loadExportData } from '../firebase/exportData';
+import { buildExportJson, dailyCsv, exportFileName } from '../services/export/dataExport';
+import { deliverText } from '../services/export/deliver';
 import { DEFAULT_CHECKIN, shiftTime, formatClock, nextFire, type CheckinSettings } from '../services/habits/checkin';
 import { View, Text, StyleSheet, Pressable, ScrollView, Switch, Alert, Linking, Platform, Modal, TextInput, ActivityIndicator } from 'react-native';
 import { Screen } from '../components/ui';
@@ -51,6 +54,24 @@ export default function SettingsScreen({ navigation }: any) {
   const [reminderNote, setReminderNote] = useState('');
   const [checkin, setCheckin] = useState<CheckinSettings>(DEFAULT_CHECKIN);
   const [checkinNote, setCheckinNote] = useState('');
+  const [exportNote, setExportNote] = useState('');
+  const [exporting, setExporting] = useState(false);
+
+  async function exportData(kind: 'json' | 'csv') {
+    if (!authUser || exporting) return;
+    setExporting(true); setExportNote(t('exWorking'));
+    try {
+      const { parts, summaries } = await loadExportData(authUser.uid);
+      const now = new Date();
+      const name = exportFileName(kind, now);
+      const r = kind === 'json' ? await deliverText(name, buildExportJson(parts, now), 'application/json') : await deliverText(name, dailyCsv(summaries), 'text/csv');
+      setExportNote(r === 'saved' ? t('exSaved').replace('{name}', name) : r === 'shared' ? t('exShared') : r === 'too_big' ? t('exTooBig') : r === 'failed' ? t('exFailed') : '');
+    } catch {
+      setExportNote(t('exFailed'));
+    } finally {
+      setExporting(false);
+    }
+  }
   const locale = language === 'zh' ? 'zh-CN' : language;
   useEffect(() => { if (authUser) loadCheckin(authUser.uid).then(setCheckin).catch(() => {}); }, [authUser?.uid]);
 
@@ -248,6 +269,7 @@ export default function SettingsScreen({ navigation }: any) {
         {/* Weekly review */}
         <Section title={t('wrTitle')} palette={palette}>
           <TappableRow label={t('wrSettingsRow')} onPress={() => navigation.navigate('WeeklyReview')} palette={palette} />
+          <TappableRow label={t('trSettingsRow')} onPress={() => navigation.navigate('Trends')} palette={palette} />
         </Section>
 
         {/* Mindful breaks */}
@@ -337,6 +359,9 @@ export default function SettingsScreen({ navigation }: any) {
 
         {/* Danger zone */}
         <Section title={t('setYourData')} palette={palette}>
+          <TappableRow label={t('exJson')} onPress={() => exportData('json')} palette={palette} />
+          <TappableRow label={t('exCsv')} onPress={() => exportData('csv')} palette={palette} />
+          {exportNote !== '' && <Text style={{ color: palette.textSecondary, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, fontSize: 13 }} accessibilityLiveRegion="polite">{exportNote}</Text>}
           <TappableRow
             label={t('deleteAccount')}
             onPress={() => { setDeletePassword(''); setDeleteError(''); setDeleteOpen(true); }}

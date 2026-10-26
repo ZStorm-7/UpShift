@@ -34,6 +34,7 @@ import BreaksInsightsScreen from './screens/BreaksInsightsScreen';
 import CustomWorkoutsScreen from './screens/CustomWorkoutsScreen';
 import GroceryScreen from './screens/GroceryScreen';
 import WeeklyReviewScreen from './screens/WeeklyReviewScreen';
+import TrendsScreen from './screens/TrendsScreen';
 import CoachWidget from './components/CoachWidget';
 import CheckinSync from './components/CheckinSync';
 
@@ -96,6 +97,7 @@ function RootNavigator() {
       <Stack.Screen name="CustomWorkouts" component={CustomWorkoutsScreen} />
       <Stack.Screen name="Grocery" component={GroceryScreen} />
       <Stack.Screen name="WeeklyReview" component={WeeklyReviewScreen} />
+      <Stack.Screen name="Trends" component={TrendsScreen} />
       <Stack.Screen name="History" component={HistoryScreen} />
       <Stack.Screen name="Leaderboard" component={LeaderboardScreen} />
       <Stack.Screen name="Friends" component={FriendsScreen} />
