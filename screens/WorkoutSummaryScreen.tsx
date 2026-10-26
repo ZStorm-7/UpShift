@@ -42,6 +42,7 @@ import { beat, easing, summary as summaryBeats } from '../animation/motion';
 import haptics from '../services/haptics';
 import sound from '../services/sound';
 import { useLanguage } from '../i18n/LanguageContext';
+import type { PersonalRecord } from '../services/training/progression';
 import { usePalette, useThemedStyles, Palette } from '../theme/themedColors';
 
 type SummaryParams = {
@@ -52,6 +53,10 @@ type SummaryParams = {
   muscleGroup?: string;
   /** Minutes, if the caller tracked it. */
   durationMinutes?: number;
+  /** Personal records set in this session (services/training/progression.ts). */
+  prs?: PersonalRecord[];
+  /** Total weight lifted in finished sets, in pounds. */
+  volume?: number;
 };
 
 export default function WorkoutSummaryScreen({ navigation, route }: any) {
@@ -69,6 +74,8 @@ export default function WorkoutSummaryScreen({ navigation, route }: any) {
     exerciseCount = 0,
     muscleGroup = '',
     durationMinutes,
+    prs = [],
+    volume = 0,
   }: SummaryParams = route?.params ?? {};
 
   const perfect = totalSets > 0 && completedSets === totalSets;
@@ -284,6 +291,19 @@ export default function WorkoutSummaryScreen({ navigation, route }: any) {
         ))}
       </View>
 
+      {(prs.length > 0 || volume > 0) && (
+        <Card style={styles.prCard}>
+          {prs.length > 0 && <Text style={styles.prHead}>🏅 {t('wkNewRecord')}</Text>}
+          {prs.map(pr => (
+            <Text key={pr.name + pr.kind} style={styles.prLine}>
+              {t(pr.kind === 'weight' ? 'wkPrWeight' : pr.kind === 'e1rm' ? 'wkPrE1rm' : 'wkPrVolume')
+                .replace('{name}', pr.name).replace('{v}', String(Math.round(pr.value))).replace('{p}', String(Math.round(pr.previous)))}
+            </Text>
+          ))}
+          {volume > 0 && <Text style={styles.prVolume}>{t('wkTotalLifted').replace('{v}', Math.round(volume).toLocaleString())}</Text>}
+        </Card>
+      )}
+
       {/* Arrives last. Showing the exit before the reward has finished
           animating invites people to leave before they've seen it. */}
       <Animated.View style={[styles.actions, actionStyle]}>
@@ -417,6 +437,10 @@ const makeStyles = (colors: Palette) => StyleSheet.create({
   statSlot: {
     flex: 1,
   },
+  prCard: { gap: spacing.xs, marginBottom: spacing.lg },
+  prHead: { fontFamily: fontFamily.sansBold, fontSize: 15, color: colors.textPrimary },
+  prLine: { fontFamily: fontFamily.sans, fontSize: 14, color: colors.textSecondary },
+  prVolume: { fontFamily: fontFamily.sansBold, fontSize: 13, color: colors.textMuted, marginTop: spacing.xs },
   statCard: {
     alignItems: 'center',
     gap: spacing.xs,

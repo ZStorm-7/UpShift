@@ -308,6 +308,8 @@ const PRO: WorkoutTemplate[] = [
   },
 ];
 
+export const ALL_TEMPLATES = (): WorkoutTemplate[] => [...BEGINNER, ...INTERMEDIATE, ...ADVANCED, ...PRO];
+
 const TEMPLATES_BY_TIER: Record<WorkoutTier, WorkoutTemplate[]> = {
   beginner: BEGINNER,
   intermediate: INTERMEDIATE,
