@@ -98,7 +98,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     // services/purchases.ts) — a missing SDK is not an entitlement.
     let paid: 'monthly' | 'annual' | null = null;
     try {
-      paid = await purchases.getActiveEntitlement();
+      paid = await purchases.getActiveEntitlement(authUser.uid);
     } catch {
       paid = null;
     }
@@ -137,7 +137,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
 
   const restorePurchases = useCallback(async () => {
     try {
-      await purchases.restore();
+      await purchases.restore(authUser?.uid);
     } catch {
       // Show nothing on failure — the paywall itself surfaces the outcome
       // by refreshing entitlement.

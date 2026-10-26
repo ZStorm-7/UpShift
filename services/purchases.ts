@@ -43,6 +43,7 @@ const REVENUECAT_ANDROID_KEY = '';
 type EntitlementChangeListener = () => void;
 const listeners = new Set<EntitlementChangeListener>();
 let configured = false;
+let identifiedUid: string | undefined;
 
 // Lazy-load react-native-purchases. Wrapped so a missing module doesn't
 // crash the JS bundle at import time.
@@ -66,6 +67,7 @@ async function ensureConfigured(uid?: string): Promise<any | null> {
     try {
       RNP.configure({ apiKey: key, appUserID: uid });
       configured = true;
+      identifiedUid = uid;
       // Wire the SDK's own listener into ours so SubscriptionContext
       // refreshes when a purchase completes.
       RNP.addCustomerInfoUpdateListener(() => {
@@ -76,7 +78,20 @@ async function ensureConfigured(uid?: string): Promise<any | null> {
       // means the next call will try again — harmless.
     }
   }
+  // Tie purchases to the signed-in account, so a subscription follows the person to a new phone and
+  // never leaks to whoever signs in next on this one.
+  if (configured && uid && uid !== identifiedUid) {
+    try { await RNP.logIn(uid); identifiedUid = uid; } catch { /* keep the previous id; entitlement reads still work */ }
+  }
   return RNP;
+}
+
+// Call on sign-out so the next person starts anonymous instead of inheriting this subscription.
+async function reset(): Promise<void> {
+  identifiedUid = undefined;
+  if (!configured) return;
+  const RNP = tryLoadPurchases();
+  try { if (RNP && typeof RNP.logOut === 'function') await RNP.logOut(); } catch { /* already anonymous */ }
 }
 
 // ---- Public API ----
@@ -131,8 +146,8 @@ async function getOfferings(): Promise<{
   }
 }
 
-async function purchaseMonthly(): Promise<'success' | 'cancelled' | 'error'> {
-  const RNP = await ensureConfigured();
+async function purchaseMonthly(uid?: string): Promise<'success' | 'cancelled' | 'error'> {
+  const RNP = await ensureConfigured(uid);
   if (!RNP) return 'error';
   try {
     const offerings = await RNP.getOfferings();
@@ -146,8 +161,8 @@ async function purchaseMonthly(): Promise<'success' | 'cancelled' | 'error'> {
   }
 }
 
-async function purchaseAnnual(): Promise<'success' | 'cancelled' | 'error'> {
-  const RNP = await ensureConfigured();
+async function purchaseAnnual(uid?: string): Promise<'success' | 'cancelled' | 'error'> {
+  const RNP = await ensureConfigured(uid);
   if (!RNP) return 'error';
   try {
     const offerings = await RNP.getOfferings();
@@ -161,8 +176,8 @@ async function purchaseAnnual(): Promise<'success' | 'cancelled' | 'error'> {
   }
 }
 
-async function restore(): Promise<void> {
-  const RNP = await ensureConfigured();
+async function restore(uid?: string): Promise<void> {
+  const RNP = await ensureConfigured(uid);
   if (!RNP) return;
   try {
     await RNP.restorePurchases();
@@ -196,6 +211,7 @@ export default {
   purchaseMonthly,
   purchaseAnnual,
   restore,
+  reset,
   openManageSubscription,
   onEntitlementChanged,
 };

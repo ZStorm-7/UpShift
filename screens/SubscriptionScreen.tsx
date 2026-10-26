@@ -19,6 +19,7 @@ import { spacing, radius, layout } from '../theme/tokens';
 import { fontFamily } from '../theme/fonts';
 import { usePalette } from '../theme/themedColors';
 import { useSubscription } from '../context/SubscriptionContext';
+import { useUser } from '../context/UserContext';
 import purchases from '../services/purchases';
 import haptics from '../services/haptics';
 
@@ -26,6 +27,7 @@ type Plan = 'monthly' | 'annual';
 
 export default function SubscriptionScreen({ navigation, route }: any) {
   const palette = usePalette();
+  const { authUser } = useUser();
   const { startTrial, status } = useSubscription();
   const [selected, setSelected] = useState<Plan>('annual'); // annual pre-selected — better value
   const [prices, setPrices] = useState<{ monthly: string; annual: string }>({
@@ -56,8 +58,8 @@ export default function SubscriptionScreen({ navigation, route }: any) {
     haptics.setComplete();
     try {
       const result = selected === 'monthly'
-        ? await purchases.purchaseMonthly()
-        : await purchases.purchaseAnnual();
+        ? await purchases.purchaseMonthly(authUser?.uid)
+        : await purchases.purchaseAnnual(authUser?.uid);
       if (result === 'success') {
         haptics.goalMet();
         // SubscriptionContext will refresh via the entitlement listener.
@@ -181,7 +183,7 @@ export default function SubscriptionScreen({ navigation, route }: any) {
         </Pressable>
 
         <Pressable
-          onPress={() => purchases.restore()}
+          onPress={() => purchases.restore(authUser?.uid)}
           hitSlop={12}
           style={styles.restore}>
           <Text style={[styles.restoreText, { color: palette.textMuted }]}>

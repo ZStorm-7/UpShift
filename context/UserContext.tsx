@@ -12,6 +12,7 @@ import {
 } from 'firebase/auth';
 import { auth, db } from '../firebase/config';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
+import purchases from '../services/purchases';
 type UserProfile = {
   firstName: string;
   lastInitial: string;
@@ -153,6 +154,7 @@ async function loadProfile(uid: string): Promise<boolean> {
 
   async function logOut() {
     await signOut(auth);
+    purchases.reset().catch(() => {});
     setProfile(null);
   }
 
