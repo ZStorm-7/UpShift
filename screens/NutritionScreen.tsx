@@ -30,6 +30,9 @@ import { Shimmer } from '../components/anim';
 import { Enter } from '../components/dashboard';
 import { CalorieRing } from '../components/CalorieRing';
 import haptics from '../services/haptics';
+import { FoodLibraryPanel, BarcodeSheet, PhotoLogSheet } from '../components/food/FoodExtras';
+import { loadRecentFoods, loadSavedMeals, addSavedMeal, removeSavedMeal } from '../firebase/foodLibrary';
+import type { FoodItem, SavedMeal } from '../services/food/library';
 import { useUser } from '../context/UserContext';
 import { dayDocRef, getTodayKey } from '../firebase/progress';
 import { FOOD_DATABASE, FoodDatabaseItem } from '../data/foods';
@@ -78,6 +81,15 @@ export default function NutritionScreen({ navigation }: any) {
 
   const [customFoods, setCustomFoods] = useState<CustomFood[]>([]);
 
+  // One-tap ways to log: recent foods, saved meals, barcode, photo.
+  const [recent, setRecent] = useState<FoodItem[]>([]);
+  const [savedMeals, setSavedMeals] = useState<SavedMeal[]>([]);
+  const [barcodeOpen, setBarcodeOpen] = useState(false);
+  const [photoOpen, setPhotoOpen] = useState(false);
+  const [mealFormOpen, setMealFormOpen] = useState(false);
+  const [mealName, setMealName] = useState('');
+  const [mealNote, setMealNote] = useState('');
+
   // ---- Load today's food log + saved custom foods ----
   useEffect(() => {
     if (!authUser) return;
@@ -99,6 +111,12 @@ export default function NutritionScreen({ navigation }: any) {
       }
     })();
   }, [authUser?.uid]);
+
+  useEffect(() => {
+    if (!authUser) return;
+    loadRecentFoods(authUser.uid).then(setRecent).catch(() => {});
+    loadSavedMeals(authUser.uid).then(setSavedMeals).catch(() => {});
+  }, [authUser?.uid, foodLog.length]);
 
   // The floating AI coach can log meals while this screen stays mounted
   // underneath it, so reload today's log whenever it announces a change.
@@ -137,6 +155,30 @@ export default function NutritionScreen({ navigation }: any) {
     setFoodLog(updated);
     haptics.setComplete();
     await setDoc(dayDocRef(authUser.uid), { foodLog: updated }, { merge: true });
+  }
+
+  // Several items at once (a saved meal, or everything the photo found), as one write.
+  async function addFoods(items: FoodItem[]) {
+    if (!authUser || items.length === 0) return;
+    const stamp = Date.now();
+    const updated = [...foodLog, ...items.map((it, i) => ({ ...it, id: stamp + i }))];
+    setFoodLog(updated);
+    haptics.setComplete();
+    await setDoc(dayDocRef(authUser.uid), { foodLog: updated }, { merge: true });
+  }
+
+  // iOS can't show a second sheet while the first is still on screen, so close it, then open.
+  function openSheet(setter: (v: boolean) => void) {
+    setModalVisible(false);
+    setTimeout(() => setter(true), 350);
+  }
+
+  async function saveTodayAsMeal() {
+    if (!authUser) return;
+    const r = await addSavedMeal(authUser.uid, mealName, foodLog.map(({ name, calories, protein, carbs, fat }) => ({ name, calories, protein, carbs, fat })));
+    if (r === 'full') { setMealNote(t('fdMealFull')); return; }
+    if (r === 'invalid') { setMealNote(t('cwNeedExercise')); return; }
+    setSavedMeals(r); setMealName(''); setMealFormOpen(false); setMealNote(t('fdMealSaved')); haptics.setComplete();
   }
 
   async function deleteFood(id: number) {
@@ -213,7 +255,15 @@ export default function NutritionScreen({ navigation }: any) {
   return (
     <View style={[styles.wrapper, { backgroundColor: palette.bg }]}>
       <Screen scroll contentStyle={styles.container}>
-        <AppBar title={t('nutrition')} onBack={() => navigation.goBack()} />
+        <AppBar
+          title={t('nutrition')}
+          onBack={() => navigation.goBack()}
+          right={
+            <Pressable onPress={() => navigation.navigate('Grocery')} hitSlop={10} accessibilityRole="button" accessibilityLabel={t('grTitle')}>
+              <Text style={{ color: palette.accent, fontFamily: fontFamily.sansBold, fontSize: 13 }}>{t('grTitle')}</Text>
+            </Pressable>
+          }
+        />
 
         {/* HERO ROW — big ring left, macro stack right. */}
         <Enter index={0}>
@@ -272,6 +322,22 @@ export default function NutritionScreen({ navigation }: any) {
             </Text>
           </View>
         </Enter>
+
+        {foodLog.length > 0 && (
+          <View style={{ marginBottom: spacing.sm }}>
+            {!mealFormOpen ? (
+              <Pressable onPress={() => { setMealFormOpen(true); setMealNote(''); }} hitSlop={8} accessibilityRole="button" style={{ minHeight: 36, justifyContent: 'center' }}>
+                <Text style={{ color: palette.accent, fontFamily: fontFamily.sansBold, fontSize: 13 }}>{t('fdSaveAsMeal')}</Text>
+              </Pressable>
+            ) : (
+              <View style={{ flexDirection: 'row', gap: spacing.sm, alignItems: 'center' }}>
+                <View style={{ flex: 1 }}><Field label={t('fdMealName')} value={mealName} onChangeText={setMealName} placeholder={t('fdMealName')} /></View>
+                <Button label={t('fdSaveMeal')} size="sm" onPress={saveTodayAsMeal} disabled={!mealName.trim()} />
+              </View>
+            )}
+          </View>
+        )}
+        {!!mealNote && <Text style={{ color: palette.textSecondary, fontFamily: fontFamily.sans, fontSize: 12, marginBottom: spacing.sm }} accessibilityLiveRegion="polite">{mealNote}</Text>}
 
         <Enter index={2}>
           <View style={[styles.logCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
@@ -358,6 +424,10 @@ export default function NutritionScreen({ navigation }: any) {
 
             {activeTab === 'search' ? (
               <>
+                <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                  <View style={{ flex: 1 }}><Button label={`▥ ${t('fdScanBarcode')}`} variant="secondary" size="sm" onPress={() => openSheet(setBarcodeOpen)} fullWidth /></View>
+                  <View style={{ flex: 1 }}><Button label={`📷 ${t('fdPhoto')}`} variant="secondary" size="sm" onPress={() => openSheet(setPhotoOpen)} fullWidth /></View>
+                </View>
                 <Field
                   label="Food"
                   placeholder="e.g. chicken breast"
@@ -366,6 +436,16 @@ export default function NutritionScreen({ navigation }: any) {
                   autoCapitalize="none"
                   autoFocus
                 />
+                {!searchQuery.trim() ? (
+                  <ScrollView style={{ maxHeight: 360 }} keyboardShouldPersistTaps="handled">
+                    <FoodLibraryPanel
+                      recent={recent} saved={savedMeals}
+                      onLog={f => { addFood(f); setModalVisible(false); }}
+                      onLogMeal={m => { addFoods(m.items); setModalVisible(false); }}
+                      onRemoveMeal={m => { if (authUser) removeSavedMeal(authUser.uid, m.id).then(setSavedMeals).catch(() => {}); }}
+                    />
+                  </ScrollView>
+                ) : (
                 <FlatList
                   data={searchResults}
                   keyExtractor={(item, i) => `${item.id}-${i}`}
@@ -396,6 +476,7 @@ export default function NutritionScreen({ navigation }: any) {
                     </Pressable>
                   )}
                 />
+                )}
               </>
             ) : (
               <View style={{ gap: spacing.md }}>
@@ -412,6 +493,9 @@ export default function NutritionScreen({ navigation }: any) {
           </View>
         </View>
       </Modal>
+
+      <BarcodeSheet visible={barcodeOpen} onClose={() => setBarcodeOpen(false)} onLog={f => { addFood(f); setModalVisible(false); }} />
+      <PhotoLogSheet visible={photoOpen} onClose={() => setPhotoOpen(false)} onLog={items => { addFoods(items); setModalVisible(false); }} />
     </View>
   );
 }

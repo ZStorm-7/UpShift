@@ -562,7 +562,50 @@ type TranslationKey =
   | 'cwNeedExercise'
   | 'cwExercises'
   | 'cwRemove'
-  | 'cwImported';
+  | 'cwImported'
+  | 'fdScanBarcode'
+  | 'fdBarcodeHint'
+  | 'fdBarcodeInput'
+  | 'fdLookUp'
+  | 'fdUseCamera'
+  | 'fdStopCamera'
+  | 'fdCameraDenied'
+  | 'fdErrInvalid'
+  | 'fdErrNotFound'
+  | 'fdErrNetwork'
+  | 'fdErrNoNutrition'
+  | 'fdPer'
+  | 'fdServings'
+  | 'fdLogIt'
+  | 'fdDataFrom'
+  | 'fdPhoto'
+  | 'fdPhotoCamera'
+  | 'fdPhotoLibrary'
+  | 'fdAnalyzing'
+  | 'fdPhotoResult'
+  | 'fdLogAll'
+  | 'fdPhotoErrConsent'
+  | 'fdPhotoErrLimit'
+  | 'fdPhotoErr'
+  | 'fdPhotoNote'
+  | 'fdRecent'
+  | 'fdSavedMeals'
+  | 'fdNoRecent'
+  | 'fdSaveAsMeal'
+  | 'fdMealName'
+  | 'fdSaveMeal'
+  | 'fdMealSaved'
+  | 'fdMealFull'
+  | 'fdRemoveMeal'
+  | 'fdItems'
+  | 'grTitle'
+  | 'grEmpty'
+  | 'grAddPlaceholder'
+  | 'grAdd'
+  | 'grShare'
+  | 'grClearTicked'
+  | 'grYours'
+  | 'grLeft';
 
 export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, string>>> = {
   en: {
@@ -1106,6 +1149,49 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     cwExercises: "{n} exercises",
     cwRemove: "Remove",
     cwImported: "Imported.",
+    fdScanBarcode: "Scan a barcode",
+    fdBarcodeHint: "Point the camera at the barcode, or type the numbers under it.",
+    fdBarcodeInput: "Barcode number",
+    fdLookUp: "Look up",
+    fdUseCamera: "Use camera",
+    fdStopCamera: "Stop camera",
+    fdCameraDenied: "Camera access is off. You can still type the number.",
+    fdErrInvalid: "That doesn't look like a valid barcode. Check the numbers.",
+    fdErrNotFound: "We couldn't find that product.",
+    fdErrNetwork: "Couldn't reach the food database. Check your connection.",
+    fdErrNoNutrition: "That product has no nutrition information.",
+    fdPer: "Per {s}",
+    fdServings: "Servings",
+    fdLogIt: "Log it",
+    fdDataFrom: "Product data from Open Food Facts.",
+    fdPhoto: "Log from a photo",
+    fdPhotoCamera: "Take a photo",
+    fdPhotoLibrary: "Choose a photo",
+    fdAnalyzing: "Looking at your meal…",
+    fdPhotoResult: "We think this is:",
+    fdLogAll: "Log all",
+    fdPhotoErrConsent: "Open the AI coach once and agree to its terms first.",
+    fdPhotoErrLimit: "You've used today's AI tools. Try again later.",
+    fdPhotoErr: "Couldn't read that photo. Try again or search instead.",
+    fdPhotoNote: "AI estimates can be off. Check the numbers.",
+    fdRecent: "Recent",
+    fdSavedMeals: "Saved meals",
+    fdNoRecent: "Foods you log will show up here for one-tap repeats.",
+    fdSaveAsMeal: "Save today's food as a meal",
+    fdMealName: "Meal name",
+    fdSaveMeal: "Save meal",
+    fdMealSaved: "Meal saved.",
+    fdMealFull: "You can keep up to 20 saved meals.",
+    fdRemoveMeal: "Remove saved meal",
+    fdItems: "{n} items",
+    grTitle: "Grocery list",
+    grEmpty: "Save a meal plan from the AI coach and your shopping list will appear here.",
+    grAddPlaceholder: "Add your own item",
+    grAdd: "Add",
+    grShare: "Share list",
+    grClearTicked: "Clear ticked items",
+    grYours: "Your items",
+    grLeft: "{n} left to buy",
   },
   es: {
     goodMorning: 'Buenos días',
@@ -1648,6 +1734,49 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     cwExercises: "{n} ejercicios",
     cwRemove: "Quitar",
     cwImported: "Importado.",
+    fdScanBarcode: "Escanear código de barras",
+    fdBarcodeHint: "Apunta la cámara al código o escribe los números de debajo.",
+    fdBarcodeInput: "Número del código de barras",
+    fdLookUp: "Buscar",
+    fdUseCamera: "Usar la cámara",
+    fdStopCamera: "Detener la cámara",
+    fdCameraDenied: "El acceso a la cámara está desactivado. Aún puedes escribir el número.",
+    fdErrInvalid: "Eso no parece un código de barras válido. Revisa los números.",
+    fdErrNotFound: "No encontramos ese producto.",
+    fdErrNetwork: "No se pudo acceder a la base de alimentos. Revisa tu conexión.",
+    fdErrNoNutrition: "Ese producto no tiene información nutricional.",
+    fdPer: "Por {s}",
+    fdServings: "Porciones",
+    fdLogIt: "Registrar",
+    fdDataFrom: "Datos de productos de Open Food Facts.",
+    fdPhoto: "Registrar con una foto",
+    fdPhotoCamera: "Tomar una foto",
+    fdPhotoLibrary: "Elegir una foto",
+    fdAnalyzing: "Mirando tu comida…",
+    fdPhotoResult: "Creemos que es:",
+    fdLogAll: "Registrar todo",
+    fdPhotoErrConsent: "Abre primero el coach de IA y acepta sus términos.",
+    fdPhotoErrLimit: "Has usado las herramientas de IA de hoy. Inténtalo más tarde.",
+    fdPhotoErr: "No pude leer esa foto. Inténtalo de nuevo o busca.",
+    fdPhotoNote: "Las estimaciones de la IA pueden fallar. Revisa los números.",
+    fdRecent: "Recientes",
+    fdSavedMeals: "Comidas guardadas",
+    fdNoRecent: "Los alimentos que registres aparecerán aquí para repetirlos con un toque.",
+    fdSaveAsMeal: "Guardar la comida de hoy como un plato",
+    fdMealName: "Nombre de la comida",
+    fdSaveMeal: "Guardar comida",
+    fdMealSaved: "Comida guardada.",
+    fdMealFull: "Puedes guardar hasta 20 comidas.",
+    fdRemoveMeal: "Quitar comida guardada",
+    fdItems: "{n} alimentos",
+    grTitle: "Lista de compras",
+    grEmpty: "Guarda un plan de comidas del coach de IA y tu lista de compras aparecerá aquí.",
+    grAddPlaceholder: "Añade tu propio artículo",
+    grAdd: "Añadir",
+    grShare: "Compartir lista",
+    grClearTicked: "Quitar los marcados",
+    grYours: "Tus artículos",
+    grLeft: "Faltan {n} por comprar",
   },
   fr: {
     goodMorning: 'Bonjour',
@@ -2190,6 +2319,49 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     cwExercises: "{n} exercices",
     cwRemove: "Retirer",
     cwImported: "Importé.",
+    fdScanBarcode: "Scanner un code-barres",
+    fdBarcodeHint: "Pointe la caméra vers le code-barres ou saisis les chiffres en dessous.",
+    fdBarcodeInput: "Numéro du code-barres",
+    fdLookUp: "Rechercher",
+    fdUseCamera: "Utiliser la caméra",
+    fdStopCamera: "Arrêter la caméra",
+    fdCameraDenied: "L’accès à la caméra est désactivé. Tu peux quand même saisir le numéro.",
+    fdErrInvalid: "Ce n’est pas un code-barres valide. Vérifie les chiffres.",
+    fdErrNotFound: "Nous n’avons pas trouvé ce produit.",
+    fdErrNetwork: "Impossible d’atteindre la base d’aliments. Vérifie ta connexion.",
+    fdErrNoNutrition: "Ce produit n’a pas d’informations nutritionnelles.",
+    fdPer: "Pour {s}",
+    fdServings: "Portions",
+    fdLogIt: "Enregistrer",
+    fdDataFrom: "Données produits : Open Food Facts.",
+    fdPhoto: "Enregistrer avec une photo",
+    fdPhotoCamera: "Prendre une photo",
+    fdPhotoLibrary: "Choisir une photo",
+    fdAnalyzing: "J’examine ton repas…",
+    fdPhotoResult: "Nous pensons que c’est :",
+    fdLogAll: "Tout enregistrer",
+    fdPhotoErrConsent: "Ouvre d’abord le coach IA et accepte ses conditions.",
+    fdPhotoErrLimit: "Tu as utilisé les outils IA du jour. Réessaie plus tard.",
+    fdPhotoErr: "Impossible de lire cette photo. Réessaie ou cherche.",
+    fdPhotoNote: "Les estimations de l’IA peuvent être fausses. Vérifie les chiffres.",
+    fdRecent: "Récents",
+    fdSavedMeals: "Repas enregistrés",
+    fdNoRecent: "Les aliments que tu enregistres apparaîtront ici pour les répéter en un geste.",
+    fdSaveAsMeal: "Enregistrer les aliments du jour comme un repas",
+    fdMealName: "Nom du repas",
+    fdSaveMeal: "Enregistrer le repas",
+    fdMealSaved: "Repas enregistré.",
+    fdMealFull: "Tu peux garder jusqu’à 20 repas enregistrés.",
+    fdRemoveMeal: "Retirer le repas enregistré",
+    fdItems: "{n} aliments",
+    grTitle: "Liste de courses",
+    grEmpty: "Enregistre un plan de repas du coach IA et ta liste de courses apparaîtra ici.",
+    grAddPlaceholder: "Ajoute ton propre article",
+    grAdd: "Ajouter",
+    grShare: "Partager la liste",
+    grClearTicked: "Effacer les articles cochés",
+    grYours: "Tes articles",
+    grLeft: "Encore {n} à acheter",
   },
   zh: {
     goodMorning: '早上好',
@@ -2732,6 +2904,49 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     cwExercises: "{n} 个动作",
     cwRemove: "移除",
     cwImported: "已导入。",
+    fdScanBarcode: "扫描条形码",
+    fdBarcodeHint: "将相机对准条形码，或输入下方的数字。",
+    fdBarcodeInput: "条形码数字",
+    fdLookUp: "查询",
+    fdUseCamera: "使用相机",
+    fdStopCamera: "关闭相机",
+    fdCameraDenied: "相机权限已关闭，你仍可以输入数字。",
+    fdErrInvalid: "这不是有效的条形码，请检查数字。",
+    fdErrNotFound: "找不到该商品。",
+    fdErrNetwork: "无法连接食品数据库，请检查网络。",
+    fdErrNoNutrition: "该商品没有营养信息。",
+    fdPer: "每 {s}",
+    fdServings: "份数",
+    fdLogIt: "记录",
+    fdDataFrom: "商品数据来自 Open Food Facts。",
+    fdPhoto: "拍照记录",
+    fdPhotoCamera: "拍照",
+    fdPhotoLibrary: "选择照片",
+    fdAnalyzing: "正在分析你的餐食…",
+    fdPhotoResult: "我们认为这是：",
+    fdLogAll: "全部记录",
+    fdPhotoErrConsent: "请先打开 AI 教练并同意其条款。",
+    fdPhotoErrLimit: "今天的 AI 工具次数已用完，请稍后再试。",
+    fdPhotoErr: "无法识别这张照片，请重试或改用搜索。",
+    fdPhotoNote: "AI 估算可能有误，请核对数字。",
+    fdRecent: "最近",
+    fdSavedMeals: "已保存的餐食",
+    fdNoRecent: "你记录过的食物会出现在这里，方便一键重复记录。",
+    fdSaveAsMeal: "将今天的食物保存为一餐",
+    fdMealName: "餐食名称",
+    fdSaveMeal: "保存餐食",
+    fdMealSaved: "餐食已保存。",
+    fdMealFull: "最多可保存 20 个餐食。",
+    fdRemoveMeal: "移除已保存的餐食",
+    fdItems: "{n} 种食物",
+    grTitle: "购物清单",
+    grEmpty: "保存 AI 教练的饮食计划后，购物清单会显示在这里。",
+    grAddPlaceholder: "添加你自己的物品",
+    grAdd: "添加",
+    grShare: "分享清单",
+    grClearTicked: "清除已勾选项",
+    grYours: "你的物品",
+    grLeft: "还剩 {n} 件待买",
   },
   te: {
     goodMorning: 'శుభోదయం',
@@ -3274,5 +3489,48 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     cwExercises: "{n} వ్యాయామాలు",
     cwRemove: "తొలగించు",
     cwImported: "దిగుమతి అయింది.",
+    fdScanBarcode: "బార్‌కోడ్ స్కాన్ చేయండి",
+    fdBarcodeHint: "కెమెరాను బార్‌కోడ్ వైపు చూపండి లేదా కింద ఉన్న సంఖ్యలను టైప్ చేయండి.",
+    fdBarcodeInput: "బార్‌కోడ్ సంఖ్య",
+    fdLookUp: "వెతకండి",
+    fdUseCamera: "కెమెరా ఉపయోగించండి",
+    fdStopCamera: "కెమెరా ఆపండి",
+    fdCameraDenied: "కెమెరా యాక్సెస్ ఆఫ్‌లో ఉంది. మీరు ఇంకా సంఖ్యను టైప్ చేయవచ్చు.",
+    fdErrInvalid: "అది చెల్లుబాటు అయ్యే బార్‌కోడ్ లా లేదు. సంఖ్యలను సరిచూడండి.",
+    fdErrNotFound: "ఆ ఉత్పత్తి కనుగొనబడలేదు.",
+    fdErrNetwork: "ఫుడ్ డేటాబేస్‌కు చేరుకోలేకపోయాం. మీ కనెక్షన్ చూడండి.",
+    fdErrNoNutrition: "ఆ ఉత్పత్తికి పోషక సమాచారం లేదు.",
+    fdPer: "ప్రతి {s}",
+    fdServings: "సర్వింగ్‌లు",
+    fdLogIt: "నమోదు చేయండి",
+    fdDataFrom: "ఉత్పత్తి డేటా Open Food Facts నుండి.",
+    fdPhoto: "ఫోటో నుండి నమోదు చేయండి",
+    fdPhotoCamera: "ఫోటో తీయండి",
+    fdPhotoLibrary: "ఫోటో ఎంచుకోండి",
+    fdAnalyzing: "మీ భోజనాన్ని చూస్తున్నాం…",
+    fdPhotoResult: "ఇది ఇలా అనిపిస్తోంది:",
+    fdLogAll: "అన్నీ నమోదు చేయండి",
+    fdPhotoErrConsent: "ముందుగా AI కోచ్‌ను తెరిచి దాని నిబంధనలకు అంగీకరించండి.",
+    fdPhotoErrLimit: "ఈరోజు AI టూల్స్ ఉపయోగించారు. తర్వాత మళ్లీ ప్రయత్నించండి.",
+    fdPhotoErr: "ఆ ఫోటోను చదవలేకపోయాం. మళ్లీ ప్రయత్నించండి లేదా వెతకండి.",
+    fdPhotoNote: "AI అంచనాలు తప్పవచ్చు. సంఖ్యలను సరిచూడండి.",
+    fdRecent: "ఇటీవలివి",
+    fdSavedMeals: "సేవ్ చేసిన భోజనాలు",
+    fdNoRecent: "మీరు నమోదు చేసిన ఆహారాలు ఒక్క ట్యాప్‌తో మళ్లీ నమోదు చేయడానికి ఇక్కడ కనిపిస్తాయి.",
+    fdSaveAsMeal: "ఈరోజు ఆహారాన్ని భోజనంగా సేవ్ చేయండి",
+    fdMealName: "భోజనం పేరు",
+    fdSaveMeal: "భోజనం సేవ్ చేయండి",
+    fdMealSaved: "భోజనం సేవ్ అయింది.",
+    fdMealFull: "మీరు గరిష్ఠంగా 20 భోజనాలు సేవ్ చేయవచ్చు.",
+    fdRemoveMeal: "సేవ్ చేసిన భోజనాన్ని తొలగించండి",
+    fdItems: "{n} వస్తువులు",
+    grTitle: "కిరాణా జాబితా",
+    grEmpty: "AI కోచ్ నుండి భోజన ప్రణాళికను సేవ్ చేస్తే మీ షాపింగ్ జాబితా ఇక్కడ కనిపిస్తుంది.",
+    grAddPlaceholder: "మీ స్వంత వస్తువును జోడించండి",
+    grAdd: "జోడించు",
+    grShare: "జాబితాను షేర్ చేయండి",
+    grClearTicked: "టిక్ చేసినవి తొలగించండి",
+    grYours: "మీ వస్తువులు",
+    grLeft: "కొనాల్సినవి {n} మిగిలాయి",
   },
 };

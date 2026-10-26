@@ -130,6 +130,8 @@ workout details.
 - **USDA FoodData Central** — when you search for a food, the search text you type
   is sent to the U.S. Department of Agriculture's public database. No account
   information is sent with that request.
+- **Open Food Facts** — when you scan or type a barcode, only the barcode number is
+  sent to this public food database. The camera picture stays on your phone.
 
 ## Your rights and choices
 

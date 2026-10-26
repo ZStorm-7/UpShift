@@ -45,6 +45,12 @@
           "cameraPermission": "UpShift uses the camera so the AI coach can estimate nutrition from a photo of your meal."
         }
       ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "UpShift uses the camera to scan the barcode on packaged food. The picture never leaves your phone; only the barcode number is looked up."
+        }
+      ],
       "expo-notifications",
       [
         "expo-speech-recognition",
