@@ -29,6 +29,7 @@
     "expo-image-picker": "~57.0.11",
     "expo-notifications": "*",
     "expo-sensors": "~57.0.2",
+    "expo-speech-recognition": "^58.0.0",
     "expo-splash-screen": "~57.0.8",
     "expo-status-bar": "~57.0.1",
     "expo-web-browser": "~57.0.3",
