@@ -290,7 +290,7 @@ export default function WorkoutSummaryScreen({ navigation, route }: any) {
         <PressableScale
           accessibilityRole="button"
           accessibilityLabel={t('backToDashboard')}
-          onPress={() => navigation.navigate('Dashboard')}>
+          onPress={() => navigation.popTo('Dashboard')}>
           <View style={[styles.button, styles.buttonPrimary]}>
             <Text style={[styles.buttonLabel, styles.buttonLabelPrimary]} numberOfLines={1}>
               {t('backToDashboard')}
@@ -300,7 +300,7 @@ export default function WorkoutSummaryScreen({ navigation, route }: any) {
         <PressableScale
           accessibilityRole="button"
           accessibilityLabel="Start another workout"
-          onPress={() => navigation.navigate('Workout')}>
+          onPress={() => navigation.replace('Workout')}>
           <View style={[styles.button, styles.buttonSecondary]}>
             <Text style={styles.buttonLabel} numberOfLines={1}>
               Another Workout

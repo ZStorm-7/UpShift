@@ -318,7 +318,8 @@ export default function OnboardingScreen({ navigation }: any) {
       finishedRef.current = true;
       logOnboardingEvent(authUser.uid, step, 'onboarding_complete');
       setProfile(newProfile);
-      navigation.navigate('Dashboard');
+      // reset, not navigate: navigate would stack the Dashboard on top, and Back would return to the finished onboarding.
+      navigation.reset({ index: 0, routes: [{ name: 'Dashboard' }] });
     } catch {
       setSaveError(t('errorSaveFailed'));
     } finally {
