@@ -12,4 +12,15 @@
   <string name="upshift_widget_done">Terminé pour aujourd'hui</string>
   <string name="upshift_widget_off">Les pauses sont désactivées</string>
   <string name="upshift_widget_countdown_sub">avant ta pause respiration</string>
+  <string name="upshift_progress_title">Aujourd’hui</string>
+  <string name="upshift_progress_quests">Quêtes</string>
+  <string name="upshift_progress_water">Eau</string>
+  <string name="upshift_progress_streak">Série</string>
+  <string name="upshift_progress_water_value">%1$s / %2$s L</string>
+  <string name="upshift_progress_stale">Ouvre UpShift pour actualiser</string>
+  <string name="upshift_progress_description">Affiche les quêtes, l’eau et la série du jour.</string>
+  <plurals name="upshift_progress_days">
+    <item quantity="one">%d jour</item>
+    <item quantity="other">%d jours</item>
+  </plurals>
 </resources>

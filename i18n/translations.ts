@@ -650,7 +650,17 @@ type TranslationKey =
   | 'lbSeasonLastDay'
   | 'lbSeasonEmpty'
   | 'lbSeasonReset'
-  | 'lbMonthXp';
+  | 'lbMonthXp'
+  | 'ciTitle'
+  | 'ciHint'
+  | 'ciToggle'
+  | 'ciTime'
+  | 'ciEarlier'
+  | 'ciLater'
+  | 'ciNext'
+  | 'ciNotifTitle'
+  | 'ciNotifBody'
+  | 'ciAction';
 
 export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, string>>> = {
   en: {
@@ -1282,6 +1292,16 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     lbSeasonEmpty: "No one has earned XP this month yet. Be the first!",
     lbSeasonReset: "The month board starts fresh on the 1st (UTC).",
     lbMonthXp: "{n} XP this month",
+    ciTitle: "Daily check-in",
+    ciHint: "A friendly nudge at a time you choose, with a button to log a glass of water.",
+    ciToggle: "Daily check-in reminder",
+    ciTime: "Reminder time",
+    ciEarlier: "15 minutes earlier",
+    ciLater: "15 minutes later",
+    ciNext: "Next reminder: {when}",
+    ciNotifTitle: "How's your day going?",
+    ciNotifBody: "Tap the button to log a glass of water, or open UpShift to check in.",
+    ciAction: "+250 ml water",
   },
   es: {
     goodMorning: 'Buenos días',
@@ -1912,6 +1932,16 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     lbSeasonEmpty: "Nadie ha ganado XP este mes. ¡Sé el primero!",
     lbSeasonReset: "El ranking del mes se reinicia el día 1 (UTC).",
     lbMonthXp: "{n} XP este mes",
+    ciTitle: "Chequeo diario",
+    ciHint: "Un aviso amable a la hora que elijas, con un botón para registrar un vaso de agua.",
+    ciToggle: "Recordatorio de chequeo diario",
+    ciTime: "Hora del recordatorio",
+    ciEarlier: "15 minutos antes",
+    ciLater: "15 minutos después",
+    ciNext: "Próximo recordatorio: {when}",
+    ciNotifTitle: "¿Cómo va tu día?",
+    ciNotifBody: "Toca el botón para registrar un vaso de agua o abre UpShift para hacer tu chequeo.",
+    ciAction: "+250 ml de agua",
   },
   fr: {
     goodMorning: 'Bonjour',
@@ -2542,6 +2572,16 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     lbSeasonEmpty: "Personne n’a encore gagné d’XP ce mois-ci. Sois le premier !",
     lbSeasonReset: "Le classement du mois repart à zéro le 1er (UTC).",
     lbMonthXp: "{n} XP ce mois-ci",
+    ciTitle: "Point du jour",
+    ciHint: "Un petit rappel à l’heure choisie, avec un bouton pour noter un verre d’eau.",
+    ciToggle: "Rappel du point du jour",
+    ciTime: "Heure du rappel",
+    ciEarlier: "15 minutes plus tôt",
+    ciLater: "15 minutes plus tard",
+    ciNext: "Prochain rappel : {when}",
+    ciNotifTitle: "Comment se passe ta journée ?",
+    ciNotifBody: "Touche le bouton pour noter un verre d’eau, ou ouvre UpShift pour faire le point.",
+    ciAction: "+250 ml d’eau",
   },
   zh: {
     goodMorning: '早上好',
@@ -3172,6 +3212,16 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     lbSeasonEmpty: "本月还没有人获得经验值，快来抢先！",
     lbSeasonReset: "月榜每月 1 日（UTC）重置。",
     lbMonthXp: "本月 {n} 经验",
+    ciTitle: "每日打卡提醒",
+    ciHint: "在你选择的时间发送提醒，并带有一键记录一杯水的按钮。",
+    ciToggle: "每日打卡提醒",
+    ciTime: "提醒时间",
+    ciEarlier: "提前 15 分钟",
+    ciLater: "推迟 15 分钟",
+    ciNext: "下次提醒：{when}",
+    ciNotifTitle: "今天过得怎么样？",
+    ciNotifBody: "点按按钮记录一杯水，或打开 UpShift 打卡。",
+    ciAction: "+250 毫升水",
   },
   te: {
     goodMorning: 'శుభోదయం',
@@ -3802,5 +3852,15 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     lbSeasonEmpty: "ఈ నెల ఇంకా ఎవరూ XP సంపాదించలేదు. మొదటివారు అవ్వండి!",
     lbSeasonReset: "నెల బోర్డు 1వ తేదీ (UTC) న మళ్లీ మొదలవుతుంది.",
     lbMonthXp: "ఈ నెల {n} XP",
+    ciTitle: "రోజువారీ చెక్-ఇన్",
+    ciHint: "మీరు ఎంచుకున్న సమయంలో స్నేహపూర్వక రిమైండర్, ఒక గ్లాసు నీరు నమోదు చేసే బటన్‌తో.",
+    ciToggle: "రోజువారీ చెక్-ఇన్ రిమైండర్",
+    ciTime: "రిమైండర్ సమయం",
+    ciEarlier: "15 నిమిషాలు ముందుగా",
+    ciLater: "15 నిమిషాలు తరువాత",
+    ciNext: "తదుపరి రిమైండర్: {when}",
+    ciNotifTitle: "మీ రోజు ఎలా సాగుతోంది?",
+    ciNotifBody: "ఒక గ్లాసు నీరు నమోదు చేయడానికి బటన్ నొక్కండి, లేదా చెక్-ఇన్ కోసం UpShift తెరవండి.",
+    ciAction: "+250 మి.లీ నీరు",
   },
 };

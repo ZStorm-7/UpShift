@@ -63,6 +63,11 @@ class UpShiftBreaksModule : Module() {
       }
     }
 
+    // Numbers for the "Today" home-screen widget (quests, water, streak). Display only.
+    Function("setProgressSnapshot") { day: String, questsDone: Int, questsTotal: Int, waterMl: Int, waterGoalMl: Int, streak: Int ->
+      ProgressWidgetProvider.push(context, ProgressSnapshot.clean(day, questsDone, questsTotal, waterMl, waterGoalMl, streak))
+    }
+
     Function("getConfig") {
       val s = BreakConfig.read(context)
       BreakConfig.toMap(context) + mapOf(

@@ -19,6 +19,8 @@ type NativeApi = {
   // `policyJson` is services/breaks/policy.ts's Policy, serialized.
   setPolicy(policyJson: string, packages: string[]): void;
   getConfig(): NativeBreakConfig;
+  // Numbers for the Today widget: day (YYYY-MM-DD), quests done and total, water ml and goal, streak.
+  setProgressSnapshot(day: string, questsDone: number, questsTotal: number, waterMl: number, waterGoalMl: number, streak: number): void;
   getPendingBreak(): PendingBreak | null;
   markBreakDone(): void;
   abandonBreak(): void;

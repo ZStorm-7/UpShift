@@ -12,4 +12,15 @@
   <string name="upshift_widget_done">Done for today</string>
   <string name="upshift_widget_off">Breaks are off</string>
   <string name="upshift_widget_countdown_sub">until your breathing break</string>
+  <string name="upshift_progress_title">Today</string>
+  <string name="upshift_progress_quests">Quests</string>
+  <string name="upshift_progress_water">Water</string>
+  <string name="upshift_progress_streak">Streak</string>
+  <string name="upshift_progress_water_value">%1$s / %2$s L</string>
+  <string name="upshift_progress_stale">Open UpShift to refresh</string>
+  <string name="upshift_progress_description">Shows today\'s quests, water and streak.</string>
+  <plurals name="upshift_progress_days">
+    <item quantity="one">%d day</item>
+    <item quantity="other">%d days</item>
+  </plurals>
 </resources>

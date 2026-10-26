@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import { CHECKIN_CATEGORY, CHECKIN_IDENTIFIER, CHECKIN_ACTION_LOG_WATER, type ResponseLike } from './habits/checkin';
 
 // Mirrors services/sound.ts's pattern exactly: lazy-load the native module
 // inside a try/catch so a missing/misconfigured native module degrades to
@@ -141,4 +142,56 @@ export async function cancelAllReminders(): Promise<void> {
 
 export function notificationsAvailable(): boolean {
   return Notifications !== null;
+}
+
+
+// ---- Daily check-in: repeats every day at the chosen time, with a "+250 ml water" button ----
+export type CheckinTexts = { title: string; body: string; action: string };
+
+export async function scheduleDailyCheckin(hour: number, minute: number, texts: CheckinTexts): Promise<boolean> {
+  if (!Notifications) return false;
+  configureHandler();
+  if (!(await hasNotificationPermission())) return false;
+  try {
+    await Notifications.cancelScheduledNotificationAsync(CHECKIN_IDENTIFIER).catch(() => {});
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync('daily-checkin', { name: 'Daily check-in', importance: Notifications.AndroidImportance.DEFAULT }).catch(() => {});
+    }
+    // The button's label comes with the category, so it is re-set every time in the current language.
+    await Notifications.setNotificationCategoryAsync(CHECKIN_CATEGORY, [
+      { identifier: CHECKIN_ACTION_LOG_WATER, buttonTitle: texts.action, options: { opensAppToForeground: false } },
+    ]);
+    await Notifications.scheduleNotificationAsync({
+      identifier: CHECKIN_IDENTIFIER,
+      content: { title: texts.title, body: texts.body, sound: true, categoryIdentifier: CHECKIN_CATEGORY },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DAILY,
+        hour, minute,
+        channelId: Platform.OS === 'android' ? 'daily-checkin' : undefined,
+      },
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function cancelDailyCheckin(): Promise<void> {
+  if (!Notifications) return;
+  await Notifications.cancelScheduledNotificationAsync(CHECKIN_IDENTIFIER).catch(() => {});
+}
+
+/** Calls back whenever the person taps a notification or one of its buttons. Returns a stop function. */
+export function onNotificationResponse(cb: (r: ResponseLike) => void): () => void {
+  if (!Notifications) return () => {};
+  try {
+    const sub = Notifications.addNotificationResponseReceivedListener(r => cb(r as unknown as ResponseLike));
+    return () => sub.remove();
+  } catch { return () => {}; }
+}
+
+/** The response that opened the app from a closed state, if any. */
+export async function lastNotificationResponse(): Promise<ResponseLike | null> {
+  if (!Notifications) return null;
+  try { return ((await Notifications.getLastNotificationResponseAsync()) as unknown as ResponseLike) ?? null; } catch { return null; }
 }

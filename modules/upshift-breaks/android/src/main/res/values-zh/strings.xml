@@ -12,4 +12,15 @@
   <string name="upshift_widget_done">今天已完成</string>
   <string name="upshift_widget_off">休息已关闭</string>
   <string name="upshift_widget_countdown_sub">距离呼吸休息</string>
+  <string name="upshift_progress_title">今天</string>
+  <string name="upshift_progress_quests">任务</string>
+  <string name="upshift_progress_water">饮水</string>
+  <string name="upshift_progress_streak">连续</string>
+  <string name="upshift_progress_water_value">%1$s / %2$s 升</string>
+  <string name="upshift_progress_stale">打开 UpShift 以刷新</string>
+  <string name="upshift_progress_description">显示今天的任务、饮水和连续天数。</string>
+  <plurals name="upshift_progress_days">
+    <item quantity="one">%d 天</item>
+    <item quantity="other">%d 天</item>
+  </plurals>
 </resources>

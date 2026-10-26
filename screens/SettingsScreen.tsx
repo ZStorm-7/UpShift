@@ -12,10 +12,12 @@
 // affect the user's experience are shown here. Anything that touches
 // profile data (name, age, weight) stays on EditProfile.
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
-import { requestNotificationPermission, hasNotificationPermission, cancelAllReminders } from '../services/notifications';
+import { requestNotificationPermission, hasNotificationPermission, cancelAllReminders, scheduleDailyCheckin, cancelDailyCheckin } from '../services/notifications';
+import { loadCheckin, saveCheckin } from '../firebase/checkin';
+import { DEFAULT_CHECKIN, shiftTime, formatClock, nextFire, type CheckinSettings } from '../services/habits/checkin';
 import { View, Text, StyleSheet, Pressable, ScrollView, Switch, Alert, Linking, Platform, Modal, TextInput, ActivityIndicator } from 'react-native';
 import { Screen } from '../components/ui';
 import { spacing, radius, layout } from '../theme/tokens';
@@ -34,7 +36,7 @@ export default function SettingsScreen({ navigation }: any) {
   const palette = usePalette();
   const { mode, setMode } = useTheme();
   const { profile, setProfile, logOut, authUser, emailVerified, resendVerification, refreshEmailVerified, reauthenticate } = useUser();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const { settings: breakSettings, disableAll: disableBreaks } = useBreak();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
@@ -47,6 +49,27 @@ export default function SettingsScreen({ navigation }: any) {
 
   const notificationsEnabled = profile?.notificationsEnabled !== false;
   const [reminderNote, setReminderNote] = useState('');
+  const [checkin, setCheckin] = useState<CheckinSettings>(DEFAULT_CHECKIN);
+  const [checkinNote, setCheckinNote] = useState('');
+  const locale = language === 'zh' ? 'zh-CN' : language;
+  useEffect(() => { if (authUser) loadCheckin(authUser.uid).then(setCheckin).catch(() => {}); }, [authUser?.uid]);
+
+  // Saves, then (re)schedules or cancels the reminder to match.
+  async function updateCheckin(next: CheckinSettings) {
+    if (!authUser) return;
+    setCheckinNote('');
+    if (next.enabled) {
+      const allowed = (await hasNotificationPermission()) || (await requestNotificationPermission());
+      if (!allowed) { setCheckinNote(t('setRemindersDenied')); return; }
+    }
+    setCheckin(next);
+    saveCheckin(authUser.uid, next).catch(() => {});
+    if (next.enabled && notificationsEnabled) {
+      scheduleDailyCheckin(next.hour, next.minute, { title: t('ciNotifTitle'), body: t('ciNotifBody'), action: t('ciAction') });
+    } else {
+      cancelDailyCheckin();
+    }
+  }
 
   // Saves straight away. The Dashboard reschedules (or cancels) the evening reminder
   // whenever this profile field changes, so turning it on needs no extra scheduling here.
@@ -253,6 +276,48 @@ export default function SettingsScreen({ navigation }: any) {
           {reminderNote !== '' && (
             <Text style={{ color: palette.textSecondary, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, fontSize: 13 }}>{reminderNote}</Text>
           )}
+        </Section>
+
+        {/* Daily check-in */}
+        <Section title={t('ciTitle')} palette={palette}>
+          <Row
+            label={t('ciToggle')}
+            palette={palette}
+            right={
+              <Switch
+                value={checkin.enabled}
+                onValueChange={v => { haptics.selection(); updateCheckin({ ...checkin, enabled: v }); }}
+                accessibilityLabel={t('ciToggle')}
+                trackColor={{ true: palette.accent, false: palette.borderStrong }}
+              />
+            }
+          />
+          <Text style={{ color: palette.textMuted, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, fontSize: 13, lineHeight: 18 }}>{t('ciHint')}</Text>
+          {checkin.enabled && (
+            <>
+              <Row
+                label={t('ciTime')}
+                palette={palette}
+                right={
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                    <Pressable onPress={() => updateCheckin(shiftTime(checkin, -15))} hitSlop={8} accessibilityRole="button" accessibilityLabel={t('ciEarlier')}
+                      style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
+                      <Text style={{ color: palette.textPrimary, fontSize: 22 }}>−</Text>
+                    </Pressable>
+                    <Text style={{ color: palette.textPrimary, fontFamily: fontFamily.sansBold, minWidth: 74, textAlign: 'center' }} accessibilityLiveRegion="polite">{formatClock(checkin.hour, checkin.minute, locale)}</Text>
+                    <Pressable onPress={() => updateCheckin(shiftTime(checkin, 15))} hitSlop={8} accessibilityRole="button" accessibilityLabel={t('ciLater')}
+                      style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
+                      <Text style={{ color: palette.textPrimary, fontSize: 22 }}>+</Text>
+                    </Pressable>
+                  </View>
+                }
+              />
+              <Text style={{ color: palette.textMuted, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, fontSize: 12 }}>
+                {t('ciNext').replace('{when}', nextFire(new Date(), checkin).toLocaleString(locale, { weekday: 'short', hour: 'numeric', minute: '2-digit' }))}
+              </Text>
+            </>
+          )}
+          {checkinNote !== '' && <Text style={{ color: palette.textSecondary, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, fontSize: 13 }}>{checkinNote}</Text>}
         </Section>
 
         {/* About */}

@@ -35,6 +35,7 @@ import CustomWorkoutsScreen from './screens/CustomWorkoutsScreen';
 import GroceryScreen from './screens/GroceryScreen';
 import WeeklyReviewScreen from './screens/WeeklyReviewScreen';
 import CoachWidget from './components/CoachWidget';
+import CheckinSync from './components/CheckinSync';
 
 const Stack = createNativeStackNavigator();
 
@@ -133,6 +134,7 @@ function ThemedNavigator() {
         }}>
         <RootNavigator />
         <CoachWidget />
+        <CheckinSync />
       </NavigationContainer>
     </View>
   );

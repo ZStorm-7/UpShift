@@ -79,6 +79,8 @@ import {
   cancelStreakRiskReminder,
 } from '../services/notifications';
 import { getRankInfo } from '../data/ranks';
+import { pushWidgetSnapshot } from '../services/widgets';
+import { buildSnapshot } from '../services/habits/widgetSnapshot';
 import { validWeight } from '../utils/bodyStats';
 
 // Header avatar diameter. Named because Avatar derives its font size and
@@ -916,6 +918,11 @@ export default function DashboardScreen({ navigation }: any) {
     }
     scheduleStreakRiskReminder(questsDone < quests_.length, currentStreakDays, 20, getStreakRescueLine());
   }, [profile?.notificationsEnabled, questsDone, quests_.length, currentStreakDays]);
+
+  // Keep the Android Today widget in step with what this screen shows.
+  useEffect(() => {
+    pushWidgetSnapshot(buildSnapshot(getQuestCycleKey(), { questsDone, questsTotal: quests_.length, waterMl: waterTotal, waterGoalMl: waterGoal, streak: currentStreakDays }));
+  }, [questsDone, quests_.length, waterTotal, waterGoal, currentStreakDays]);
 
   const currentWeight = latestWeight(weightEntries);
   const weightDelta = weightChange(weightEntries);

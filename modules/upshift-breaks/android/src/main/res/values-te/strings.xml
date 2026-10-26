@@ -12,4 +12,15 @@
   <string name="upshift_widget_done">ఈరోజు పూర్తయింది</string>
   <string name="upshift_widget_off">విరామాలు ఆఫ్‌లో ఉన్నాయి</string>
   <string name="upshift_widget_countdown_sub">మీ శ్వాస విరామం వరకు</string>
+  <string name="upshift_progress_title">ఈరోజు</string>
+  <string name="upshift_progress_quests">క్వెస్ట్‌లు</string>
+  <string name="upshift_progress_water">నీరు</string>
+  <string name="upshift_progress_streak">స్ట్రీక్</string>
+  <string name="upshift_progress_water_value">%1$s / %2$s లీ</string>
+  <string name="upshift_progress_stale">రిఫ్రెష్ చేయడానికి UpShift తెరవండి</string>
+  <string name="upshift_progress_description">ఈరోజు క్వెస్ట్‌లు, నీరు, స్ట్రీక్ చూపిస్తుంది.</string>
+  <plurals name="upshift_progress_days">
+    <item quantity="one">%d రోజు</item>
+    <item quantity="other">%d రోజులు</item>
+  </plurals>
 </resources>
