@@ -25,6 +25,7 @@ import Svg, { Circle } from 'react-native-svg';
 import { colors } from '../theme/colors';
 import { type as typeScale } from '../theme/tokens';
 import { beat, easing } from '../animation/motion';
+import { usePalette, useThemedStyles, Palette } from '../theme/themedColors';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
@@ -61,11 +62,14 @@ export function CalorieRing({
   size = 168,
   thickness = 12,
   label = 'kcal',
-  color = colors.accent,
+  color,
   instant = false,
   caption,
   hideCenter = false,
 }: CalorieRingProps) {
+  const colors = usePalette();
+  color = color ?? colors.accent;
+  const styles = useThemedStyles(makeStyles);
   // The stroke is centred on the path, so the radius has to come in by half
   // the thickness or the ring is clipped by the viewBox.
   const radius = (size - thickness) / 2;
@@ -147,7 +151,7 @@ export function CalorieRing({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Palette) => StyleSheet.create({
   wrap: {
     alignItems: 'center',
     justifyContent: 'center',

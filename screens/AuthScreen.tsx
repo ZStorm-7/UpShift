@@ -22,6 +22,7 @@ import { getAuthErrorMessage } from '../firebase/authErrors';
 import haptics from '../services/haptics';
 import { useLanguage } from '../i18n/LanguageContext';
 import { withMinDuration, AUTH_TRANSITION_MS } from '../utils/timing';
+import { usePalette, useThemedStyles, Palette } from '../theme/themedColors';
 
 // The chevron only, at two-thirds of the splash's size. Welcome has just shown
 // the full lockup one screen ago; repeating the wordmark here would restate the
@@ -31,6 +32,8 @@ const MARK_WIDTH = 44;
 const MARK_HEIGHT = 38;
 
 export default function AuthScreen({ navigation }: any) {
+  const colors = usePalette();
+  const styles = useThemedStyles(makeStyles);
   const { signUp, logIn, loadProfile, resetPassword } = useUser();
   const { t } = useLanguage();
   const [isSignUp, setIsSignUp] = useState(true);
@@ -276,7 +279,7 @@ export default function AuthScreen({ navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Palette) => StyleSheet.create({
   screen: {
     justifyContent: 'center',
   },

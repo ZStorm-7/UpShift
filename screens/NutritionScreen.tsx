@@ -324,7 +324,7 @@ export default function NutritionScreen({ navigation }: any) {
       </View>
 
       {/* Add food modal */}
-      <Modal visible={modalVisible} transparent animationType="slide" onRequestClose={() => setModalVisible(false)}>
+      <Modal visible={modalVisible} transparent animationType="slide" onRequestClose={() => setModalVisible(false)} accessibilityLabel="Log food">
         <View style={[styles.modalOverlay, { backgroundColor: palette.scrim }]}>
           <View style={[styles.modalContent, { backgroundColor: palette.surface, borderColor: palette.border }]}>
             <View style={styles.modalHeader}>

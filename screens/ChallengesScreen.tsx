@@ -19,6 +19,7 @@ import {
   reportChallengeScore,
   finalizeChallengeIfDue,
 } from '../firebase/challenges';
+import { usePalette, useThemedStyles, Palette } from '../theme/themedColors';
 
 const AVATAR_SIZE = 40;
 
@@ -31,6 +32,8 @@ function daysRemaining(endDate: string): number {
 }
 
 export default function ChallengesScreen({ navigation }: any) {
+  const colors = usePalette();
+  const styles = useThemedStyles(makeStyles);
   const { authUser, profile } = useUser();
   const { t } = useLanguage();
   const [loading, setLoading] = useState(true);
@@ -178,7 +181,7 @@ export default function ChallengesScreen({ navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Palette) => StyleSheet.create({
   skeletonStack: {
     gap: spacing.lg,
     paddingTop: spacing.md,

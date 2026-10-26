@@ -121,3 +121,12 @@ test('a streak cannot be longer than the account has existed', () => {
   assert.equal(maxPlausibleStreak(now - 400 * DAY, now), 401);
   assert.equal(maxPlausibleStreak(now + 5 * DAY, now), 1, 'a creation time in the future cannot raise it');
 });
+
+test('display names keep real names in any script and drop markup', () => {
+  const name = (n: string) => cleanScore({ displayName: n, avatar: '', level: 1, totalXP: 0, rank: 'Rookie', streak: 0 }, 'x').displayName;
+  assert.equal(name("María-José O'Neil Jr."), "María-José O'Neil Jr.");
+  assert.equal(name('张伟 L.'), '张伟 L.');
+  assert.equal(name('రవి K.'), 'రవి K.');
+  assert.equal(name('<script>alert(1)</script>'), 'scriptalert1script');
+  assert.equal(name('Sam\u0000   R.'), 'Sam R.');
+});

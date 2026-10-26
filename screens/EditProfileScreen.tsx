@@ -22,11 +22,13 @@ import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useUser, calculateWaterGoal, calculateCalorieGoal } from '../context/UserContext';
 import { useLanguage } from '../i18n/LanguageContext';
+import { validAge, validFeet, validInches, validWeight } from '../utils/bodyStats';
 import { LANGUAGES, LanguageCode } from '../i18n/translations';
 import { uploadProfilePhoto, photoUploadAvailable, getDefaultAvatarColor } from '../services/avatar';
 import { avatarPalette } from '../theme/colors';
 import AvatarView from '../components/Avatar';
 import { requestNotificationPermission, cancelAllReminders, notificationsAvailable } from '../services/notifications';
+import { usePalette, useThemedStyles, Palette } from '../theme/themedColors';
 
 // The marker that rides along with the accent tint on a selected option.
 // Colour is never allowed to be the only thing that says "this one" — a
@@ -60,6 +62,8 @@ const DEFAULT_CALORIE_GOAL = 2000;
 const DEFAULT_WATER_GOAL_ML = 2500;
 
 export default function EditProfileScreen({ navigation }: any) {
+  const colors = usePalette();
+  const styles = useThemedStyles(makeStyles);
   const { authUser, profile, setProfile } = useUser();
   const { t } = useLanguage();
 
@@ -95,7 +99,7 @@ export default function EditProfileScreen({ navigation }: any) {
   const savingRef = useRef(false);
 
   const canSave =
-    firstName && lastInitial && age && heightFeet && weight && gender && activityLevel && goal;
+    firstName && lastInitial && validAge(age) && validFeet(heightFeet) && validInches(heightInches) && validWeight(weight) && gender && activityLevel && goal;
 
   // Opens the device's photo library, and if the user picks something,
   // uploads it to Cloudinary right away, holding only the resulting URL in
@@ -612,7 +616,7 @@ export default function EditProfileScreen({ navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Palette) => StyleSheet.create({
   flexOne: {
     flex: 1,
   },

@@ -75,6 +75,7 @@ import {
   cancelStreakRiskReminder,
 } from '../services/notifications';
 import { getRankInfo } from '../data/ranks';
+import { validWeight } from '../utils/bodyStats';
 
 // Header avatar diameter. Named because Avatar derives its font size and
 // AuthTransition-style pressable frame from it — a bare `36` scattered across
@@ -627,8 +628,8 @@ export default function DashboardScreen({ navigation }: any) {
 
   const logWeight = () => {
     if (!authUser) return;
+    if (!validWeight(weightInput)) return;
     const weight = parseFloat(weightInput);
-    if (!weight || weight <= 0 || weight > 1000) return;
     const updated = upsertTodayWeight(weightEntries, weight);
     setWeightEntries(updated);
     setDoc(weightLogDocRef(authUser.uid), { entries: updated }).catch(() => {
@@ -1184,7 +1185,7 @@ export default function DashboardScreen({ navigation }: any) {
       )}
 
       {/* Water modal */}
-      <Modal visible={waterModalVisible} transparent animationType="slide">
+      <Modal visible={waterModalVisible} transparent animationType="slide" onRequestClose={() => setWaterModalVisible(false)} accessibilityLabel={t('waterModalTitle')}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>{t('waterModalTitle')}</Text>
@@ -1227,7 +1228,7 @@ export default function DashboardScreen({ navigation }: any) {
       </Modal>
 
       {/* Sleep modal */}
-      <Modal visible={sleepModalVisible} transparent animationType="slide">
+      <Modal visible={sleepModalVisible} transparent animationType="slide" onRequestClose={() => setSleepModalVisible(false)} accessibilityLabel={t('sleepModalTitle')}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>{t('sleepModalTitle')}</Text>
@@ -1292,7 +1293,7 @@ export default function DashboardScreen({ navigation }: any) {
       </Modal>
 
       {/* Weight modal */}
-      <Modal visible={weightModalVisible} transparent animationType="slide">
+      <Modal visible={weightModalVisible} transparent animationType="slide" onRequestClose={() => setWeightModalVisible(false)} accessibilityLabel={t('logWeight')}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>{t('logWeight')}</Text>

@@ -24,12 +24,15 @@ import {
   removeFriend,
 } from '../firebase/friends';
 import { createChallenge, hasActiveChallengeWith } from '../firebase/challenges';
+import { usePalette, useThemedStyles, Palette } from '../theme/themedColors';
 
 const AVATAR_SIZE = 44;
 
 const fillName = (s: string, name: string) => s.replace('{name}', name);
 
 export default function FriendsScreen({ navigation }: any) {
+  const colors = usePalette();
+  const styles = useThemedStyles(makeStyles);
   const { authUser, profile } = useUser();
   const { t } = useLanguage();
 
@@ -334,7 +337,7 @@ export default function FriendsScreen({ navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Palette) => StyleSheet.create({
   headerIcon: {
     fontSize: 20,
   },

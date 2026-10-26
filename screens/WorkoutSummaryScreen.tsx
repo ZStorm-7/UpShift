@@ -42,6 +42,7 @@ import { beat, easing, summary as summaryBeats } from '../animation/motion';
 import haptics from '../services/haptics';
 import sound from '../services/sound';
 import { useLanguage } from '../i18n/LanguageContext';
+import { usePalette, useThemedStyles, Palette } from '../theme/themedColors';
 
 type SummaryParams = {
   xpEarned?: number;
@@ -54,6 +55,8 @@ type SummaryParams = {
 };
 
 export default function WorkoutSummaryScreen({ navigation, route }: any) {
+  const colors = usePalette();
+  const styles = useThemedStyles(makeStyles);
   const { t } = useLanguage();
   const reduced = useReducedMotion();
 
@@ -328,6 +331,7 @@ function StatSlot({
   at: (start: number, length: number) => (p: number) => number;
   children: ReactNode;
 }) {
+  const styles = useThemedStyles(makeStyles);
   const window = at(
     summaryBeats.at.stats + index * summaryBeats.statStagger,
     summaryBeats.dur.stats
@@ -344,7 +348,7 @@ function StatSlot({
   return <Animated.View style={[styles.statSlot, animatedStyle]}>{children}</Animated.View>;
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Palette) => StyleSheet.create({
   content: {
     alignItems: 'center',
     paddingTop: spacing.xxxl * 2,

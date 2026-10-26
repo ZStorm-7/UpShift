@@ -9,6 +9,7 @@ import { fontFamily } from '../theme/fonts';
 import { usePalette } from '../theme/themedColors';
 import haptics from '../services/haptics';
 import { useLanguage } from '../i18n/LanguageContext';
+import { validWeight } from '../utils/bodyStats';
 
 type Props = {
   visible: boolean;
@@ -25,7 +26,7 @@ export default function WeightPromptModal({ visible, currentWeight, onSubmit, on
 
   async function handleSubmit() {
     const num = parseFloat(value);
-    if (!Number.isFinite(num) || num <= 0 || num > 1500) {
+    if (!validWeight(value)) {
       // Silently reject — the input's border will color to indicate error
       // (see the numeric check on `value` below).
       return;
@@ -45,8 +46,7 @@ export default function WeightPromptModal({ visible, currentWeight, onSubmit, on
     await onSkip();
   }
 
-  const num = parseFloat(value);
-  const valid = value.length > 0 && Number.isFinite(num) && num > 0 && num < 1500;
+  const valid = validWeight(value);
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={handleSkip} accessibilityLabel={t('weightTitle')}>

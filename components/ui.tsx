@@ -25,9 +25,10 @@ import {
   Easing,
 } from 'react-native';
 import { colors } from '../theme/colors';
-import { spacing, radius, type, layout, elevation } from '../theme/tokens';
+import { spacing, radius, type, layout } from '../theme/tokens';
 import { fontFamily } from '../theme/fonts';
 import { duration, beat, PRESS_SCALE } from '../animation/motion';
+import { usePalette, useThemedStyles, Palette } from '../theme/themedColors';
 
 // The app's one curve, expressed for React Native's legacy Animated API.
 // `animation/motion.ts` exports it as a Reanimated easing, which the modern
@@ -53,6 +54,7 @@ type ScreenProps = {
  * gutters from matching before.
  */
 export function Screen({ children, scroll = false, style, contentStyle }: ScreenProps) {
+  const styles = useThemedStyles(makeStyles);
   if (scroll) {
     return (
       <View style={[styles.screen, style]}>
@@ -82,6 +84,7 @@ type AppBarProps = {
  *  still put their title on the same baseline, so navigating doesn't make the
  *  title jump. */
 export function AppBar({ title, subtitle, onBack, right }: AppBarProps) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={styles.appBar}>
       {onBack ? (
@@ -152,9 +155,15 @@ export function Card({
   accessibilityRole = 'button',
   accessibilityState,
 }: CardProps) {
+  const styles = useThemedStyles(makeStyles);
+  const colors = usePalette();
+  // Same fills as `elevation` in theme/tokens, but from the current theme (the token is built once, dark).
+  const fill = raised
+    ? { backgroundColor: colors.surfaceRaised, borderWidth: layout.hairline, borderColor: colors.borderStrong }
+    : { backgroundColor: colors.surface, borderWidth: layout.hairline, borderColor: colors.border };
   const base = [
     styles.card,
-    raised ? elevation.raised : elevation.flat,
+    fill,
     accentColor ? { borderColor: accentColor } : null,
     style,
   ];
@@ -181,6 +190,7 @@ export function Card({
 /** Small uppercase label that introduces a group of cards. Optional trailing
  *  slot for a count or a "See all" action. */
 export function SectionTitle({ children, right }: { children: ReactNode; right?: ReactNode }) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={styles.sectionRow}>
       <Text style={styles.sectionTitle}>{children}</Text>
@@ -203,7 +213,10 @@ type MeterProps = {
   animated?: boolean;
 };
 
-export function Meter({ progress, color = colors.accent, height = 8, animated = true }: MeterProps) {
+export function Meter({ progress, color, height = 8, animated = true }: MeterProps) {
+  const colors = usePalette();
+  color = color ?? colors.accent;
+  const styles = useThemedStyles(makeStyles);
   const clamped = Math.max(0, Math.min(1, isFinite(progress) ? progress : 0));
   const width = useRef(new Animated.Value(clamped)).current;
 
@@ -249,7 +262,10 @@ type PillProps = {
   style?: StyleProp<ViewStyle>;
 };
 
-export function Pill({ label, color = colors.accent, filled = false, style }: PillProps) {
+export function Pill({ label, color, filled = false, style }: PillProps) {
+  const colors = usePalette();
+  color = color ?? colors.accent;
+  const styles = useThemedStyles(makeStyles);
   return (
     <View
       style={[
@@ -313,6 +329,8 @@ export function Button({
   accessibilityHint,
   accessibilityState,
 }: ButtonProps) {
+  const colors = usePalette();
+  const styles = useThemedStyles(makeStyles);
   const scale = useRef(new Animated.Value(1)).current;
 
   const animateTo = (value: number) =>
@@ -349,6 +367,7 @@ export function Button({
         style,
       ]}>
       <Pressable
+        disabled={!!disabled}
         onPress={disabled ? undefined : onPress}
         onPressIn={() => !disabled && animateTo(PRESS_SCALE)}
         onPressOut={() => !disabled && animateTo(1)}
@@ -439,6 +458,8 @@ export function Field({
   accessibilityLabel,
   accessibilityHint,
 }: FieldProps) {
+  const colors = usePalette();
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={[styles.field, style]}>
       {!!label && <Text style={styles.fieldLabel}>{label}</Text>}
@@ -487,7 +508,10 @@ type StatTileProps = {
 /** The repeated "one number, one word" tile used across Dashboard and
  *  History. Values are always printed as text, never conveyed by colour
  *  alone. */
-export function StatTile({ icon, value, label, progress, color = colors.accent, onPress }: StatTileProps) {
+export function StatTile({ icon, value, label, progress, color, onPress }: StatTileProps) {
+  const colors = usePalette();
+  color = color ?? colors.accent;
+  const styles = useThemedStyles(makeStyles);
   return (
     <Card
       onPress={onPress}
@@ -525,6 +549,7 @@ export function EmptyState({
   title: string;
   message?: string;
 }) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={styles.empty}>
       <Text style={styles.emptyIcon}>{icon}</Text>
@@ -583,6 +608,7 @@ export function FadeIn({
  * ------------------------------------------------------------------ */
 
 export function Divider({ style }: { style?: StyleProp<ViewStyle> }) {
+  const styles = useThemedStyles(makeStyles);
   return <View style={[styles.divider, style]} />;
 }
 
@@ -602,7 +628,7 @@ export const text = StyleSheet.create({
   label: { ...type.label, color: colors.textMuted, textTransform: 'uppercase' as const },
 });
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Palette) => StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.bg,

@@ -390,7 +390,7 @@ export default function BreaksSettingsScreen({ navigation }: any) {
       </ScrollView>
 
       {/* Prominent disclosure: shown BEFORE the system Usage Access screen (Google Play requirement). */}
-      <Modal visible={disclosureOpen} transparent animationType="fade" onRequestClose={() => setDisclosureOpen(false)}>
+      <Modal visible={disclosureOpen} transparent animationType="fade" onRequestClose={() => setDisclosureOpen(false)} accessibilityLabel={t('breaksTitle')}>
         <View style={[styles.scrim, { backgroundColor: palette.scrim }]}>
           <View style={[styles.dialog, { backgroundColor: palette.surface, borderColor: palette.borderStrong }]}>
             <Text style={[styles.dialogTitle, { color: palette.textPrimary }]} accessibilityRole="header">{t('breaksDisclosureTitle')}</Text>

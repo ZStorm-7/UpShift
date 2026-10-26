@@ -35,7 +35,10 @@ import {
 
 // Screens with a full-width button pinned to the bottom: the button sits under the circle there, so lift the circle above it.
 const BOTTOM_BUTTON_ROUTES = new Set(['Nutrition']);
-const HIDDEN_ROUTES = new Set(['Welcome', 'Auth', 'Subscription', 'Onboarding', 'Workout', 'WorkoutSummary', 'Break']);
+const cap = (w: string) => w.charAt(0).toUpperCase() + w.slice(1);
+
+// Form-heavy screens are hidden too: the circle sat on top of right-aligned switches and buttons there.
+const HIDDEN_ROUTES = new Set(['Welcome', 'Auth', 'Subscription', 'Onboarding', 'Workout', 'WorkoutSummary', 'Break', 'Settings', 'EditProfile', 'BreaksSettings']);
 
 // Quick-reply chips change with the screen (values are translation keys).
 const CHIPS: Record<string, string[]> = {
@@ -393,14 +396,14 @@ export default function CoachWidget() {
         </View>);
       case 'plan': return (
         <View style={box}>
-          {c.days.map((d, i) => <Text key={i} style={[type.bodySm, { color: p.textPrimary }]}>{d.day.slice(0, 3)}: {d.rest ? '—' : `${d.focus} (${d.exercises.length})`}</Text>)}
+          {c.days.map((d, i) => <Text key={i} style={[type.bodySm, { color: p.textPrimary }]}>{cap(d.day.slice(0, 3))}: {d.rest ? '—' : `${d.focus} · ${d.exercises.length} ${d.exercises.length === 1 ? 'exercise' : 'exercises'}`}</Text>)}
           {btn(!!c.saved, t('coachSaveWorkout'), t('coachSavedWorkout'), () => savePlanCard(m))}
         </View>);
       case 'mealplan': return (
         <View style={box}>
           {c.days.map((d, i) => (
             <Text key={i} style={[type.bodySm, { color: p.textPrimary }]}>
-              {d.day.slice(0, 3)}: {d.meals.reduce((n, x) => n + x.calories, 0)} kcal · {d.meals.map(x => x.name).join(', ')}
+              {cap(d.day.slice(0, 3))}: {d.meals.reduce((n, x) => n + x.calories, 0)} kcal · {d.meals.map(x => x.name).join(', ')}
             </Text>))}
           {!!c.calorieNote && <Text style={[type.bodySm, { color: p.warning }]}>{c.calorieNote}</Text>}
           {(c.allergies?.length ?? 0) > 0 && <Text style={[type.bodySm, { color: p.warning }]}>⚠️ {t('coachAllergyNote')}</Text>}

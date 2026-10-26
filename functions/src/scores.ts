@@ -19,7 +19,8 @@ export function validAvatar(url: unknown, cloudName: string): string {
 export function cleanScore(raw: any, cloudName: string): ScoreInput {
   const color = str(raw?.avatarColor, 9);
   return {
-    displayName: str(raw?.displayName, 40).replace(/[\u0000-\u001f]/g, ''),
+    // Names are letters (any script), marks, digits, spaces and . ' - only: nothing that could be markup.
+    displayName: str(raw?.displayName, 40).replace(/[^\p{L}\p{M}\p{N} .'\-]/gu, '').replace(/\s+/g, ' ').trim(),
     avatar: validAvatar(raw?.avatar, cloudName),
     ...(/^#[0-9a-fA-F]{3,8}$/.test(color) ? { avatarColor: color } : {}),
     level: Math.max(1, int(raw?.level, 1000)),

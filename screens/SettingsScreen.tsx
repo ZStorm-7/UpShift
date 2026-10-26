@@ -290,7 +290,7 @@ export default function SettingsScreen({ navigation }: any) {
         </View>
       </ScrollView>
 
-      <Modal visible={deleteOpen} transparent animationType="fade" onRequestClose={() => !deleting && setDeleteOpen(false)}>
+      <Modal visible={deleteOpen} transparent animationType="fade" onRequestClose={() => !deleting && setDeleteOpen(false)} accessibilityLabel={t('deleteAccountTitle')}>
         <View style={[styles.modalScrim, { backgroundColor: palette.scrim }]}>
           <View style={[styles.modalCard, { backgroundColor: palette.surface, borderColor: palette.borderStrong }]}>
             <Text style={[styles.modalTitle, { color: palette.textPrimary }]} accessibilityRole="header">{t('deleteAccountTitle')}</Text>

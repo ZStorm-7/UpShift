@@ -21,6 +21,7 @@ import { Image, Text, View, StyleSheet } from 'react-native';
 import { colors } from '../theme/colors';
 import { fontFamily } from '../theme/fonts';
 import { getInitials, getDefaultAvatarColor } from '../services/avatar';
+import { usePalette, useThemedStyles, Palette } from '../theme/themedColors';
 
 type AvatarProps = {
   /** The profile's stored `avatar` field — a photo URL, a legacy `preset:`
@@ -84,6 +85,7 @@ export default function Avatar({
 }
 
 function AvatarBase({ photoUrl, color, uid, firstName, lastInitial, size }: Omit<AvatarProps, 'frame'>) {
+  const styles = useThemedStyles(makeStyles);
   const dimension = { width: size, height: size, borderRadius: size / 2 };
 
   if (isRealPhoto(photoUrl)) {
@@ -120,7 +122,7 @@ function AvatarBase({ photoUrl, color, uid, firstName, lastInitial, size }: Omit
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Palette) => StyleSheet.create({
   photo: {
     backgroundColor: colors.surfaceRaised,
   },

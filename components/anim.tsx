@@ -55,6 +55,7 @@ type ScreenTransitionProps = {
  * and use cinematicScreenOptions.
  */
 export function ScreenTransition({ children, variant = 'rise', style }: ScreenTransitionProps) {
+  const styles = useThemedStyles(makeStyles);
   const progress = useSharedValue(0);
   const reduced = useReducedMotion();
 
@@ -149,6 +150,7 @@ export function PressableScale({
   return (
     <Animated.View style={[animatedStyle, style]}>
       <Pressable
+        disabled={!!disabled}
         onPress={disabled ? undefined : onPress}
         onPressIn={() => press(to)}
         onPressOut={() => press(1)}
@@ -157,7 +159,9 @@ export function PressableScale({
         accessibilityHint={accessibilityHint}
         // The visual disabled state and the announced one have to agree, or a
         // screen-reader user is told to press something that ignores them.
-        accessibilityState={{ disabled: !!disabled, ...accessibilityState }}>
+        accessibilityState={{ disabled: !!disabled, ...accessibilityState }}
+        // Web only reads the checked state of a radio/checkbox from aria-checked.
+        aria-checked={accessibilityRole === 'radio' || accessibilityRole === 'checkbox' ? accessibilityState?.checked : undefined}>
         {children}
       </Pressable>
     </Animated.View>
@@ -252,7 +256,10 @@ type PulseRingProps = {
  * should read as a heartbeat you can ignore, because it may be on screen for
  * a long time.
  */
-export function PulseRing({ size, color = colors.accent, active = true, style }: PulseRingProps) {
+export function PulseRing({ size, color, active = true, style }: PulseRingProps) {
+  const colors = usePalette();
+  color = color ?? colors.accent;
+  const styles = useThemedStyles(makeStyles);
   const t = useSharedValue(0);
   const reduced = useReducedMotion();
 
@@ -368,6 +375,7 @@ type ShimmerProps = {
  * already something to look at.
  */
 export function Shimmer({ width, height, radius: cornerRadius, style }: ShimmerProps) {
+  const colors = usePalette();
   const t = useSharedValue(0);
   const reduced = useReducedMotion();
 
@@ -424,11 +432,14 @@ type AnimatedMeterProps = {
  */
 export function AnimatedMeter({
   progress,
-  color = colors.accent,
+  color,
   height = 8,
   celebrateAtFull = true,
   style,
 }: AnimatedMeterProps) {
+  const colors = usePalette();
+  color = color ?? colors.accent;
+  const styles = useThemedStyles(makeStyles);
   const clamped = Math.max(0, Math.min(1, isFinite(progress) ? progress : 0));
   // Starts at zero, not at the target. Seeding this with `clamped` meant the
   // effect's withTiming had nowhere to travel on first mount, so a bar that
@@ -503,6 +514,7 @@ export function AnimatedMeter({
 // does — the standard trick for a 60fps counter. Made non-editable and
 // stripped of padding so it renders indistinguishably from Text.
 import { TextInput } from 'react-native';
+import { usePalette, useThemedStyles, Palette } from '../theme/themedColors';
 const AnimatedTextInput = Animated.createAnimatedComponent(TextInput);
 
 function AnimatedTextDisplay({
@@ -514,6 +526,7 @@ function AnimatedTextDisplay({
   animatedProps: any;
   defaultValue: string;
 }) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <AnimatedTextInput
       editable={false}
@@ -527,7 +540,7 @@ function AnimatedTextDisplay({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Palette) => StyleSheet.create({
   fill: {
     flex: 1,
   },

@@ -23,6 +23,7 @@ import {
   clearReaction,
 } from '../firebase/leaderboard';
 import { getRankEmoji } from '../data/ranks';
+import { usePalette, useThemedStyles, Palette } from '../theme/themedColors';
 
 // Component dimensions, not spacing. The skeleton reuses all three so the
 // layout doesn't shift when the real rows land on top of it.
@@ -37,6 +38,7 @@ const SKELETON_ROWS = 6;
 const REACTION_ROW_LIMIT = 10;
 
 export default function LeaderboardScreen({ navigation }: any) {
+  const styles = useThemedStyles(makeStyles);
   const { authUser } = useUser();
   const { t } = useLanguage();
   const [loading, setLoading] = useState(true);
@@ -298,7 +300,7 @@ export default function LeaderboardScreen({ navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Palette) => StyleSheet.create({
   container: {
     gap: layout.gap,
     paddingBottom: layout.bottomInset,

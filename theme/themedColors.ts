@@ -19,7 +19,7 @@
 // export, so a screen that currently does `colors.textPrimary` becomes
 // `theme.textPrimary` with a one-line change.
 
-import { createContext, useContext } from 'react';
+import { createContext, useContext, useMemo } from 'react';
 
 export type Palette = {
   bg: string;
@@ -124,7 +124,7 @@ export const lightPalette: Palette = {
   // Brand green and red are too light to read as text or to carry white text
   // on a white page (2.3:1 and 3.3:1), so the light theme uses deeper shades.
   accent: LIGHT_GREEN,
-  accentSoft: 'rgba(0, 122, 10, 0.12)',
+  accentSoft: 'rgba(0, 122, 10, 0.08)',
   accentBorder: 'rgba(0, 122, 10, 0.35)',
 
   loss: LIGHT_RED,
@@ -143,7 +143,7 @@ export const lightPalette: Palette = {
   divider: '#E4E4E4',
 
   success: LIGHT_GREEN,
-  successSoft: 'rgba(0, 122, 10, 0.12)',
+  successSoft: 'rgba(0, 122, 10, 0.08)',
   danger: LIGHT_RED,
   dangerSoft: 'rgba(201, 48, 59, 0.12)',
   warning: '#8A5A00',
@@ -183,4 +183,12 @@ export function useTheme(): ThemeContextValue {
 // Sugar for the common case — most call sites only want the palette.
 export function usePalette(): Palette {
   return useContext(ThemeContext).palette;
+}
+
+// For screens whose StyleSheet reads colours: write the sheet as `makeStyles(colors)` and call this
+// in the component, so the sheet is rebuilt when the theme changes (a module-level StyleSheet
+// freezes whatever colours were current at import time).
+export function useThemedStyles<T>(make: (colors: Palette) => T): T {
+  const palette = usePalette();
+  return useMemo(() => make(palette), [palette]);
 }

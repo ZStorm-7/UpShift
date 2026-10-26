@@ -21,10 +21,12 @@ import { useUser, calculateWaterGoal, calculateCalorieGoal } from '../context/Us
 import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useLanguage } from '../i18n/LanguageContext';
+import { validAge, validFeet, validInches } from '../utils/bodyStats';
 import { LANGUAGES, LanguageCode } from '../i18n/translations';
 import { uploadProfilePhoto, photoUploadAvailable } from '../services/avatar';
 import AvatarView from '../components/Avatar';
 import { logOnboardingEvent } from '../firebase/analytics';
+import { usePalette, useThemedStyles, Palette } from '../theme/themedColors';
 
 // Named for the same reason EditProfileScreen's preview one is — the
 // skeleton/preview have to agree on a size or the row jumps.
@@ -61,6 +63,7 @@ const DEFAULT_CALORIE_GOAL = 2000;
 const DEFAULT_WATER_GOAL_ML = 2500;
 
 export default function OnboardingScreen({ navigation }: any) {
+  const styles = useThemedStyles(makeStyles);
   const { authUser, setProfile } = useUser();
   const { t, language, setLanguage } = useLanguage();
   const [avatar, setAvatar] = useState('');
@@ -135,7 +138,7 @@ export default function OnboardingScreen({ navigation }: any) {
           Boolean
         ) as string[];
       case 2:
-        return [!age && t('age'), !heightFeet && t('heightFt')].filter(
+        return [!validAge(age) && t('age'), !validFeet(heightFeet) && t('heightFt'), !validInches(heightInches) && t('heightIn')].filter(
           Boolean
         ) as string[];
       case 3:
@@ -375,7 +378,6 @@ export default function OnboardingScreen({ navigation }: any) {
       accessibilityRole="radio"
       accessibilityLabel={label}
       accessibilityState={{ selected, checked: selected }}
-      aria-checked={selected}
       onPress={() => selectOption(onSelect)}
       style={grow ? styles.chipGrowWrap : undefined}>
       <View style={[styles.chip, styles.chipRow, grow && styles.chipGrow, selected && styles.chipSelected]}>
@@ -397,7 +399,6 @@ export default function OnboardingScreen({ navigation }: any) {
       accessibilityRole="radio"
       accessibilityLabel={description ? `${label}. ${description}` : label}
       accessibilityState={{ selected, checked: selected }}
-      aria-checked={selected}
       onPress={() => selectOption(onSelect)}>
       <View style={[styles.chip, styles.optionCard, selected && styles.chipSelected]}>
         <View style={styles.optionText}>
@@ -745,7 +746,7 @@ export default function OnboardingScreen({ navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Palette) => StyleSheet.create({
   flex: {
     flex: 1,
   },
