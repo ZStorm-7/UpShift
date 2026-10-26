@@ -1,7 +1,8 @@
-import { doc, collection, query, orderBy, limit, getDocs, setDoc, deleteDoc } from 'firebase/firestore';
+import { doc, collection, query, orderBy, limit, getDocs, setDoc, deleteDoc, where } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { db, functions } from './config';
 import { TOTAL_XP_PER_LEVEL } from './progress';
+import { monthKeyUtc } from '../services/habits/season';
 
 // Everything else in this app lives under users/{uid}/… and is readable only
 // by that user — which is exactly right for private data, but it makes a
@@ -31,6 +32,9 @@ export type LeaderboardEntry = {
   breakStreak?: number;
   // The avatar frame earned from the longest break streak (server-derived), shown to friends.
   breakFrame?: 'dawn' | 'aurora' | 'zen' | null;
+  // XP earned this calendar month (UTC), worked out by the server for the seasonal board.
+  monthKey?: string;
+  monthXP?: number;
 };
 
 export function leaderboardDocRef(uid: string) {
@@ -73,7 +77,12 @@ export async function publishToLeaderboard(entry: LeaderboardEntry): Promise<voi
 // Top N by total XP. Firestore does the sorting and limiting server-side, so
 // this stays cheap no matter how many users exist — it never downloads the
 // whole collection to sort locally.
-export async function fetchTopEntries(max = 50): Promise<LeaderboardEntry[]> {
+export async function fetchTopEntries(max = 50, scope: 'all' | 'month' = 'all'): Promise<LeaderboardEntry[]> {
+  if (scope === 'month') {
+    const q = query(collection(db, 'leaderboard'), where('monthKey', '==', monthKeyUtc(Date.now())), orderBy('monthXP', 'desc'), limit(max));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(d => d.data() as LeaderboardEntry).filter(e => (e.monthXP ?? 0) > 0);
+  }
   const q = query(collection(db, 'leaderboard'), orderBy('totalXP', 'desc'), limit(max));
   const snapshot = await getDocs(q);
   return snapshot.docs.map(d => d.data() as LeaderboardEntry);

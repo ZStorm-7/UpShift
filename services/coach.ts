@@ -9,7 +9,7 @@ import {
 } from 'firebase/firestore';
 import { db, functions } from '../firebase/config';
 import { dayDocRef } from '../firebase/progress';
-import { streakDocRef, liveStreak, EMPTY_STREAK, StreakState } from '../firebase/streaks';
+import { streakDocRef, liveStreak, EMPTY_STREAK, StreakState, cleanStreak } from '../firebase/streaks';
 import { getQuestCycleKey } from '../firebase/quests';
 import { emitDayDataChanged } from './dataEvents';
 import type { WorkoutTemplate, WorkoutTier } from '../data/workoutPlans';
@@ -226,7 +226,7 @@ export async function sendFeedback(uid: string, f: {
 // ---- Streak rescue ----
 export async function getStreakStatus(uid: string): Promise<{ streak: number; atRisk: boolean }> {
   const snap = await getDoc(streakDocRef(uid));
-  const s = snap.exists() ? (snap.data() as StreakState) : EMPTY_STREAK;
+  const s = snap.exists() ? cleanStreak(snap.data()) : EMPTY_STREAK;
   const cycle = getQuestCycleKey();
   const streak = liveStreak(s, cycle);
   return { streak, atRisk: streak > 0 && s.lastCompletedCycleKey !== cycle };

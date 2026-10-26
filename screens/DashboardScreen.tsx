@@ -23,6 +23,7 @@ import {
 import AuthTransition from '../components/AuthTransition';
 import Avatar from '../components/Avatar';
 import CircularRankBadge from '../components/CircularRankBadge';
+import WeeklyCards from '../components/WeeklyCards';
 import WeightPromptModal from '../components/WeightPromptModal';
 import { withMinDuration, AUTH_TRANSITION_MS } from '../utils/timing';
 import { Enter, LevelUpTakeover } from '../components/dashboard';
@@ -54,6 +55,9 @@ import {
   streakDocRef,
   advanceStreak,
   liveStreak,
+  cleanStreak,
+  daysToNextFreeze,
+  recentlyFrozen,
 } from '../firebase/streaks';
 import {
   WeightEntry,
@@ -453,7 +457,7 @@ export default function DashboardScreen({ navigation }: any) {
         setMealCount(dayContext.mealCount);
         setSmallestMealCalories(dayContext.smallestMealCalories);
 
-        setStreak(streakSnap.exists() ? (streakSnap.data() as StreakState) : EMPTY_STREAK);
+        setStreak(streakSnap.exists() ? cleanStreak(streakSnap.data()) : EMPTY_STREAK);
         setWeightEntries(weightSnap.exists() ? (weightSnap.data().entries || []) : []);
         // currentXP/level always come straight from Firestore here, not from
         // any local-only state — so logging out and back in (or closing and
@@ -1060,9 +1064,18 @@ export default function DashboardScreen({ navigation }: any) {
           />
           {currentStreakDays > 0 && (
             <Text style={styles.streakLine}>
-              🔥 {currentStreakDays}-day streak
+              {t('strkLine').replace('{n}', String(currentStreakDays))}
             </Text>
           )}
+          {(currentStreakDays > 0 || streak.freezes > 0) && (
+            <Text style={styles.nextRankLine} accessibilityLiveRegion="polite">
+              {[
+                streak.freezes > 0 ? (streak.freezes === 1 ? t('strkFreezeOne') : t('strkFreezeMany').replace('{n}', String(streak.freezes))) : null,
+                (() => { const d = daysToNextFreeze(streak, currentStreakDays); return d !== null && currentStreakDays > 0 ? t('strkNextFreeze').replace('{n}', String(d)) : null; })(),
+              ].filter(Boolean).join(' · ')}
+            </Text>
+          )}
+          {recentlyFrozen(streak, getQuestCycleKey()) && <Text style={styles.nextRankLine}>{t('strkFreezeUsed')}</Text>}
           {nextRankLabel && (
             <Text style={styles.nextRankLine}>
               {nextRankLabel}
@@ -1089,6 +1102,7 @@ export default function DashboardScreen({ navigation }: any) {
           spend three of the five beats on one section and make the stats and
           water arrive late enough to feel like an afterthought. */}
       <Enter index={2}>
+        <View style={{ marginBottom: 16 }}><WeeklyCards navigation={navigation} refreshKey={workoutsCompleted} /></View>
         <View style={styles.questSection}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>{t('dailyQuests')}</Text>

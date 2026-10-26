@@ -222,6 +222,11 @@ export default function SettingsScreen({ navigation }: any) {
           )}
         </Section>
 
+        {/* Weekly review */}
+        <Section title={t('wrTitle')} palette={palette}>
+          <TappableRow label={t('wrSettingsRow')} onPress={() => navigation.navigate('WeeklyReview')} palette={palette} />
+        </Section>
+
         {/* Mindful breaks */}
         <Section title={t('breaksSection')} palette={palette}>
           <TappableRow

@@ -11,6 +11,7 @@ import haptics from '../services/haptics';
 import { useUser } from '../context/UserContext';
 import { useLanguage } from '../i18n/LanguageContext';
 import { frameColorOf } from '../services/breaks/rewards';
+import { monthLabel, daysLeftInMonthUtc } from '../services/habits/season';
 import {
   LeaderboardEntry,
   fetchTopEntries,
@@ -40,7 +41,8 @@ const REACTION_ROW_LIMIT = 10;
 export default function LeaderboardScreen({ navigation }: any) {
   const styles = useThemedStyles(makeStyles);
   const { authUser } = useUser();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
+  const [scope, setScope] = useState<'all' | 'month'>('all');
   const [loading, setLoading] = useState(true);
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [failed, setFailed] = useState(false);
@@ -49,9 +51,9 @@ export default function LeaderboardScreen({ navigation }: any) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      setLoading(true);
+      setLoading(true); setFailed(false);
       try {
-        const top = await fetchTopEntries(50);
+        const top = await fetchTopEntries(50, scope);
         if (!cancelled) setEntries(top);
 
         const forReactions = top.slice(0, REACTION_ROW_LIMIT);
@@ -72,7 +74,7 @@ export default function LeaderboardScreen({ navigation }: any) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [scope]);
 
   // Optimistic toggle: updates local state immediately (so the tap feels
   // instant) and fires the write in the background. If the write fails —
@@ -108,6 +110,13 @@ export default function LeaderboardScreen({ navigation }: any) {
   // Where the signed-in user sits, so they can find themselves without
   // scrolling. Computed from the same fetched list rather than a second query.
   const myIndex = entries.findIndex(e => e.uid === authUser?.uid);
+  const shownXp = (e: LeaderboardEntry) => (scope === 'month' ? e.monthXP ?? 0 : e.totalXP);
+  const now = Date.now();
+  const monthName = monthLabel(now, language === 'zh' ? 'zh-CN' : language);
+  const daysLeft = daysLeftInMonthUtc(now);
+  const subtitle = scope === 'month'
+    ? (daysLeft <= 1 ? t('lbSeasonLastDay') : t('lbSeasonLeft')).replace('{month}', monthName).replace('{n}', String(daysLeft))
+    : t('leaderboardSubtitle');
 
   const medalFor = (index: number): string => {
     if (index === 0) return '🥇';
@@ -119,14 +128,26 @@ export default function LeaderboardScreen({ navigation }: any) {
   // Skeletons in the shape of the rows that are coming, and the AppBar renders
   // in this branch too — the old spinner-only loading state had no back button,
   // so a leaderboard that never resolved was a dead end.
+  const scopeTabs = (
+    <View style={styles.scopeRow} accessibilityRole="tablist">
+      {(['all', 'month'] as const).map(k => (
+        <Pressable key={k} onPress={() => setScope(k)} accessibilityRole="tab" accessibilityState={{ selected: scope === k }} aria-selected={scope === k}
+          accessibilityLabel={k === 'all' ? t('lbAllTime') : t('lbThisMonth')} style={[styles.scopeTab, scope === k && styles.scopeTabOn]}>
+          <Text style={[styles.scopeText, scope === k && styles.scopeTextOn]}>{k === 'all' ? t('lbAllTime') : t('lbThisMonth')}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+
   if (loading) {
     return (
       <Screen scroll contentStyle={styles.container}>
         <AppBar
           title={t('leaderboard')}
-          subtitle={t('leaderboardSubtitle')}
+          subtitle={subtitle}
           onBack={() => navigation.goBack()}
         />
+        {scopeTabs}
         <Shimmer width="100%" height={84} style={styles.skeletonCard} />
         <View style={styles.listCard}>
           {Array.from({ length: SKELETON_ROWS }).map((_, index) => (
@@ -152,9 +173,10 @@ export default function LeaderboardScreen({ navigation }: any) {
     <Screen scroll contentStyle={styles.container}>
       <AppBar
         title={t('leaderboard')}
-        subtitle={t('leaderboardSubtitle')}
+        subtitle={subtitle}
         onBack={() => navigation.goBack()}
       />
+      {scopeTabs}
 
       {/* Your own standing is pinned to the top so it never requires scrolling
           to find — the number most people open this screen for. */}
@@ -166,7 +188,7 @@ export default function LeaderboardScreen({ navigation }: any) {
               <Text style={styles.myRankLabel}>{t('yourPosition')}</Text>
             </View>
             <View style={styles.myRankRight}>
-              <Text style={styles.myRankXP}>{entries[myIndex].totalXP.toLocaleString()} XP</Text>
+              <Text style={styles.myRankXP}>{shownXp(entries[myIndex]).toLocaleString()} XP</Text>
               <Text style={styles.myRankOutOf}>
                 {t('outOf')} {entries.length}
               </Text>
@@ -183,7 +205,7 @@ export default function LeaderboardScreen({ navigation }: any) {
           {failed ? (
             <EmptyState icon="🔒" title={t('leaderboard')} message={t('leaderboardUnavailable')} />
           ) : entries.length === 0 ? (
-            <EmptyState icon="🏆" title={t('leaderboard')} message={t('leaderboardEmpty')} />
+            <EmptyState icon="🏆" title={t('leaderboard')} message={scope === 'month' ? t('lbSeasonEmpty') : t('leaderboardEmpty')} />
           ) : (
             <>
               {/* Column headers, so the trailing number is identifiably XP
@@ -214,7 +236,7 @@ export default function LeaderboardScreen({ navigation }: any) {
                       accessibilityLabel={
                         `${isMe ? `${t('you')}, ` : ''}rank ${index + 1}, ${entry.displayName}, ` +
                         `${entry.rank}, ${t('level')} ${entry.level}, ` +
-                        `${entry.totalXP.toLocaleString()} XP${streakPart}`
+                        `${shownXp(entry).toLocaleString()} XP${streakPart}`
                       }>
                       {/* The numeral is always rendered, medal or not: the
                           medals are a flourish on top of the rank, never the
@@ -257,7 +279,7 @@ export default function LeaderboardScreen({ navigation }: any) {
                         </Text>
                       </View>
 
-                      <Text style={styles.xp}>{entry.totalXP.toLocaleString()}</Text>
+                      <Text style={styles.xp}>{shownXp(entry).toLocaleString()}</Text>
                     </View>
 
                     {/* No reacting to your own row — there's nothing to
@@ -294,7 +316,7 @@ export default function LeaderboardScreen({ navigation }: any) {
       </Enter>
 
       <Enter index={2}>
-        <Text style={styles.privacyNote}>{t('leaderboardPrivacy')}</Text>
+        <Text style={styles.privacyNote}>{scope === 'month' ? t('lbSeasonReset') : t('leaderboardPrivacy')}</Text>
       </Enter>
     </Screen>
   );
@@ -316,6 +338,11 @@ const makeStyles = (colors: Palette) => StyleSheet.create({
   },
   // Your standing is the headline of this screen, so it gets the raised
   // surface and the brighter border — depth here is fill + border, not shadow.
+  scopeRow: { flexDirection: 'row', gap: spacing.xs, backgroundColor: colors.surfaceSunken, borderRadius: radius.pill, padding: 3, marginBottom: spacing.md },
+  scopeTab: { flex: 1, minHeight: 40, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
+  scopeTabOn: { backgroundColor: colors.accent },
+  scopeText: { fontFamily: fontFamily.sansBold, fontSize: 13, color: colors.textSecondary },
+  scopeTextOn: { color: colors.textOnAccent },
   myRankCard: {
     flexDirection: 'row',
     alignItems: 'center',

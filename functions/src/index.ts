@@ -28,6 +28,7 @@ import { signedAvatarParams, CLOUD_NAME } from './cloudinary.ts';
 import { deleteAllUserData } from './account.ts';
 import { resolveTrialStart, trialClaimId } from './trial.ts';
 import { frameForLongest } from './frames.ts';
+import { monthlyXp } from './season.ts';
 
 const GEMINI_API_KEY = defineSecret('GEMINI_API_KEY');
 const REVENUECAT_SECRET = defineSecret('REVENUECAT_SECRET_KEY');
@@ -343,7 +344,8 @@ export const publishScore = onCall({ region: 'us-central1' }, async (req: Callab
     const prev = lb.exists ? Number(lb.data()?.totalXP) || 0 : null;
     const xp = applyXpBank(prev, rl.data()?.xp as XpState | undefined, entry.totalXP, now);
     // merge: keeps fields other functions own (breakStreak) when the app republishes its score.
-    tx.set(lbRef, { uid, ...entry, totalXP: xp.total }, { merge: true });
+    const season = monthlyXp({ prevKey: lb.data()?.monthKey, prevMonthXP: lb.data()?.monthXP, prevTotal: prev, newTotal: xp.total, nowMs: now });
+    tx.set(lbRef, { uid, ...entry, totalXP: xp.total, ...season }, { merge: true });
     tx.set(rlRef, { publish: limited, xp: xp.state }, { merge: true });
     return { limited: false as const, clamped: xp.clamped };
   });

@@ -605,7 +605,52 @@ type TranslationKey =
   | 'grShare'
   | 'grClearTicked'
   | 'grYours'
-  | 'grLeft';
+  | 'grLeft'
+  | 'strkLine'
+  | 'strkFreezeOne'
+  | 'strkFreezeMany'
+  | 'strkFreezeUsed'
+  | 'strkNextFreeze'
+  | 'wrTitle'
+  | 'wrBanner'
+  | 'wrOpen'
+  | 'wrStatWorkouts'
+  | 'wrStatWater'
+  | 'wrStatSleep'
+  | 'wrStatFood'
+  | 'wrWins'
+  | 'wrWinWorkouts'
+  | 'wrWinWater'
+  | 'wrWinSleep'
+  | 'wrWinLogging'
+  | 'wrWinCalories'
+  | 'wrWinBreaks'
+  | 'wrWinStreak'
+  | 'wrWinShowedUp'
+  | 'wrNoWins'
+  | 'wrImprove'
+  | 'wrImproveWorkouts'
+  | 'wrImproveWater'
+  | 'wrImproveSleep'
+  | 'wrImproveLogging'
+  | 'wrPickGoal'
+  | 'wrGoalWorkouts'
+  | 'wrGoalWater'
+  | 'wrGoalSleep'
+  | 'wrGoalLogging'
+  | 'wrYourGoal'
+  | 'wrGoalProgress'
+  | 'wrGoalDone'
+  | 'wrGoalSet'
+  | 'wrChange'
+  | 'wrSettingsRow'
+  | 'lbAllTime'
+  | 'lbThisMonth'
+  | 'lbSeasonLeft'
+  | 'lbSeasonLastDay'
+  | 'lbSeasonEmpty'
+  | 'lbSeasonReset'
+  | 'lbMonthXp';
 
 export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, string>>> = {
   en: {
@@ -1192,6 +1237,51 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     grClearTicked: "Clear ticked items",
     grYours: "Your items",
     grLeft: "{n} left to buy",
+    strkLine: "🔥 {n}-day streak",
+    strkFreezeOne: "🧊 1 streak freeze",
+    strkFreezeMany: "🧊 {n} streak freezes",
+    strkFreezeUsed: "A streak freeze covered your missed day.",
+    strkNextFreeze: "{n} more days to earn a freeze",
+    wrTitle: "Your week in review",
+    wrBanner: "Your week in review is ready",
+    wrOpen: "See my week",
+    wrStatWorkouts: "Workouts",
+    wrStatWater: "Water goal days",
+    wrStatSleep: "Avg sleep (h)",
+    wrStatFood: "Days with food logged",
+    wrWins: "What went well",
+    wrWinWorkouts: "You trained {n} times.",
+    wrWinWater: "You hit your water goal on {n} days.",
+    wrWinSleep: "{n} nights of 7+ hours of sleep.",
+    wrWinLogging: "You logged food on {n} days.",
+    wrWinCalories: "{n} days close to your calorie goal.",
+    wrWinBreaks: "{n} mindful breaks completed.",
+    wrWinStreak: "A {n}-day streak.",
+    wrWinShowedUp: "You showed up on {n} days. That counts.",
+    wrNoWins: "No data yet. Log something today and next week's review will have more to say.",
+    wrImprove: "One thing to work on",
+    wrImproveWorkouts: "Fit in a few more workouts. Even short ones count.",
+    wrImproveWater: "Reach your water goal on more days.",
+    wrImproveSleep: "Aim for 7+ hours on more nights.",
+    wrImproveLogging: "Log your food on more days.",
+    wrPickGoal: "Pick a goal for next week",
+    wrGoalWorkouts: "{n} workouts",
+    wrGoalWater: "Hit your water goal {n} days",
+    wrGoalSleep: "{n} nights of 7+ hours",
+    wrGoalLogging: "Log food {n} days",
+    wrYourGoal: "This week's goal",
+    wrGoalProgress: "{v} of {t}",
+    wrGoalDone: "Goal reached!",
+    wrGoalSet: "Goal set for next week.",
+    wrChange: "Change goal",
+    wrSettingsRow: "Weekly review",
+    lbAllTime: "All time",
+    lbThisMonth: "This month",
+    lbSeasonLeft: "{month} · {n} days left",
+    lbSeasonLastDay: "{month} · last day",
+    lbSeasonEmpty: "No one has earned XP this month yet. Be the first!",
+    lbSeasonReset: "The month board starts fresh on the 1st (UTC).",
+    lbMonthXp: "{n} XP this month",
   },
   es: {
     goodMorning: 'Buenos días',
@@ -1777,6 +1867,51 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     grClearTicked: "Quitar los marcados",
     grYours: "Tus artículos",
     grLeft: "Faltan {n} por comprar",
+    strkLine: "🔥 Racha de {n} días",
+    strkFreezeOne: "🧊 1 congelación de racha",
+    strkFreezeMany: "🧊 {n} congelaciones de racha",
+    strkFreezeUsed: "Una congelación de racha cubrió tu día perdido.",
+    strkNextFreeze: "{n} días más para ganar una congelación",
+    wrTitle: "Tu semana en resumen",
+    wrBanner: "Tu resumen semanal está listo",
+    wrOpen: "Ver mi semana",
+    wrStatWorkouts: "Entrenamientos",
+    wrStatWater: "Días con meta de agua",
+    wrStatSleep: "Sueño medio (h)",
+    wrStatFood: "Días con comidas registradas",
+    wrWins: "Lo que salió bien",
+    wrWinWorkouts: "Entrenaste {n} veces.",
+    wrWinWater: "Alcanzaste tu meta de agua {n} días.",
+    wrWinSleep: "{n} noches de 7+ horas de sueño.",
+    wrWinLogging: "Registraste comidas {n} días.",
+    wrWinCalories: "{n} días cerca de tu meta de calorías.",
+    wrWinBreaks: "{n} pausas conscientes completadas.",
+    wrWinStreak: "Una racha de {n} días.",
+    wrWinShowedUp: "Estuviste presente {n} días. Eso cuenta.",
+    wrNoWins: "Aún no hay datos. Registra algo hoy y el resumen de la próxima semana tendrá más que decir.",
+    wrImprove: "Algo para mejorar",
+    wrImproveWorkouts: "Haz algunos entrenamientos más. Hasta los cortos cuentan.",
+    wrImproveWater: "Alcanza tu meta de agua más días.",
+    wrImproveSleep: "Intenta dormir 7+ horas más noches.",
+    wrImproveLogging: "Registra tus comidas más días.",
+    wrPickGoal: "Elige una meta para la próxima semana",
+    wrGoalWorkouts: "{n} entrenamientos",
+    wrGoalWater: "Alcanza tu meta de agua {n} días",
+    wrGoalSleep: "{n} noches de 7+ horas",
+    wrGoalLogging: "Registra comidas {n} días",
+    wrYourGoal: "Meta de esta semana",
+    wrGoalProgress: "{v} de {t}",
+    wrGoalDone: "¡Meta alcanzada!",
+    wrGoalSet: "Meta fijada para la próxima semana.",
+    wrChange: "Cambiar meta",
+    wrSettingsRow: "Resumen semanal",
+    lbAllTime: "Siempre",
+    lbThisMonth: "Este mes",
+    lbSeasonLeft: "{month} · quedan {n} días",
+    lbSeasonLastDay: "{month} · último día",
+    lbSeasonEmpty: "Nadie ha ganado XP este mes. ¡Sé el primero!",
+    lbSeasonReset: "El ranking del mes se reinicia el día 1 (UTC).",
+    lbMonthXp: "{n} XP este mes",
   },
   fr: {
     goodMorning: 'Bonjour',
@@ -2362,6 +2497,51 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     grClearTicked: "Effacer les articles cochés",
     grYours: "Tes articles",
     grLeft: "Encore {n} à acheter",
+    strkLine: "🔥 Série de {n} jours",
+    strkFreezeOne: "🧊 1 gel de série",
+    strkFreezeMany: "🧊 {n} gels de série",
+    strkFreezeUsed: "Un gel de série a couvert ton jour manqué.",
+    strkNextFreeze: "Encore {n} jours pour gagner un gel",
+    wrTitle: "Ta semaine en revue",
+    wrBanner: "Ta revue de la semaine est prête",
+    wrOpen: "Voir ma semaine",
+    wrStatWorkouts: "Séances",
+    wrStatWater: "Jours objectif eau",
+    wrStatSleep: "Sommeil moyen (h)",
+    wrStatFood: "Jours avec repas notés",
+    wrWins: "Ce qui a bien marché",
+    wrWinWorkouts: "Tu t’es entraîné {n} fois.",
+    wrWinWater: "Tu as atteint ton objectif d’eau {n} jours.",
+    wrWinSleep: "{n} nuits de 7 h de sommeil ou plus.",
+    wrWinLogging: "Tu as noté tes repas {n} jours.",
+    wrWinCalories: "{n} jours proches de ton objectif calorique.",
+    wrWinBreaks: "{n} pauses conscientes terminées.",
+    wrWinStreak: "Une série de {n} jours.",
+    wrWinShowedUp: "Tu étais là {n} jours. Ça compte.",
+    wrNoWins: "Pas encore de données. Note quelque chose aujourd’hui et la revue de la semaine prochaine aura plus à dire.",
+    wrImprove: "Un point à améliorer",
+    wrImproveWorkouts: "Ajoute quelques séances. Même courtes, elles comptent.",
+    wrImproveWater: "Atteins ton objectif d’eau plus de jours.",
+    wrImproveSleep: "Vise 7 h de sommeil ou plus plus de nuits.",
+    wrImproveLogging: "Note tes repas plus de jours.",
+    wrPickGoal: "Choisis un objectif pour la semaine prochaine",
+    wrGoalWorkouts: "{n} séances",
+    wrGoalWater: "Atteins ton objectif d’eau {n} jours",
+    wrGoalSleep: "{n} nuits de 7 h ou plus",
+    wrGoalLogging: "Note tes repas {n} jours",
+    wrYourGoal: "Objectif de la semaine",
+    wrGoalProgress: "{v} sur {t}",
+    wrGoalDone: "Objectif atteint !",
+    wrGoalSet: "Objectif fixé pour la semaine prochaine.",
+    wrChange: "Changer d’objectif",
+    wrSettingsRow: "Revue de la semaine",
+    lbAllTime: "Depuis toujours",
+    lbThisMonth: "Ce mois-ci",
+    lbSeasonLeft: "{month} · encore {n} jours",
+    lbSeasonLastDay: "{month} · dernier jour",
+    lbSeasonEmpty: "Personne n’a encore gagné d’XP ce mois-ci. Sois le premier !",
+    lbSeasonReset: "Le classement du mois repart à zéro le 1er (UTC).",
+    lbMonthXp: "{n} XP ce mois-ci",
   },
   zh: {
     goodMorning: '早上好',
@@ -2947,6 +3127,51 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     grClearTicked: "清除已勾选项",
     grYours: "你的物品",
     grLeft: "还剩 {n} 件待买",
+    strkLine: "🔥 连续 {n} 天",
+    strkFreezeOne: "🧊 1 次连续保护",
+    strkFreezeMany: "🧊 {n} 次连续保护",
+    strkFreezeUsed: "连续保护为你补上了错过的一天。",
+    strkNextFreeze: "再坚持 {n} 天可获得一次保护",
+    wrTitle: "本周回顾",
+    wrBanner: "你的每周回顾已准备好",
+    wrOpen: "查看我的一周",
+    wrStatWorkouts: "训练",
+    wrStatWater: "饮水达标天数",
+    wrStatSleep: "平均睡眠（小时）",
+    wrStatFood: "记录饮食的天数",
+    wrWins: "做得好的地方",
+    wrWinWorkouts: "你训练了 {n} 次。",
+    wrWinWater: "你有 {n} 天达到了饮水目标。",
+    wrWinSleep: "{n} 晚睡够 7 小时以上。",
+    wrWinLogging: "你有 {n} 天记录了饮食。",
+    wrWinCalories: "{n} 天接近你的热量目标。",
+    wrWinBreaks: "完成了 {n} 次正念暂停。",
+    wrWinStreak: "连续 {n} 天。",
+    wrWinShowedUp: "你坚持了 {n} 天，这很重要。",
+    wrNoWins: "暂无数据。今天记录点什么，下周的回顾会更丰富。",
+    wrImprove: "需要改进的一点",
+    wrImproveWorkouts: "多安排几次训练，短的也算数。",
+    wrImproveWater: "争取更多天达到饮水目标。",
+    wrImproveSleep: "争取更多晚睡够 7 小时以上。",
+    wrImproveLogging: "多记录几天饮食。",
+    wrPickGoal: "为下周选一个目标",
+    wrGoalWorkouts: "{n} 次训练",
+    wrGoalWater: "{n} 天达到饮水目标",
+    wrGoalSleep: "{n} 晚睡够 7 小时以上",
+    wrGoalLogging: "{n} 天记录饮食",
+    wrYourGoal: "本周目标",
+    wrGoalProgress: "{v} / {t}",
+    wrGoalDone: "目标达成！",
+    wrGoalSet: "已设定下周目标。",
+    wrChange: "更换目标",
+    wrSettingsRow: "每周回顾",
+    lbAllTime: "总榜",
+    lbThisMonth: "本月",
+    lbSeasonLeft: "{month} · 还剩 {n} 天",
+    lbSeasonLastDay: "{month} · 最后一天",
+    lbSeasonEmpty: "本月还没有人获得经验值，快来抢先！",
+    lbSeasonReset: "月榜每月 1 日（UTC）重置。",
+    lbMonthXp: "本月 {n} 经验",
   },
   te: {
     goodMorning: 'శుభోదయం',
@@ -3532,5 +3757,50 @@ export const TRANSLATIONS: Record<LanguageCode, Partial<Record<TranslationKey, s
     grClearTicked: "టిక్ చేసినవి తొలగించండి",
     grYours: "మీ వస్తువులు",
     grLeft: "కొనాల్సినవి {n} మిగిలాయి",
+    strkLine: "🔥 {n} రోజుల స్ట్రీక్",
+    strkFreezeOne: "🧊 1 స్ట్రీక్ ఫ్రీజ్",
+    strkFreezeMany: "🧊 {n} స్ట్రీక్ ఫ్రీజ్‌లు",
+    strkFreezeUsed: "ఒక స్ట్రీక్ ఫ్రీజ్ మీ మిస్ అయిన రోజును కవర్ చేసింది.",
+    strkNextFreeze: "ఫ్రీజ్ సంపాదించడానికి ఇంకా {n} రోజులు",
+    wrTitle: "మీ వారం సమీక్ష",
+    wrBanner: "మీ వారం సమీక్ష సిద్ధంగా ఉంది",
+    wrOpen: "నా వారం చూడండి",
+    wrStatWorkouts: "వర్కౌట్‌లు",
+    wrStatWater: "నీటి లక్ష్యం రోజులు",
+    wrStatSleep: "సగటు నిద్ర (గం)",
+    wrStatFood: "ఆహారం నమోదు చేసిన రోజులు",
+    wrWins: "బాగా జరిగినవి",
+    wrWinWorkouts: "మీరు {n} సార్లు శిక్షణ పొందారు.",
+    wrWinWater: "మీరు {n} రోజులు నీటి లక్ష్యాన్ని చేరారు.",
+    wrWinSleep: "{n} రాత్రులు 7+ గంటల నిద్ర.",
+    wrWinLogging: "మీరు {n} రోజులు ఆహారం నమోదు చేశారు.",
+    wrWinCalories: "{n} రోజులు మీ క్యాలరీ లక్ష్యానికి దగ్గరగా.",
+    wrWinBreaks: "{n} మైండ్‌ఫుల్ బ్రేక్‌లు పూర్తయ్యాయి.",
+    wrWinStreak: "{n} రోజుల స్ట్రీక్.",
+    wrWinShowedUp: "మీరు {n} రోజులు వచ్చారు. అదీ లెక్కే.",
+    wrNoWins: "ఇంకా డేటా లేదు. ఈరోజు ఏదైనా నమోదు చేయండి, వచ్చే వారం సమీక్ష ఎక్కువ చెబుతుంది.",
+    wrImprove: "మెరుగుపరచాల్సిన ఒక విషయం",
+    wrImproveWorkouts: "మరికొన్ని వర్కౌట్‌లు చేయండి. చిన్నవైనా లెక్కే.",
+    wrImproveWater: "ఎక్కువ రోజులు నీటి లక్ష్యాన్ని చేరండి.",
+    wrImproveSleep: "ఎక్కువ రాత్రులు 7+ గంటల నిద్ర లక్ష్యంగా పెట్టుకోండి.",
+    wrImproveLogging: "ఎక్కువ రోజులు ఆహారం నమోదు చేయండి.",
+    wrPickGoal: "వచ్చే వారానికి ఒక లక్ష్యం ఎంచుకోండి",
+    wrGoalWorkouts: "{n} వర్కౌట్‌లు",
+    wrGoalWater: "{n} రోజులు నీటి లక్ష్యం చేరండి",
+    wrGoalSleep: "{n} రాత్రులు 7+ గంటలు",
+    wrGoalLogging: "{n} రోజులు ఆహారం నమోదు చేయండి",
+    wrYourGoal: "ఈ వారం లక్ష్యం",
+    wrGoalProgress: "{t} లో {v}",
+    wrGoalDone: "లక్ష్యం చేరారు!",
+    wrGoalSet: "వచ్చే వారం లక్ష్యం నిర్ణయించబడింది.",
+    wrChange: "లక్ష్యం మార్చండి",
+    wrSettingsRow: "వారం సమీక్ష",
+    lbAllTime: "ఎల్లప్పుడూ",
+    lbThisMonth: "ఈ నెల",
+    lbSeasonLeft: "{month} · {n} రోజులు మిగిలాయి",
+    lbSeasonLastDay: "{month} · చివరి రోజు",
+    lbSeasonEmpty: "ఈ నెల ఇంకా ఎవరూ XP సంపాదించలేదు. మొదటివారు అవ్వండి!",
+    lbSeasonReset: "నెల బోర్డు 1వ తేదీ (UTC) న మళ్లీ మొదలవుతుంది.",
+    lbMonthXp: "ఈ నెల {n} XP",
   },
 };

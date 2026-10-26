@@ -33,6 +33,7 @@ import BreaksSettingsScreen from './screens/BreaksSettingsScreen';
 import BreaksInsightsScreen from './screens/BreaksInsightsScreen';
 import CustomWorkoutsScreen from './screens/CustomWorkoutsScreen';
 import GroceryScreen from './screens/GroceryScreen';
+import WeeklyReviewScreen from './screens/WeeklyReviewScreen';
 import CoachWidget from './components/CoachWidget';
 
 const Stack = createNativeStackNavigator();
@@ -93,6 +94,7 @@ function RootNavigator() {
       <Stack.Screen name="WorkoutSummary" component={WorkoutSummaryScreen} />
       <Stack.Screen name="CustomWorkouts" component={CustomWorkoutsScreen} />
       <Stack.Screen name="Grocery" component={GroceryScreen} />
+      <Stack.Screen name="WeeklyReview" component={WeeklyReviewScreen} />
       <Stack.Screen name="History" component={HistoryScreen} />
       <Stack.Screen name="Leaderboard" component={LeaderboardScreen} />
       <Stack.Screen name="Friends" component={FriendsScreen} />
